@@ -140,7 +140,7 @@ Owner browses partner and selects items
 → order receives a reference number
 → the order appears on the café's order screen within seconds
 → owner travels to the venue
-→ inside the geofence, owner taps Redeem
+→ owner taps Redeem
 → order is marked collected
 ```
 
@@ -217,6 +217,7 @@ Explicitly **not** built for pilot:
 ```text
 iOS
 merchant self-registration and self-service offer editing
+geofence-gated order collection (planned after MVP)
 offline walk tracking and queued sync
 in-app payments or buying points
 reviews and ratings

@@ -44,6 +44,8 @@ behaviour for them, raise them instead.
 | R30 | Café interface | Café staff sign in to the Android app with a `CAFE` account |
 | R31 | Daily goal, multiple dogs | Once per day per account, when every dog on that day's walks met its own goal |
 | R32 | Max dogs per account | 10 |
+| R33 | Order abandonment | Uncollected orders expire at end of day and refund automatically |
+| R34 | Geofence gate on collection | Deferred. Not in MVP, planned for a later phase |
 
 ### On R29
 
@@ -58,8 +60,14 @@ This is recorded so the reasoning is not lost, not to reopen it.
 
 ## Open
 
-O2, O14 and O15 were resolved and moved to the table above. Numbering is not
-reused, so earlier references stay valid.
+O2, O3, O4, O14 and O15 were resolved and moved to the table above. Numbering
+is not reused, so earlier references stay valid.
+
+On R34: with no geofence gate at MVP, an owner can mark an order collected
+without being at the venue. The points are already deducted, so the café is not
+out of pocket — the failure is an order shown as collected that nobody picked
+up. Accepted for MVP; build the collection endpoint so the check drops in later
+without reshaping the flow.
 
 ### O1 — Vet checkup confirmation
 
@@ -69,24 +77,6 @@ evidence? Admin review of an uploaded invoice is the assumed default, but it is
 unverified and forgeable.
 
 **Blocks:** `rewards` app, Engineer 4.
-
-### O3 — Order abandonment
-
-Points are deducted when the order is created, so an owner who never collects
-has already paid.
-
-**Assumed default, pending confirmation:** uncollected orders expire at end of
-day and points are refunded automatically, with a ledger entry.
-
-**Blocks:** expiry job, Engineer 4.
-
-### O4 — Geofence gate on collection
-
-Proposed by the delivery team: the in-store Redeem button only becomes tappable
-inside the venue geofence, so an order cannot be marked collected from home.
-Reuses existing check-in geofencing at near-zero extra cost.
-
-**Assumed default, pending confirmation:** implemented.
 
 ### O5 — Daily cap suppresses multi-venue check-ins
 

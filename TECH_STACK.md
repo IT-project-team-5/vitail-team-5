@@ -655,9 +655,13 @@ that must be implemented:
 - an admin can cancel and refund an order manually, for example when a venue has
   run out of stock.
 
-Gating the Redeem button on the geofence prevents an order being marked
-collected away from the venue. This reuses the check-in geofencing rather than
-adding a new mechanism.
+At MVP the Redeem button is always tappable, so an order can be marked
+collected away from the venue. This is a known and accepted gap.
+
+Gating that button on the venue geofence is planned **after MVP**. It reuses the
+check-in geofencing rather than adding a new mechanism, so the later change is
+small. Build the collection endpoint so the check can be dropped in without
+reshaping the flow.
 
 ### Café order screen
 
@@ -670,8 +674,8 @@ GET  /api/cafe/orders?since={cursor}       polled by the café screen
 
 The screen polls every few seconds and lists orders still `PENDING` for that
 café, showing the reference number, the owner's name, the items and the time
-ordered. When the owner taps Redeem inside the geofence the order becomes
-`COLLECTED` and drops off the list on the next poll.
+ordered. When the owner taps Redeem the order becomes `COLLECTED` and drops off
+the list on the next poll.
 
 Implementation requirements:
 
@@ -863,7 +867,6 @@ mock-location detection (isFromMockProvider + Play Integrity)
 server-confirmed geofence dwell
 one check-in per venue per day
 daily point cap
-geofence gate on order collection
 ```
 
 Advanced fake-GPS detection is out of scope. Disputes are handled by email at
@@ -990,7 +993,7 @@ streaks
 ```text
 order creation and deduction
 café login, café order screen and its polling feed
-geofence-gated collection
+collection endpoint, built to accept a geofence check later
 expiry and refund job
 charity donations
 redemption history
@@ -1046,7 +1049,7 @@ Owner registers with Google
 → dwells and completes a check-in
 → orders an offer
 → points are deducted once
-→ taps Redeem inside the geofence
+→ taps Redeem
 → order is marked collected
 → the redemption appears in history with a reference number
 ```
@@ -1063,7 +1066,6 @@ daily cap boundary
 walk with several dogs earns the same as a walk with one
 insufficient balance
 duplicate collection request
-collection attempted outside the geofence
 uncollected order expiry and refund
 point expiry at 12 months
 ```
@@ -1075,6 +1077,7 @@ point expiry at 12 months
 ```text
 iOS
 merchant self-registration and self-service offer editing
+geofence-gated order collection (planned after MVP)
 offline tracking and queued sync
 in-app payments
 reviews and ratings
