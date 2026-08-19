@@ -50,7 +50,7 @@ That means there is no merchant application to build:
 ```text
 Dog owner  → Android app
 Vitail admin → Django Admin
-Merchant   → database record + email notification
+Merchant   → venue record + read-only order page
 ```
 
 The backend must still enforce that an owner can only act on their own data.
@@ -202,7 +202,7 @@ Social login is Google at pilot. Apple sign-in is deferred with iOS.
 
 ```text
 id
-owner_id               one dog per owner at pilot
+owner_id
 name
 photo
 breed_id
@@ -230,7 +230,6 @@ be overridden for mixed breeds.
 ```text
 id
 owner_id
-dog_id
 started_at
 ended_at
 end_reason             MANUAL | AUTO_TIMEOUT | LOGOUT
@@ -257,6 +256,19 @@ is_discarded           accuracy > 30 m, or failed speed check
 
 Store only the minimum needed for route display and validation.
 
+### WalkDog
+
+```text
+walk_id
+dog_id
+```
+
+Which of the owner's dogs took part in a walk. An account may hold several dogs
+and a single walk may include more than one of them.
+
+Dog count never multiplies points. This table exists so each dog's own daily
+goal can be evaluated, and so history shows who actually went.
+
 ### Venue
 
 ```text
@@ -272,6 +284,7 @@ required_dwell_s
 opening_hours
 photo
 is_active
+order_page_token       credential for the venue order page
 created_at
 ```
 
@@ -468,7 +481,8 @@ mid-route. So:
 ## 8. Walk Tracking
 
 ```text
-Owner selects Start
+Owner selects which dogs are coming
+→ selects Start
 → app waits for a GPS lock
 → foreground service starts
 → route renders on the map
@@ -538,7 +552,10 @@ welfare guardrails
 personalised daily goal
 ```
 
-Meeting the goal awards 20 points once per day.
+Each dog has its own goal. The 20-point award is granted once per day per
+**account**, not per dog — dog count never multiplies points. How it is
+evaluated when an account holds several dogs is open; see `docs/DECISIONS.md`
+O14.
 
 The goal is expressed in minutes while walk points are earned per kilometre.
 This mismatch is intentional but must be presented clearly in the UI, and the
@@ -615,7 +632,7 @@ Owner selects venue and items
 → order created as PENDING
 → points deducted immediately, FIFO across lots
 → reference number issued
-→ merchant notified by email with owner name and order
+→ the order appears on the venue order page on its next refresh
 → owner travels to the venue
 → Redeem button enables only inside the venue geofence
 → owner taps Redeem
@@ -633,6 +650,36 @@ that must be implemented:
 Gating the Redeem button on the geofence prevents an order being marked
 collected away from the venue. This reuses the check-in geofencing rather than
 adding a new mechanism.
+
+### Venue order page
+
+Venue staff install nothing and have no account. Each venue has a single
+read-only web page, opened from a private link and left running on a tablet or
+till browser during trading hours.
+
+```text
+GET  /venue/{order_page_token}/orders      rendered page
+GET  /api/venues/orders?since={cursor}     JSON feed, polled by that page
+```
+
+The page polls every few seconds and lists orders still `PENDING`, showing the
+reference number, the owner's name, the items and the time ordered. When the
+owner taps Redeem inside the geofence the order becomes `COLLECTED` and drops
+off the list on the next poll.
+
+Implementation requirements:
+
+- the feed accepts a `since` cursor and returns only what changed;
+- respond `304 Not Modified` when nothing changed, so idle polling is nearly
+  free;
+- a five second interval is ample at pilot volume;
+- `order_page_token` is long, random, per-venue and revocable, because the URL
+  is the only credential;
+- the page is a **display surface only**. It must expose no endpoint that
+  mutates an order — collection is driven by the owner's app, never by the
+  venue.
+
+The operational risk is that staff close the tab. See `docs/DECISIONS.md` O2.
 
 ### Order state machine
 
@@ -701,6 +748,7 @@ GET    /api/walks/{id}
 GET    /api/venues
 GET    /api/venues/{id}
 GET    /api/venues/{id}/offers
+GET    /api/venues/orders            venue order feed, token auth, polled
 
 POST   /api/checkins
 POST   /api/checkins/{id}/heartbeat
@@ -824,8 +872,8 @@ Requirements:
 - registration evidence stored with restricted access and deleted after review
   where possible;
 - account deletion must actually remove or irreversibly anonymise personal data;
-- the owner's name is disclosed to a merchant on order notification, which must
-  be stated in the privacy notice.
+- the owner's name is displayed on the venue order page, which must be stated
+  in the privacy notice.
 
 ---
 
@@ -899,7 +947,7 @@ Never commit secrets. Never commit a real API key.
 ```text
 registration, Google login, password reset, account deletion
 owner profile
-dog profile and breed reference data
+dog profiles, several per account, and breed reference data
 personalised goal calculation
 heat adjustment
 ```
@@ -929,7 +977,7 @@ streaks
 
 ```text
 order creation and deduction
-merchant email notification
+venue order page and its polling feed
 geofence-gated collection
 expiry and refund job
 charity donations
@@ -976,8 +1024,8 @@ Main acceptance flow:
 
 ```text
 Owner registers with Google
-→ adds a dog
-→ sees a personalised daily goal
+→ adds one or more dogs
+→ sees a personalised daily goal per dog
 → starts a walk
 → sees the route
 → ends the walk
@@ -1000,6 +1048,7 @@ GPS accuracy below threshold
 mock location
 second check-in at the same venue the same day
 daily cap boundary
+walk with several dogs earns the same as a walk with one
 insufficient balance
 duplicate collection request
 collection attempted outside the geofence
@@ -1013,9 +1062,8 @@ point expiry at 12 months
 
 ```text
 iOS
-merchant portal or merchant accounts
+merchant portal or merchant accounts (read-only order page only)
 offline tracking and queued sync
-multiple dogs per account
 in-app payments
 reviews and ratings
 wearable integration
@@ -1034,7 +1082,7 @@ invent behaviour for an open decision.
 
 ```text
 vet checkup confirmation method
-merchant notification channel beyond email
+how venue staff authenticate to the order page
 raw GPS route retention period
 weather provider for heat adjustment
 charity partners

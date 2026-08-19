@@ -36,18 +36,27 @@ Merchants, vets, councils and dog parks are **data records, not accounts**.
 Merchants do not log in, do not scan anything, and do not edit their own offers
 during pilot — they contact Vitail directly and an admin makes the change.
 
+Venues do get one read-only screen: an **order page** staff leave open during
+trading, which refreshes itself every few seconds and lists orders waiting to be
+collected. It is a display, not a portal — nothing on it can be edited.
+
 This is a deliberate simplification. It removes an entire merchant-facing
 application from pilot scope.
 
 ## Dogs
 
-One dog per account at pilot.
+An account can hold **multiple dogs**. Each walk records which dogs took part.
 
 Stored per dog: name, photo, breed, age, size, and a brachycephalic flag.
 
 This is **not** display-only. Breed energy, age, size and the brachycephalic
-flag feed the personalised daily walk goal, and the goal is reduced during
-Australian summer heat.
+flag feed that dog's own personalised daily walk goal, and the goal is reduced
+during Australian summer heat. A senior pug and a young kelpie on the same
+account are targeted differently.
+
+Dog count never multiplies points — walking three dogs earns the same as
+walking one. How the daily goal award is evaluated for an account with several
+dogs is recorded as an open question in `docs/DECISIONS.md`.
 
 ## Earning Points
 
@@ -92,7 +101,8 @@ and the owner can return to the same geofence later the same day to complete it.
 ## Walk Rules
 
 ```text
-Owner taps Start
+Owner selects which dogs are coming
+→ taps Start
 → GPS lock required before tracking begins
 → foreground service records the route
 → pauses under 5 minutes are forgiven (sniffing)
@@ -116,7 +126,7 @@ Owner browses partner and selects items
 → confirms order
 → points are deducted immediately
 → order receives a reference number
-→ merchant is notified with the owner's name and order
+→ the order appears on the venue's order page within seconds
 → owner travels to the venue
 → inside the geofence, owner taps Redeem
 → order is marked collected
@@ -176,7 +186,7 @@ database changes, tests and documentation for their area.
 | 1 | Accounts, social login, dog profile, personalised goal calculation |
 | 2 | Partner venues, discovery map, geofencing, check-ins and dwell verification |
 | 3 | Walk tracking, walk validation, points engine, ledger, streaks, expiry |
-| 4 | Redemption orders, in-store collection, charity donations, history, admin notifications |
+| 4 | Redemption orders, venue order page, in-store collection, charity donations, history |
 
 ## Must-Have Scope
 
@@ -194,9 +204,8 @@ Explicitly **not** built for pilot:
 
 ```text
 iOS
-merchant self-service portal
+merchant self-service portal (read-only order page only)
 offline walk tracking and queued sync
-multiple dogs per account
 in-app payments or buying points
 reviews and ratings
 pet wearable integration

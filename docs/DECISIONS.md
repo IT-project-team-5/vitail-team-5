@@ -16,7 +16,7 @@ behaviour for them, raise them instead.
 | R2 | Business model | B2B2C — insurers, councils and merchants fund the reward catalogue |
 | R3 | Platform | Android only |
 | R4 | Roles | Dog owner and Vitail admin only. Merchants are records, not accounts |
-| R5 | Dogs | One dog per account |
+| R5 | Dogs | Multiple dogs per account. Reversed after delivery-team pushback |
 | R6 | Walk start | Manual only, no background auto-detection |
 | R7 | Walk auto-end | After 5 minutes inactive, or on logout |
 | R8 | Pause forgiveness | Stationary periods under 5 minutes are forgiven |
@@ -64,15 +64,27 @@ unverified and forgeable.
 
 **Blocks:** `rewards` app, Engineer 4.
 
-### O2 — Merchant notification channel
+### O2 — Venue order page access and operation
 
-The redemption flow requires the merchant to be notified with the owner's name
-and order, but merchants have no portal or app at pilot.
+Partly resolved. Venues are not "notified" — they watch a read-only order page
+that refreshes itself every few seconds. It is a display only: staff cannot mark
+an order collected, because the owner's app does that inside the geofence.
 
-**Assumed default, pending confirmation:** email to the merchant on order
-creation, plus a read-only order list in Django Admin for Vitail staff.
+Two parts remain open.
 
-**Blocks:** redemption notification, Engineer 4.
+**How staff reach the page.** Assumed default is a long, random, revocable
+per-venue token in the URL, with no login. That token is a bearer credential
+sitting in a URL, so it can leak through browser history, a bookmark on a shared
+tablet, or someone reading the screen. The alternative is a real login per
+venue, which reintroduces merchant accounts and the work we just removed.
+
+**What happens when staff close the tab.** A polling page only works while it is
+open. If a café closes it during a quiet period, orders are missed silently and
+the owner arrives to a counter that knows nothing about them. Worth considering
+an audible chime on a new order, and an email backstop for orders left
+unacknowledged.
+
+**Blocks:** venue order page, Engineer 4.
 
 ### O3 — Order abandonment
 
@@ -152,6 +164,29 @@ investigate suspected farming, view basic metrics.
 "Creativity aligned with the vision" is not testable. Concrete acceptance
 criteria are proposed in `TECH_STACK.md` section 23. The client deferred to the
 project deadline, which the delivery team still needs to state.
+
+### O14 — Daily goal award with multiple dogs
+
+Each dog has its own personalised goal, but the 20-point daily goal award is
+specified as once per day, and dog count must never multiply points. With
+several dogs on one account, "the goal was met" is ambiguous.
+
+**Assumed default:** awarded once per day per account, when every dog that took
+part in that day's walks has met its own goal.
+
+The alternatives each have a flaw. *Any dog's goal met* lets an owner register a
+low-requirement dog and clear the goal trivially. *Every registered dog* punishes
+multi-dog households and breaks whenever one dog is injured, recovering or too
+old to walk far.
+
+**Blocks:** goal evaluation, Engineers 1 and 3.
+
+### O15 — Maximum dogs per account
+
+Now that an account holds several dogs there should be an upper bound, both to
+limit abuse and to keep the dog-selection step on walk start usable.
+
+**Assumed default:** 5.
 
 ---
 
