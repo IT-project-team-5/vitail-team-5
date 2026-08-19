@@ -41,6 +41,9 @@ behaviour for them, raise them instead.
 | R27 | Disputes | Email contact is sufficient at pilot |
 | R28 | Budget | Free-tier and low-cost usage-based services preferred |
 | R29 | Points economics | Client owns the earn rates and the points-to-dollar peg |
+| R30 | Café interface | Café staff sign in to the Android app with a `CAFE` account |
+| R31 | Daily goal, multiple dogs | Once per day per account, when every dog on that day's walks met its own goal |
+| R32 | Max dogs per account | 10 |
 
 ### On R29
 
@@ -55,6 +58,9 @@ This is recorded so the reasoning is not lost, not to reopen it.
 
 ## Open
 
+O2, O14 and O15 were resolved and moved to the table above. Numbering is not
+reused, so earlier references stay valid.
+
 ### O1 — Vet checkup confirmation
 
 200 points is the largest single award, capped at 2 per year and 60 days apart,
@@ -63,28 +69,6 @@ evidence? Admin review of an uploaded invoice is the assumed default, but it is
 unverified and forgeable.
 
 **Blocks:** `rewards` app, Engineer 4.
-
-### O2 — Venue order page access and operation
-
-Partly resolved. Venues are not "notified" — they watch a read-only order page
-that refreshes itself every few seconds. It is a display only: staff cannot mark
-an order collected, because the owner's app does that inside the geofence.
-
-Two parts remain open.
-
-**How staff reach the page.** Assumed default is a long, random, revocable
-per-venue token in the URL, with no login. That token is a bearer credential
-sitting in a URL, so it can leak through browser history, a bookmark on a shared
-tablet, or someone reading the screen. The alternative is a real login per
-venue, which reintroduces merchant accounts and the work we just removed.
-
-**What happens when staff close the tab.** A polling page only works while it is
-open. If a café closes it during a quiet period, orders are missed silently and
-the owner arrives to a counter that knows nothing about them. Worth considering
-an audible chime on a new order, and an email backstop for orders left
-unacknowledged.
-
-**Blocks:** venue order page, Engineer 4.
 
 ### O3 — Order abandonment
 
@@ -164,29 +148,6 @@ investigate suspected farming, view basic metrics.
 "Creativity aligned with the vision" is not testable. Concrete acceptance
 criteria are proposed in `TECH_STACK.md` section 23. The client deferred to the
 project deadline, which the delivery team still needs to state.
-
-### O14 — Daily goal award with multiple dogs
-
-Each dog has its own personalised goal, but the 20-point daily goal award is
-specified as once per day, and dog count must never multiply points. With
-several dogs on one account, "the goal was met" is ambiguous.
-
-**Assumed default:** awarded once per day per account, when every dog that took
-part in that day's walks has met its own goal.
-
-The alternatives each have a flaw. *Any dog's goal met* lets an owner register a
-low-requirement dog and clear the goal trivially. *Every registered dog* punishes
-multi-dog households and breaks whenever one dog is injured, recovering or too
-old to walk far.
-
-**Blocks:** goal evaluation, Engineers 1 and 3.
-
-### O15 — Maximum dogs per account
-
-Now that an account holds several dogs there should be an upper bound, both to
-limit abuse and to keep the dog-selection step on walk start usable.
-
-**Assumed default:** 5.
 
 ---
 

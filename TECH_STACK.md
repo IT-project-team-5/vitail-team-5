@@ -39,21 +39,26 @@ Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 
 ## 2. Why This Architecture
 
-### One app, one end-user role
+### One app, two end-user roles
 
-Merchants do not scan QR codes, do not register themselves, and do not edit
-their own offers during pilot. They are onboarded by a Vitail admin and are
-stored as **venue records**.
-
-That means there is no merchant application to build:
+Owners and café staff use the same Android app. The backend role decides which
+interface loads.
 
 ```text
-Dog owner  → Android app
+Dog owner    → Android app, owner UI
+Café staff   → Android app, café order screen
 Vitail admin → Django Admin
-Merchant   → venue record + read-only order page
 ```
 
-The backend must still enforce that an owner can only act on their own data.
+Cafés do not self-register, do not scan codes and do not edit their own offers
+at pilot. Accounts are created by an admin.
+
+Putting the café screen inside the app rather than on a token-protected web page
+buys two things: real authentication instead of a secret URL, and push delivery.
+A café with the screen closed still receives an FCM notification when an order
+arrives, which a left-open browser tab cannot do.
+
+The backend must still enforce that an account only acts on its own data.
 UI visibility is not security.
 
 ### Kotlin + Jetpack Compose
@@ -100,7 +105,7 @@ solved at pilot.
 ## 3. High-Level Architecture
 
 ```text
-                        ANDROID APP (owner)
+                   ANDROID APP (owner / café staff)
                                 │
         ┌───────────┬───────────┼───────────┬────────────┐
         │           │           │           │            │
@@ -187,7 +192,7 @@ id
 email
 password_hash
 auth_provider          GOOGLE | EMAIL
-role                   OWNER | ADMIN
+role                   OWNER | CAFE | ADMIN
 display_name
 profile_photo
 is_active
@@ -284,11 +289,12 @@ required_dwell_s
 opening_hours
 photo
 is_active
-order_page_token       credential for the venue order page
+account_id             the CAFE account that signs in for this venue
 created_at
 ```
 
-Created and edited by Vitail admins only.
+Created and edited by Vitail admins only. `account_id` is null for venues with
+no staff login, such as dog parks.
 
 ### VenueOffer
 
@@ -553,9 +559,11 @@ personalised daily goal
 ```
 
 Each dog has its own goal. The 20-point award is granted once per day per
-**account**, not per dog — dog count never multiplies points. How it is
-evaluated when an account holds several dogs is open; see `docs/DECISIONS.md`
-O14.
+**account**, not per dog — dog count never multiplies points.
+
+With several dogs on an account, the award is granted when **every dog that took
+part in that day's walks** has met its own goal. A dog left at home that day does
+not block the award.
 
 The goal is expressed in minutes while walk points are earned per kilometre.
 This mismatch is intentional but must be presented clearly in the UI, and the
@@ -632,7 +640,7 @@ Owner selects venue and items
 → order created as PENDING
 → points deducted immediately, FIFO across lots
 → reference number issued
-→ the order appears on the venue order page on its next refresh
+→ the order appears on the café order screen on its next refresh
 → owner travels to the venue
 → Redeem button enables only inside the venue geofence
 → owner taps Redeem
@@ -651,35 +659,33 @@ Gating the Redeem button on the geofence prevents an order being marked
 collected away from the venue. This reuses the check-in geofencing rather than
 adding a new mechanism.
 
-### Venue order page
+### Café order screen
 
-Venue staff install nothing and have no account. Each venue has a single
-read-only web page, opened from a private link and left running on a tablet or
-till browser during trading hours.
+Café staff sign in to the Android app with a `CAFE` account and leave the order
+screen open during trading hours.
 
 ```text
-GET  /venue/{order_page_token}/orders      rendered page
-GET  /api/venues/orders?since={cursor}     JSON feed, polled by that page
+GET  /api/cafe/orders?since={cursor}       polled by the café screen
 ```
 
-The page polls every few seconds and lists orders still `PENDING`, showing the
-reference number, the owner's name, the items and the time ordered. When the
-owner taps Redeem inside the geofence the order becomes `COLLECTED` and drops
-off the list on the next poll.
+The screen polls every few seconds and lists orders still `PENDING` for that
+café, showing the reference number, the owner's name, the items and the time
+ordered. When the owner taps Redeem inside the geofence the order becomes
+`COLLECTED` and drops off the list on the next poll.
 
 Implementation requirements:
 
-- the feed accepts a `since` cursor and returns only what changed;
+- the feed is scoped to the venue attached to the signed-in `CAFE` account, and
+  must never return another café's orders;
+- it accepts a `since` cursor and returns only what changed;
 - respond `304 Not Modified` when nothing changed, so idle polling is nearly
   free;
 - a five second interval is ample at pilot volume;
-- `order_page_token` is long, random, per-venue and revocable, because the URL
-  is the only credential;
-- the page is a **display surface only**. It must expose no endpoint that
-  mutates an order — collection is driven by the owner's app, never by the
-  venue.
-
-The operational risk is that staff close the tab. See `docs/DECISIONS.md` O2.
+- an FCM push is also sent on order creation, so a café with the app closed or
+  backgrounded is still alerted;
+- the screen is a **display surface only**. There is no endpoint a café can call
+  to mutate an order — collection is driven by the owner's app, never by the
+  café.
 
 ### Order state machine
 
@@ -748,7 +754,6 @@ GET    /api/walks/{id}
 GET    /api/venues
 GET    /api/venues/{id}
 GET    /api/venues/{id}/offers
-GET    /api/venues/orders            venue order feed, token auth, polled
 
 POST   /api/checkins
 POST   /api/checkins/{id}/heartbeat
@@ -760,6 +765,8 @@ POST   /api/redemptions/orders
 POST   /api/redemptions/orders/{id}/collect
 GET    /api/redemptions/orders
 POST   /api/redemptions/donations
+
+GET    /api/cafe/orders              café order feed, CAFE role, polled
 
 POST   /api/rewards/vet-checkup
 POST   /api/rewards/council-registration
@@ -811,6 +818,11 @@ OWNER
 - view venues and offers
 - create own orders and donations
 - view own wallet and history
+
+CAFE
+- view orders for own venue only
+- receive order notifications
+- nothing else: cannot edit offers, cannot collect an order
 
 ADMIN
 - Django Admin
@@ -872,7 +884,7 @@ Requirements:
 - registration evidence stored with restricted access and deleted after review
   where possible;
 - account deletion must actually remove or irreversibly anonymise personal data;
-- the owner's name is displayed on the venue order page, which must be stated
+- the owner's name is displayed on the café order screen, which must be stated
   in the privacy notice.
 
 ---
@@ -977,7 +989,7 @@ streaks
 
 ```text
 order creation and deduction
-venue order page and its polling feed
+café login, café order screen and its polling feed
 geofence-gated collection
 expiry and refund job
 charity donations
@@ -1062,7 +1074,7 @@ point expiry at 12 months
 
 ```text
 iOS
-merchant portal or merchant accounts (read-only order page only)
+merchant self-registration and self-service offer editing
 offline tracking and queued sync
 in-app payments
 reviews and ratings
@@ -1082,7 +1094,6 @@ invent behaviour for an open decision.
 
 ```text
 vet checkup confirmation method
-how venue staff authenticate to the order page
 raw GPS route retention period
 weather provider for heat adjustment
 charity partners

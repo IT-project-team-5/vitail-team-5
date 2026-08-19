@@ -25,23 +25,32 @@ retailers). Partners pay for foot traffic, referrals and healthier-dog data.
 
 ## Product Roles
 
-At pilot there are only **two** account types.
+At pilot there are **three** account types.
 
 | Role | Interface | Notes |
 |---|---|---|
-| **Dog owner** | Android app | The only end user with an app account |
+| **Dog owner** | Android app | Tracks walks, checks in, redeems points |
+| **Café staff** | Android app | Signs in and watches incoming orders |
 | **Vitail admin** | Django Admin | Onboards partners, handles support and disputes |
 
-Merchants, vets, councils and dog parks are **data records, not accounts**.
-Merchants do not log in, do not scan anything, and do not edit their own offers
-during pilot — they contact Vitail directly and an admin makes the change.
+Owners and café staff use the **same Android app**. The account role decides
+which interface loads.
 
-Venues do get one read-only screen: an **order page** staff leave open during
-trading, which refreshes itself every few seconds and lists orders waiting to be
-collected. It is a display, not a portal — nothing on it can be edited.
+```text
+OWNER → Owner UI
+CAFE  → Café order screen
+ADMIN → Django Admin
+```
 
-This is a deliberate simplification. It removes an entire merchant-facing
-application from pilot scope.
+Café accounts are created by a Vitail admin, not self-registered. Café staff
+cannot edit their own offers during pilot — they contact Vitail and an admin
+makes the change.
+
+The café screen is **read-only**. It lists orders waiting to be collected and
+refreshes every few seconds, and it cannot mark an order collected. Only the
+owner's app does that, inside the venue geofence.
+
+Vets, councils and dog parks remain **data records, not accounts**.
 
 ## Dogs
 
@@ -55,8 +64,11 @@ during Australian summer heat. A senior pug and a young kelpie on the same
 account are targeted differently.
 
 Dog count never multiplies points — walking three dogs earns the same as
-walking one. How the daily goal award is evaluated for an account with several
-dogs is recorded as an open question in `docs/DECISIONS.md`.
+walking one. The 20-point daily goal is awarded once per day per account, when
+every dog that came along that day has met its own goal. A dog left at home does
+not block it.
+
+An account may hold up to **10 dogs**.
 
 ## Earning Points
 
@@ -126,7 +138,7 @@ Owner browses partner and selects items
 → confirms order
 → points are deducted immediately
 → order receives a reference number
-→ the order appears on the venue's order page within seconds
+→ the order appears on the café's order screen within seconds
 → owner travels to the venue
 → inside the geofence, owner taps Redeem
 → order is marked collected
@@ -186,7 +198,7 @@ database changes, tests and documentation for their area.
 | 1 | Accounts, social login, dog profile, personalised goal calculation |
 | 2 | Partner venues, discovery map, geofencing, check-ins and dwell verification |
 | 3 | Walk tracking, walk validation, points engine, ledger, streaks, expiry |
-| 4 | Redemption orders, venue order page, in-store collection, charity donations, history |
+| 4 | Redemption orders, café order screen, in-store collection, charity donations, history |
 
 ## Must-Have Scope
 
@@ -204,7 +216,7 @@ Explicitly **not** built for pilot:
 
 ```text
 iOS
-merchant self-service portal (read-only order page only)
+merchant self-registration and self-service offer editing
 offline walk tracking and queued sync
 in-app payments or buying points
 reviews and ratings
