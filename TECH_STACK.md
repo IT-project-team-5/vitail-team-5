@@ -1,8 +1,12 @@
 # Tech Stack and Architecture
 
-This document defines the technical architecture for the Dog Walking Rewards prototype.
+This document defines the technical architecture for the Vitail pilot.
 
-The goal is to keep the system simple enough for a four-engineer junior team while still using production-style foundations: one Android app, one backend, one relational database, clear API contracts, and vertical use-case ownership.
+The goal is to keep the system simple enough for a four-engineer junior team
+while using production-style foundations: one Android app, one backend, one
+relational database, clear API contracts, and vertical use-case ownership.
+
+Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 
 ---
 
@@ -15,12 +19,12 @@ The goal is to keep the system simple enough for a four-engineer junior team whi
 | Android architecture | MVVM-style separation |
 | Local persistence | Room |
 | API client | Retrofit + OkHttp |
-| Background sync | WorkManager |
 | Walk tracking | Android Foreground Service |
 | Location | Fused Location Provider |
-| Maps | TBD |
-| QR generation | Android-compatible QR library |
-| QR scanning | CameraX-compatible QR scanner |
+| Geofencing | Android Geofencing API (Play Services) |
+| Maps | Google Maps SDK for Android |
+| Integrity / anti-spoofing | Play Integrity + mock-location detection |
+| Push | Firebase Cloud Messaging |
 | Backend language | Python |
 | Backend framework | Django |
 | API framework | Django REST Framework |
@@ -28,121 +32,106 @@ The goal is to keep the system simple enough for a four-engineer junior team whi
 | Internal admin | Django Admin |
 | API contract | OpenAPI |
 | Local development | Docker Compose |
+| Hosting region | Australian (Sydney or Melbourne) |
 | Version control | Git |
 
 ---
 
 ## 2. Why This Architecture
 
-### One Android App
+### One app, one end-user role
 
-Owners and cafés use the same app, with the backend role deciding which interface is shown.
+Merchants do not scan QR codes, do not register themselves, and do not edit
+their own offers during pilot. They are onboarded by a Vitail admin and are
+stored as **venue records**.
+
+That means there is no merchant application to build:
 
 ```text
-Account.role
-├── OWNER
-├── CAFE
-└── ADMIN
+Dog owner  → Android app
+Vitail admin → Django Admin
+Merchant   → database record + email notification
 ```
 
-Reasons:
-
-- only one frontend codebase;
-- one login/authentication flow;
-- easier maintenance for a small prototype;
-- café QR scanning can use native Android camera APIs;
-- all engineers learn the same frontend stack;
-- avoids maintaining React/web infrastructure for only a few cafés.
-
-The backend must still enforce role permissions. UI visibility is not security.
+The backend must still enforce that an owner can only act on their own data.
+UI visibility is not security.
 
 ### Kotlin + Jetpack Compose
 
-Kotlin is used because the prototype is Android-only and depends heavily on Android-native functionality:
+The product depends heavily on Android-native capability:
 
-- background location;
-- foreground services;
-- camera access;
-- local offline storage;
+- foreground location during walks;
+- geofence transitions with dwell;
+- background service lifecycle;
+- local buffering while the network drops;
 - notifications;
-- device lifecycle handling.
+- camera (optional photo check-ins).
 
-Jetpack Compose keeps new UI development simpler than maintaining XML layouts.
+Compose keeps new UI development simpler than maintaining XML layouts.
 
 ### Django REST Framework
 
-Django provides:
-
-- structured models;
-- ORM;
-- migrations;
-- authentication and permissions;
-- transaction support;
-- Django Admin;
-- a clear API layer through Django REST Framework.
-
-This reduces how much infrastructure junior engineers must design from scratch.
+Django provides models, ORM, migrations, authentication, permissions,
+transactions and an admin interface out of the box. The admin interface is not
+a convenience here — it **is** the merchant and support tool for pilot.
 
 ### MySQL
 
-MySQL is used from the beginning because:
+Relational data with strict transactional requirements: point deduction,
+order collection and expiry must never double-apply. Migrations keep every
+developer's schema identical.
 
-- it matches the team's existing stack;
-- the app has relational data;
-- point deductions and redemptions require transactions;
-- migrations are safer than ad-hoc CSV schema changes;
-- the prototype can grow without changing database technology.
+CSV is used for seed data, fixtures and exports only. It is never the runtime
+database.
 
-CSV may still be used for:
+### Australian hosting
 
-```text
-seed data
-fixtures
-imports
-exports
-debugging
-```
+Vitail intends to partner with insurers and councils, and the product collects
+continuous location data plus registration documents. Personal data is hosted in
+an Australian region from day one, because moving it later is far harder than
+starting there.
 
-CSV is not the runtime database.
+Note that Google Maps tile and geocoding requests leave for Google
+infrastructure regardless of where our data sits. This is documented rather than
+solved at pilot.
 
 ---
 
 ## 3. High-Level Architecture
 
 ```text
-                         ANDROID APP
-                              │
-                ┌─────────────┴─────────────┐
-                │                           │
-            OWNER ROLE                  CAFE ROLE
-                │                           │
-      ┌─────────┼─────────┐       ┌─────────┼─────────┐
-      │         │         │       │         │         │
-     Dogs     Walks     Cafés   Profile    Items    QR Scan
-      │         │         │       │         │         │
-      └─────────┴─────────┴───────┴─────────┴─────────┘
-                              │
-                         HTTPS / JSON
-                              │
-                              ▼
-                     DJANGO REST API
-                              │
-        ┌─────────────┬───────┼───────────┬─────────────┐
-        │             │       │           │             │
-     Accounts        Cafés   Walks      Wallet      Redemptions
-        │             │       │           │             │
-        └─────────────┴───────┴───────────┴─────────────┘
-                              │
-                              ▼
-                            MySQL
+                        ANDROID APP (owner)
+                                │
+        ┌───────────┬───────────┼───────────┬────────────┐
+        │           │           │           │            │
+       Dog        Walk       Venues      Wallet      Redemption
+      profile   tracking   + check-ins   + history     orders
+        │           │           │           │            │
+        └───────────┴───────────┴───────────┴────────────┘
+                                │
+                          HTTPS / JSON
+                                │
+                                ▼
+                        DJANGO REST API
+                                │
+   ┌──────────┬──────────┬──────┼───────┬──────────┬────────────┐
+   │          │          │      │       │          │            │
+ accounts    dogs      venues  walks  wallets  redemptions   rewards
+   │          │          │      │       │          │            │
+   └──────────┴──────────┴──────┴───────┴──────────┴────────────┘
+                                │
+                                ▼
+                        MySQL (AU region)
+                                │
+                                ▼
+                     Django Admin (Vitail staff)
 ```
 
 ---
 
-## 4. Suggested Repository Structure
+## 4. Repository Structure
 
-This is the target layout, not the current state. Only `README.md` and
-`TECH_STACK.md` exist today; everything else is created as work begins.
+Target layout. Only the documents exist today.
 
 ```text
 vitail-team-5/
@@ -150,99 +139,42 @@ vitail-team-5/
 │   └── app/
 ├── backend/
 │   ├── accounts/
-│   ├── cafes/
+│   ├── dogs/
+│   ├── venues/
 │   ├── walks/
 │   ├── wallets/
-│   └── redemptions/
+│   ├── redemptions/
+│   └── rewards/
 ├── docs/
-│   ├── PROJECT_MAP.md
-│   ├── USE_CASES.md
-│   ├── DATA_MODEL.md
-│   ├── API_RULES.md
 │   └── DECISIONS.md
 ├── docker-compose.yml
 ├── README.md
 └── TECH_STACK.md
 ```
 
-Recommended authority:
-
 | Source | Authority |
 |---|---|
 | `README.md` | Product overview and locked rules |
 | `TECH_STACK.md` | Technical architecture and conventions |
-| `PROJECT_MAP.md` | Detailed product behaviour (planned) |
+| `docs/DECISIONS.md` | Resolved decisions and open questions |
 | OpenAPI | API request/response contract |
 | Django models + migrations | Physical database |
-| `DECISIONS.md` | Intentional changes and TBD decisions (planned) |
 
 ---
 
 ## 5. Backend Domain Split
 
-Use separate Django apps by domain.
-
 ```text
-accounts
-cafes
-walks
-wallets
-redemptions
+accounts      authentication, social login, owner profile
+dogs          dog profile, breed reference data, personalised goal
+venues        partner venues, geofences, check-ins, offers
+walks         walk sessions, route samples, validation
+wallets       point lots, ledger, balance, expiry, streaks, caps
+redemptions   orders, collection, charity donations, history
+rewards       vet checkup and council registration verification
 ```
 
-This reduces migration conflicts and makes ownership clearer.
-
-### accounts
-
-Responsible for:
-
-- owner registration;
-- café registration;
-- login;
-- account roles;
-- owner profile;
-- dog CRUD.
-
-### cafes
-
-Responsible for:
-
-- café profile;
-- location;
-- opening hours;
-- catalogue items;
-- item availability;
-- café discovery.
-
-### walks
-
-Responsible for:
-
-- uploaded walks;
-- route samples;
-- participating dogs;
-- validation status;
-- validated duration.
-
-### wallets
-
-Responsible for:
-
-- current point balance;
-- point ledger;
-- walk rewards;
-- manual admin adjustments.
-
-### redemptions
-
-Responsible for:
-
-- carts/redemption requests;
-- QR tokens;
-- item snapshots;
-- café confirmation;
-- atomic point deduction;
-- redemption history.
+Separate Django apps reduce migration conflicts and make ownership clear.
 
 ---
 
@@ -252,113 +184,63 @@ Responsible for:
 
 ```text
 id
-username
+email
 password_hash
-role
+auth_provider          GOOGLE | EMAIL
+role                   OWNER | ADMIN
 display_name
 profile_photo
 is_active
 created_at
 ```
 
-Rules:
+Passwords are hashed by Django authentication. Plaintext is never stored.
 
-- username is unique;
-- passwords are hashed using Django authentication;
-- plaintext passwords are never stored;
-- role is `OWNER`, `CAFE`, or `ADMIN`.
+Social login is Google at pilot. Apple sign-in is deferred with iOS.
 
 ### Dog
 
 ```text
 id
-owner_id
+owner_id               one dog per owner at pilot
 name
 photo
-breed
-age
+breed_id
+age_months
+size                   SMALL | MEDIUM | LARGE
+is_brachycephalic
 created_at
 ```
 
-One owner may have multiple dogs.
-
-### Cafe
+### Breed (reference data)
 
 ```text
 id
-account_id
 name
-description
-address
-latitude
-longitude
-opening_hours
-photo
-created_at
-updated_at
+energy_level           LOW | MODERATE | HIGH
+default_size
+is_brachycephalic
 ```
 
-For the prototype:
-
-```text
-one café account = one café
-```
-
-Café registration becomes active immediately.
-
-### CafeItem
-
-```text
-id
-cafe_id
-name
-description
-photo
-point_price
-is_available
-created_at
-updated_at
-```
-
-Coffee and dog snacks are normal catalogue items.
-
-Rewards are not tied to dogs.
+Seeded reference table. `Dog.is_brachycephalic` defaults from the breed but can
+be overridden for mixed breeds.
 
 ### Walk
 
 ```text
 id
-client_uuid
 owner_id
-start_time
-end_time
+dog_id
+started_at
+ended_at
+end_reason             MANUAL | AUTO_TIMEOUT | LOGOUT
 status
-valid_minutes
-earned_points
+raw_distance_m
+valid_distance_m
+valid_duration_s
+awarded_points
 created_at
 ```
-
-`client_uuid` is generated on the phone before tracking starts.
-
-Purpose:
-
-```text
-same walk uploaded twice
-→ same client_uuid
-→ backend returns existing result
-→ no duplicate points
-```
-
-### WalkDog
-
-```text
-walk_id
-dog_id
-```
-
-Records which registered dogs participated in the walk.
-
-Dog count does not affect points.
 
 ### WalkPoint
 
@@ -368,77 +250,168 @@ walk_id
 latitude
 longitude
 recorded_at
-accuracy
+accuracy_m
 sequence_number
+is_discarded           accuracy > 30 m, or failed speed check
 ```
 
-Only store the minimum GPS data required for route reconstruction and basic validation.
+Store only the minimum needed for route display and validation.
 
-### Wallet
+### Venue
 
 ```text
-owner_id
-balance
-updated_at
+id
+name
+venue_type             VET | DOG_PARK | CAFE | RESTAURANT | OTHER
+description
+address
+latitude
+longitude
+geofence_radius_m
+required_dwell_s
+opening_hours
+photo
+is_active
+created_at
 ```
+
+Created and edited by Vitail admins only.
+
+### VenueOffer
+
+```text
+id
+venue_id
+name
+description
+photo
+point_price
+is_available
+created_at
+```
+
+### CheckIn
+
+```text
+id
+owner_id
+venue_id
+entered_at
+dwell_completed_at
+status                 IN_PROGRESS | COMPLETED | ABANDONED
+awarded_points
+local_date
+```
+
+Unique on `(owner_id, venue_id, local_date)` for completed check-ins — one
+check-in per venue per day.
+
+### PointLot
+
+```text
+id
+owner_id
+source                 WALK | GOAL | CHECKIN | VET | COUNCIL | STREAK | REFUND
+amount_earned
+amount_remaining
+earned_at
+expires_at             earned_at + 12 months
+```
+
+Points expire 12 months after they are earned, so the wallet cannot be a single
+integer. Balance is the sum of `amount_remaining` across unexpired lots, and
+spending consumes lots **oldest-first (FIFO)** so points closest to expiry are
+used first.
 
 ### PointLedger
 
 ```text
 id
 owner_id
-amount
+amount                 signed
 type
 walk_id
+checkin_id
 redemption_id
+lot_id
 reason
 created_at
 ```
 
-Examples:
+> Never change a balance without writing the corresponding ledger entry.
+
+### DailyPointTally
 
 ```text
-+35 WALK_REWARD
--100 REDEMPTION
-+50 ADMIN_ADJUSTMENT
+owner_id
+local_date
+walk_points
+goal_points
+checkin_points
+capped_total           never exceeds 72
 ```
 
-Rule:
+Makes the daily cap cheap to enforce and cheap to audit.
 
-> Never change wallet balance without creating the corresponding ledger entry.
-
-### Redemption
+### VerifiedReward
 
 ```text
 id
-user_id
-cafe_id
-token
-status
-total_points
-expires_at
-confirmed_at
+owner_id
+type                   VET_CHECKUP | COUNCIL_REGISTRATION
+evidence_file
+status                 PENDING | APPROVED | REJECTED
+reviewed_by
+reviewed_at
+awarded_points
 created_at
 ```
 
-### RedemptionItem
+Reviewed by a Vitail admin. See `docs/DECISIONS.md` — the confirmation method
+for vet checkups is still open.
+
+### RedemptionOrder
 
 ```text
 id
-redemption_id
-cafe_item_id
+owner_id
+venue_id
+reference_number       shown to owner and merchant
+status                 PENDING | COLLECTED | EXPIRED | CANCELLED
+total_points
+created_at
+collected_at
+expires_at             end of the day it was created
+```
+
+### RedemptionOrderItem
+
+```text
+id
+order_id
+venue_offer_id
 item_name_snapshot
 point_price_snapshot
 quantity
 ```
 
-Item names and prices are snapshotted so historical purchases remain correct after a café edits its catalogue.
+Names and prices are snapshotted so history stays correct after a venue edits
+its catalogue.
+
+### CharityDonation
+
+```text
+id
+owner_id
+charity_id
+reference_number
+points
+created_at
+```
 
 ---
 
 ## 7. Android Architecture
-
-Recommended structure:
 
 ```text
 UI / Compose screens
@@ -452,277 +425,321 @@ Room       Retrofit
          Django API
 ```
 
-The UI should not directly call Retrofit or Room.
+The UI never calls Retrofit or Room directly.
 
-### Suggested feature modules/packages
+Feature packages:
 
 ```text
 auth
-dogs
-cafes
-walks
+dog
+walk
+venues
 wallet
 redemption
 shared
 ```
 
-### Shared Android responsibilities
-
-Keep these shared instead of reimplementing them per use case:
+Shared concerns, implemented once:
 
 ```text
 API client configuration
-authentication token storage
+auth token storage
 error mapping
 navigation
-loading states
+loading and empty states
 image loading
-shared UI components
 Room database
-network connectivity handling
+location permission handling
 ```
+
+### On offline behaviour
+
+Full offline tracking and queued sync are **out of scope**. However, GPS
+recording does not need the network, and a phone can lose connectivity
+mid-route. So:
+
+- route samples are buffered in Room **during** the walk;
+- the walk uploads when the owner ends it;
+- upload failure retries with backoff while the app is open;
+- there is no long-lived background sync engine, and no multi-day offline queue.
 
 ---
 
 ## 8. Walk Tracking
 
-The owner:
-
 ```text
-selects dog(s)
-→ presses Start
-→ foreground service begins
-→ route appears on map
-→ GPS points are stored locally
-→ presses End
+Owner selects Start
+→ app waits for a GPS lock
+→ foreground service starts
+→ route renders on the map
+→ samples buffered in Room
+→ Owner selects End
 ```
 
-The foreground service continues tracking when the app is backgrounded.
+The foreground service keeps tracking when the app is backgrounded. The phone
+never decides the authoritative reward — the backend does.
 
-The phone stores:
+### Auto-end
+
+A walk ends automatically after **5 minutes of inactivity**, or when the owner
+logs out. Auto-ended walks are still validated and still earn points for the
+valid portion.
+
+### Pause forgiveness
+
+Stationary periods **under 5 minutes** are forgiven and do not end the walk.
+Dogs stop to sniff; that is normal walking behaviour, not inactivity.
+
+### Sample validation
+
+Discard a sample when:
 
 ```text
-latitude
-longitude
-timestamp
-GPS accuracy
+accuracy worse than 30 m
+timestamps out of order
+implied speed above walking range (driving or cycling)
+impossible location jump
 ```
 
-The phone should not decide the authoritative reward.
+Signal loss underground simply produces no samples, and those minutes do not
+count.
 
-### Offline Flow
-
-```text
-Start walk
-→ generate client_uuid
-→ store route in Room
-→ finish
-→ if online: upload
-→ if offline: PENDING_SYNC
-→ WorkManager retries
-→ backend validates
-→ backend awards points
-```
-
-### Walk State Machine
+### Walk state machine
 
 ```text
 RECORDING
     ↓
-PENDING_SYNC
+UPLOADING
     ↓
 VALIDATING
    ↙       ↘
 ACCEPTED   REJECTED
 ```
 
-### Point Rules
+---
+
+## 9. Personalised Daily Goal
+
+The goal is a **recommended walk duration**, derived per dog:
 
 ```text
-1 valid minute = 1 point
-minimum walk = 10 minutes
-maximum earning = 300 points/day
-points never expire
-dog count does not multiply points
+breed energy level
+age
+size
+brachycephalic flag
+       ↓
+base recommended duration
+       ↓
+welfare guardrails
+  - lower target for brachycephalic breeds
+  - lower target for senior dogs
+  - reduced target in Australian summer heat
+       ↓
+personalised daily goal
 ```
 
-The daily cap is based on the walking date, not the upload date.
+Meeting the goal awards 20 points once per day.
 
-### Prototype Validation
+The goal is expressed in minutes while walk points are earned per kilometre.
+This mismatch is intentional but must be presented clearly in the UI, and the
+open question is recorded in `docs/DECISIONS.md`.
 
-Only basic validation is required.
-
-Check for:
-
-- missing GPS samples;
-- invalid timestamp order;
-- extremely inaccurate samples;
-- impossible location jumps;
-- sustained vehicle-like speed;
-- minimum valid duration.
-
-Advanced fake-GPS detection is out of scope.
+Heat adjustment requires a weather source. Provider is not yet chosen.
 
 ---
 
-## 9. Café Discovery
+## 10. Venue Check-ins
 
-Owner café discovery requires:
+Venues are registered with a coordinate, a geofence radius and a required dwell
+time.
 
 ```text
-café name
-location
-distance
-opening hours
-photo
-available items
-point prices
+Owner enters geofence
+→ CheckIn created as IN_PROGRESS
+→ dwell timer runs
+→ dwell satisfied → COMPLETED → 12 points
+→ owner leaves early → ABANDONED, no penalty
+→ owner may return the same day and try again
 ```
 
-Map/geocoding provider is still TBD.
+Dwell requirements:
 
-The backend should return café data; Android decides how it is displayed on the map.
+```text
+vet          3 minutes
+dog park     5 minutes
+café        10 minutes
+restaurant  20 minutes
+```
+
+Dwell completion is confirmed by the **backend** from timestamped location
+reports. The client must not self-report a completed check-in.
 
 ---
 
-## 10. Redemption Flow
+## 11. Points Engine
 
-A user may select multiple items and quantities from one café.
+Earning rules are listed in `README.md`. Implementation requirements:
+
+- walking is 8 points per km, counted up to 5 km per day;
+- all point values **round down**;
+- the daily cap of 72 applies to walking + goal + check-ins only;
+- vet checkups, council registration and streak bonuses are outside the cap;
+- the cap is applied as a **running total in chronological order**, so an
+  earlier event is never retroactively revoked by a later one;
+- the day boundary is the owner's **local date**.
+
+Every award writes both a `PointLot` and a `PointLedger` entry, inside one
+transaction.
+
+### Streaks
+
+A streak day is a day with at least one accepted walk. Bonuses are one-time:
+7 days awards 20 points, 30 days awards 100.
+
+### Expiry
+
+A scheduled job expires lots past `expires_at`, zeroes their remaining amount
+and writes a negative ledger entry. Expiry must be idempotent — running it twice
+must not double-deduct.
+
+---
+
+## 12. Redemption
+
+### Partner offer
 
 ```text
-Owner selects café
-→ adds items
-→ requests redemption
-→ backend reads current item prices
-→ backend calculates total
-→ backend checks balance
-→ backend creates QR
-→ café scans QR
-→ backend returns preview
-→ café confirms or rejects
-→ backend checks balance again
-→ backend confirms redemption
-→ points are deducted atomically
-→ ledger record is created
+Owner selects venue and items
+→ backend reads current prices and computes the total
+→ backend checks available balance
+→ order created as PENDING
+→ points deducted immediately, FIFO across lots
+→ reference number issued
+→ merchant notified by email with owner name and order
+→ owner travels to the venue
+→ Redeem button enables only inside the venue geofence
+→ owner taps Redeem
+→ order marked COLLECTED
 ```
 
-### QR Rules
+Deduction happens at **order creation**, not at collection. Two consequences
+that must be implemented:
 
-```text
-valid for 5 minutes
-random token
-single-use
-tied to one café
-tied to one redemption
-```
+- an order not collected by end of day moves to `EXPIRED` and the points are
+  **refunded automatically** as a new lot, with a ledger entry;
+- an admin can cancel and refund an order manually, for example when a venue has
+  run out of stock.
 
-Do not use a raw user ID as the QR security mechanism.
+Gating the Redeem button on the geofence prevents an order being marked
+collected away from the venue. This reuses the check-in geofencing rather than
+adding a new mechanism.
 
-### Redemption State Machine
+### Order state machine
 
 ```text
 PENDING
- ├── CONFIRMED
- ├── REJECTED
- ├── EXPIRED
- └── CANCELLED
+ ├── COLLECTED
+ ├── EXPIRED    (auto, end of day, refunded)
+ └── CANCELLED  (admin, refunded)
 ```
 
-### Atomic Confirmation
+### Atomicity
 
-Café confirmation must execute in one database transaction.
-
-Conceptually:
+Deduction and collection each run in a single database transaction:
 
 ```text
 BEGIN
-
-lock redemption
-check status = PENDING
-check not expired
-check café matches
-check current balance
-deduct balance
-create ledger debit
-mark redemption CONFIRMED
-
+lock the order row
+check the current status
+check expiry
+verify the geofence for collection
+apply the state change
+write ledger entries
 COMMIT
 ```
 
-If any step fails:
+If any step fails, `ROLLBACK`. A repeated request must return the existing
+state, never apply the change twice.
 
-```text
-ROLLBACK
-```
+### Charity donation
 
-A repeated confirmation request must return the already-completed state instead of deducting points again.
+Points are deducted the same way and a reference number is issued. There is no
+venue, no geofence and no collection step.
 
 ---
 
-## 11. API Structure
-
-Suggested API groups:
+## 13. API Structure
 
 ```text
 /api/auth/
 /api/dogs/
-/api/cafes/
 /api/walks/
+/api/venues/
+/api/checkins/
 /api/wallet/
 /api/redemptions/
+/api/rewards/
 ```
 
-Possible endpoint shape:
+Indicative endpoints:
 
 ```text
-POST   /api/auth/register/owner
-POST   /api/auth/register/cafe
+POST   /api/auth/register
 POST   /api/auth/login
+POST   /api/auth/social/google
+POST   /api/auth/password-reset
+DELETE /api/auth/account
 
 GET    /api/dogs
 POST   /api/dogs
 PATCH  /api/dogs/{id}
-DELETE /api/dogs/{id}
-
-GET    /api/cafes
-GET    /api/cafes/{id}
-GET    /api/cafes/{id}/items
+GET    /api/dogs/{id}/goal
 
 POST   /api/walks
 GET    /api/walks/{id}
 
+GET    /api/venues
+GET    /api/venues/{id}
+GET    /api/venues/{id}/offers
+
+POST   /api/checkins
+POST   /api/checkins/{id}/heartbeat
+
 GET    /api/wallet
 GET    /api/wallet/ledger
 
-POST   /api/redemptions
-GET    /api/redemptions/{token}/preview
-POST   /api/redemptions/{id}/confirm
-POST   /api/redemptions/{id}/reject
+POST   /api/redemptions/orders
+POST   /api/redemptions/orders/{id}/collect
+GET    /api/redemptions/orders
+POST   /api/redemptions/donations
+
+POST   /api/rewards/vet-checkup
+POST   /api/rewards/council-registration
 ```
 
-Exact routes should eventually be defined by OpenAPI rather than copied manually between developers.
+Exact routes are ultimately defined by OpenAPI, not copied between developers.
 
 ---
 
-## 12. API Rules
+## 14. API Rules
 
 The backend is authoritative for:
 
 ```text
-account role
-walk validity
-earned points
+walk validity and distance
+awarded points
 daily cap
-wallet balance
-catalogue price
-redemption total
-redemption state
-QR expiry
+streaks
+wallet balance and expiry
+check-in dwell completion
+offer price and order total
+order state
+refunds
 ```
 
-Android may calculate temporary UI values, but those values are never trusted by the server.
+Android may compute temporary display values, but the server never trusts them.
 
-Use one shared error response structure, for example:
+One shared error shape:
 
 ```json
 {
@@ -731,39 +748,32 @@ Use one shared error response structure, for example:
 }
 ```
 
-Avoid every engineer inventing different response formats.
-
 ---
 
-## 13. Authentication and Permissions
+## 15. Authentication and Permissions
 
-Use Django's authentication system with API token/JWT-style authentication.
-
-Final token implementation is TBD.
-
-Backend permissions should enforce:
+Django authentication with token/JWT-style API auth. Google social login at
+pilot; email and password as fallback. Password reset and account deletion are
+both required.
 
 ```text
 OWNER
-- manage own dogs
-- create own walks
-- view cafés
-- create own redemptions
-- view own wallet/history
-
-CAFE
-- edit own café
-- manage own items
-- scan/confirm redemptions for own café
-- view own redemption history
+- manage own dog
+- create own walks and check-ins
+- view venues and offers
+- create own orders and donations
+- view own wallet and history
 
 ADMIN
-- Django Admin access
+- Django Admin
+- onboard and edit venues and offers
+- review vet and council evidence
+- cancel and refund orders
+- investigate suspected farming
 ```
 
-Never trust an account ID sent by the Android app when the authenticated user identity already determines ownership.
-
-Example:
+Never trust an owner ID sent by the app when the authenticated identity already
+determines ownership.
 
 Bad:
 
@@ -776,81 +786,95 @@ Better:
 
 ```text
 POST /walks
-backend gets owner from authenticated request
+owner is taken from the authenticated request
 ```
 
 ---
 
-## 14. MySQL and Migration Policy
+## 16. Anti-Abuse
 
-MySQL is used from day one.
-
-Normal schema workflow:
-
-```text
-edit Django model
-→ generate migration
-→ review migration
-→ run migration
-→ commit model + migration together
-```
-
-Every schema-changing pull request should contain:
+Pilot runs mostly on trust. The controls exist to discourage farming, not to
+police users:
 
 ```text
-model change
-migration
-tests
-documentation update
+walking-speed sanity checks
+30 m GPS accuracy floor
+mock-location detection (isFromMockProvider + Play Integrity)
+server-confirmed geofence dwell
+one check-in per venue per day
+daily point cap
+geofence gate on order collection
 ```
 
-During very early development:
-
-```text
-team may intentionally reset + reseed development DB
-```
-
-After pilot data matters:
-
-```text
-do not casually reset
-use forward migrations
-backup before risky changes
-```
-
-### Why migrations are still simpler than CSV
-
-With migrations:
-
-```text
-every developer gets the same schema
-schema changes are version-controlled
-CI can build DB from zero
-relationships stay explicit
-```
-
-Without migrations, schema knowledge becomes tribal knowledge and each developer's database drifts.
+Advanced fake-GPS detection is out of scope. Disputes are handled by email at
+pilot.
 
 ---
 
-## 15. Development Environment
+## 17. Privacy and Data Handling
 
-Recommended Docker Compose services:
+The product collects continuous location, dog health attributes and — for
+council registration — identity documents. That is the most sensitive data in
+the system.
+
+Requirements:
+
+- personal data hosted in an Australian region;
+- a defined retention period for raw GPS route samples (still open);
+- registration evidence stored with restricted access and deleted after review
+  where possible;
+- account deletion must actually remove or irreversibly anonymise personal data;
+- the owner's name is disclosed to a merchant on order notification, which must
+  be stated in the privacy notice.
+
+---
+
+## 18. Notifications
+
+Categories, with per-category opt-out:
+
+| Type | Frequency |
+|---|---|
+| Walk reminder | Once daily, owner-chosen time, only if the goal is unmet |
+| Heat safety | Temperature-triggered, summer |
+| Nearby check-in | Max once daily, suppressed if already checked in |
+| Streak at risk | Only approaching the 7 and 30-day milestones |
+| Transactional | Uncapped (points awarded, order collected, refund) |
+
+Hard cap of **two promotional notifications per day**, quiet hours 21:00–08:00.
+Transactional messages are exempt. Over-notification is the main uninstall
+driver for reward apps.
+
+---
+
+## 19. MySQL and Migration Policy
+
+```text
+edit the Django model
+→ generate the migration
+→ review the migration
+→ run it
+→ commit model and migration together
+```
+
+Every schema-changing pull request contains the model change, the migration,
+tests and a documentation update.
+
+Early development may reset and reseed the development database. Once pilot data
+exists, use forward migrations and back up before risky changes.
+
+---
+
+## 20. Development Environment
+
+Docker Compose services:
 
 ```text
 backend
 mysql
 ```
 
-Optional later:
-
-```text
-redis
-```
-
-Redis is not required for the current prototype.
-
-Recommended environment variables:
+Environment variables:
 
 ```text
 DJANGO_SECRET_KEY
@@ -859,87 +883,69 @@ MYSQL_USER
 MYSQL_PASSWORD
 MYSQL_HOST
 API_BASE_URL
+GOOGLE_MAPS_API_KEY
+FCM_CREDENTIALS
+WEATHER_API_KEY
 ```
 
-Never commit production secrets.
+Never commit secrets. Never commit a real API key.
 
 ---
 
-## 16. Four-Engineer Split
+## 21. Four-Engineer Split
 
-Work by vertical use case.
-
-### Engineer 1 — Accounts and Dogs
+### Engineer 1 — Accounts and Dog
 
 ```text
-owner registration
-café authentication foundation
-login
-profile
-dog CRUD
+registration, Google login, password reset, account deletion
+owner profile
+dog profile and breed reference data
+personalised goal calculation
+heat adjustment
 ```
 
-### Engineer 2 — Café and Discovery
+### Engineer 2 — Venues and Check-ins
 
 ```text
-café self-registration
-café profile
-location
-catalogue CRUD
-availability
-owner café map
-item browsing
+venue and offer admin models
+discovery list and map
+geofence registration
+dwell tracking and confirmation
+check-in awards and daily uniqueness
 ```
 
-### Engineer 3 — Walk and Wallet
+### Engineer 3 — Walks and Wallet
 
 ```text
-dog selection
-foreground tracking
-route UI
-Room
-offline sync
-walk upload
-validation
-point calculation
-wallet
-ledger
+foreground tracking service
+route UI and Room buffering
+walk upload and validation
+points engine, caps, rounding
+point lots, ledger, FIFO spend, expiry job
+streaks
 ```
 
-### Engineer 4 — Redemption
+### Engineer 4 — Redemption and Rewards
 
 ```text
-cart
-quantities
-QR generation
-QR scanner
-preview
-confirmation
-atomic deduction
+order creation and deduction
+merchant email notification
+geofence-gated collection
+expiry and refund job
+charity donations
 redemption history
+vet and council evidence submission and admin review
 ```
 
-Each engineer owns:
-
-```text
-Android UI
-Django API
-database model/migration
-tests
-documentation
-```
-
-Do not create permanent frontend/backend silos.
+Each engineer owns the Android UI, the API, the migration, the tests and the
+docs for their area. Do not create permanent frontend/backend silos.
 
 ---
 
-## 17. Shared-Code Rule
+## 22. Shared-Code Rule
 
-Before creating a new helper, model convention, API response type, or authentication method, check whether one already exists.
-
-Shared concerns should have one implementation.
-
-Examples:
+Before creating a new helper, convention, response type or auth method, check
+whether one already exists. Shared concerns get one implementation:
 
 ```text
 auth token handling
@@ -948,88 +954,92 @@ API errors
 Room database
 Django permission classes
 point transaction logic
-QR token generation
+geofence handling
+reference number generation
 ```
-
-Avoid four engineers creating four versions of the same concept.
 
 ---
 
-## 18. Definition of Done
+## 23. Definition of Done
 
 A use case is complete only when:
 
-- Android UI works;
-- backend API works;
-- MySQL migration works from a blank database;
+- the Android UI works;
+- the backend API works;
+- the migration runs from a blank database;
 - error states are handled;
 - automated tests exist;
-- OpenAPI/docs are updated;
-- the complete vertical flow works without mocked data.
+- OpenAPI and docs are updated;
+- the vertical flow works with no mocked data.
 
 Main acceptance flow:
 
 ```text
-Owner registers
-→ adds dog
-→ starts walk
-→ sees route
-→ loses internet
-→ completes walk
-→ reconnects
-→ walk syncs
-→ points are awarded
-→ finds café
-→ selects multiple items
-→ generates QR
-→ café scans
-→ café confirms
-→ points are deducted exactly once
-→ redemption appears in history
+Owner registers with Google
+→ adds a dog
+→ sees a personalised daily goal
+→ starts a walk
+→ sees the route
+→ ends the walk
+→ points are awarded within the cap
+→ walks to a partner venue
+→ dwells and completes a check-in
+→ orders an offer
+→ points are deducted once
+→ taps Redeem inside the geofence
+→ order is marked collected
+→ the redemption appears in history with a reference number
 ```
 
 Critical failure tests:
 
 ```text
 duplicate walk upload
-expired QR
-duplicate QR confirmation
+driving instead of walking
+GPS accuracy below threshold
+mock location
+second check-in at the same venue the same day
+daily cap boundary
 insufficient balance
-unavailable item
-invalid login
-offline retry
+duplicate collection request
+collection attempted outside the geofence
+uncollected order expiry and refund
+point expiry at 12 months
 ```
 
 ---
 
-## 19. Out of Scope for v1
+## 24. Out of Scope
 
 ```text
 iOS
-separate café web app
-social login
+merchant portal or merchant accounts
+offline tracking and queued sync
+multiple dogs per account
+in-app payments
+reviews and ratings
+wearable integration
+net-walking
+friends and leaderboards
 advanced GPS fraud detection
-custom admin frontend
-automatic café reimbursement settlement
-point expiry
-dog-based reward restrictions
-dog-based point multiplier
+automatic merchant reimbursement settlement
 ```
 
 ---
 
-## 20. TBD
+## 25. TBD
 
-The team must explicitly decide these later:
+Recorded in `docs/DECISIONS.md`. Developers and AI assistants must not silently
+invent behaviour for an open decision.
 
 ```text
-map/geocoding provider
+vet checkup confirmation method
+merchant notification channel beyond email
 raw GPS route retention period
-deployment provider
+weather provider for heat adjustment
+charity partners
+minimum walk length
+whether the daily goal is measured in minutes or kilometres
+deployment provider within the AU region
 final API auth token implementation
-final QR library
 ```
-
-Developers and AI assistants must not silently invent behaviour for a TBD.
-
-When a TBD is resolved, record it in `docs/DECISIONS.md`.

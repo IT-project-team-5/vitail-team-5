@@ -1,68 +1,166 @@
-# Vitail- Dog Walking Rewards
+# Vitail — Dog Walking Rewards
 
-Android prototype where dog owners earn points from validated walks and spend those points at participating cafés.
+Android prototype where dog owners earn points from tracked walks and partner
+check-ins, then spend those points on partner offers or charity donations.
+
+Vitail differs from general fitness apps in two ways. Targets are calculated per
+**dog** rather than per person — using breed energy, age, size and a
+brachycephalic flag, with lower targets for flat-faced or senior dogs and
+reduced targets in Australian summer heat. And the reward loop connects walking
+to **local businesses**, which general fitness apps do not do.
+
+## Status
+
+Pilot scope, Melbourne. This document and `TECH_STACK.md` reflect the client
+requirements captured on 2026-08-19.
+
+Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
+behaviour for an open decision — raise it instead.
+
+## Business Model
+
+B2B2C. Vitail sits between dog owners and the partners who fund the reward
+catalogue: insurers, councils, and local merchants (cafés, vets, groomers, pet
+retailers). Partners pay for foot traffic, referrals and healthier-dog data.
 
 ## Product Roles
 
-- **Owner:** register/login, manage dogs, track walks, view route, earn points, discover cafés, select items, generate QR, view balance/history.
-- **Café:** self-register/login, edit café profile, manage items and availability, scan QR, confirm/reject redemption, view redemption history.
-- **Admin:** use Django Admin for prototype management and support.
+At pilot there are only **two** account types.
 
-Owners and cafés use the **same Android app**. The backend account role determines which interface and APIs are available.
+| Role | Interface | Notes |
+|---|---|---|
+| **Dog owner** | Android app | The only end user with an app account |
+| **Vitail admin** | Django Admin | Onboards partners, handles support and disputes |
 
-```text
-OWNER → Owner UI
-CAFE  → Café UI
-ADMIN → Django Admin
-```
+Merchants, vets, councils and dog parks are **data records, not accounts**.
+Merchants do not log in, do not scan anything, and do not edit their own offers
+during pilot — they contact Vitail directly and an admin makes the change.
 
-## Core Rules
+This is a deliberate simplification. It removes an entire merchant-facing
+application from pilot scope.
 
-| Rule | Value |
+## Dogs
+
+One dog per account at pilot.
+
+Stored per dog: name, photo, breed, age, size, and a brachycephalic flag.
+
+This is **not** display-only. Breed energy, age, size and the brachycephalic
+flag feed the personalised daily walk goal, and the goal is reduced during
+Australian summer heat.
+
+## Earning Points
+
+| Source | Points | Limit |
+|---|---|---|
+| Walking | 8 per km | Counted up to 5 km/day (40 max) |
+| Personalised daily goal met | 20 | Once per day |
+| Partner venue / dog park / vet check-in | 12 | Once per venue per day, geofenced |
+| Confirmed vet checkup | 200 | Max 2/year, at least 60 days apart |
+| Council registration proof | 300 | Once per registration period, max 1/year |
+| 7-day walking streak | 20 | One-time |
+| 30-day walking streak | 100 | One-time |
+
+**Daily cap: 72 points**, applied to the sum of walking + daily goal + venue
+check-ins.
+
+Vet checkups, council registration and streak bonuses sit **outside** the daily
+cap.
+
+Points always round down. Points expire **12 months** after they are earned.
+
+> These are starting numbers. See `docs/DECISIONS.md` for the consequences of
+> the 72-point cap on multi-venue check-ins.
+
+## Check-in Dwell Times
+
+A check-in requires the owner to remain inside the venue geofence for:
+
+| Venue type | Dwell |
 |---|---|
-| Walk reward | 1 point per valid walking minute |
-| Minimum walk | 10 minutes |
-| Daily earning cap | 300 points |
-| Point expiry | Never |
-| Dog multiplier | None |
-| QR validity | 5 minutes |
-| Café activation | Immediate after self-registration |
+| Vet | 3 minutes |
+| Dog park | 5 minutes |
+| Café | 10 minutes |
+| Restaurant | 20 minutes |
 
-Approximate business guidance:
+Vet check-ins exist so dogs build a positive association with the vet, not only
+for the reward.
 
-```text
-20 points ≈ AUD 1
-100 points ≈ AUD 5
-```
+If a check-in is not completed, progress is simply lost. There is no penalty,
+and the owner can return to the same geofence later the same day to complete it.
 
-Café items set their own point prices.
-
-## Main User Flow
+## Walk Rules
 
 ```text
-Owner registers
-→ adds dog
-→ starts walk
-→ route is tracked
-→ walk syncs to backend
-→ backend validates and awards points
-→ owner finds café
-→ selects items
-→ generates QR
-→ café scans and confirms
-→ points are deducted exactly once
+Owner taps Start
+→ GPS lock required before tracking begins
+→ foreground service records the route
+→ pauses under 5 minutes are forgiven (sniffing)
+→ owner taps End
 ```
+
+- Walks are started **manually**. There is no background auto-detection.
+- A walk auto-ends after 5 minutes of inactivity, or if the owner logs out.
+- Speed sanity checks exclude driving and cycling.
+- GPS readings worse than 30 m accuracy are ignored.
+- Minutes without signal (underground) do not count.
+
+## Redeeming Points
+
+Two redemption paths.
+
+**Partner offer**
+
+```text
+Owner browses partner and selects items
+→ confirms order
+→ points are deducted immediately
+→ order receives a reference number
+→ merchant is notified with the owner's name and order
+→ owner travels to the venue
+→ inside the geofence, owner taps Redeem
+→ order is marked collected
+```
+
+Uncollected orders expire at end of day and points are refunded automatically.
+
+**Charity donation**
+
+Owners can donate points to a selected charity. This path needs no merchant, no
+geofence and no collection step.
+
+Every redemption carries a reference number and appears in the owner's profile
+history, so owners can see what they spent points on and Vitail can resolve
+disputes with merchants.
+
+Merchants set their own point prices and thresholds when signing a partnership.
+
+## Anti-Abuse
+
+Pilot runs largely on trust — the premise is that owners act in their dog's
+interest. The safety net exists to discourage farming, not to police users:
+
+```text
+walking-speed sanity checks
+GPS accuracy floor
+mock-location detection
+geofence dwell requirements
+daily caps
+```
+
+Photo check-ins are a desirable optional addition, not a pilot requirement.
 
 ## Project Structure
 
-Target layout. Only `README.md` and `TECH_STACK.md` exist today; the remaining
-directories are created as each work stream begins.
+Target layout. Only the documents exist today; the remaining directories are
+created as each work stream begins.
 
 ```text
 vitail-team-5/
 ├── android/            (planned)
 ├── backend/            (planned)
-├── docs/               (planned)
+├── docs/
+│   └── DECISIONS.md
 ├── docker-compose.yml  (planned)
 ├── README.md
 └── TECH_STACK.md
@@ -70,23 +168,52 @@ vitail-team-5/
 
 ## Team Ownership
 
-Work is split by vertical use case.
+Work is split by vertical use case. Each engineer owns the Android UI, API,
+database changes, tests and documentation for their area.
 
 | Engineer | Ownership |
 |---|---|
-| 1 | Accounts, profiles, dogs |
-| 2 | Café registration, profile, items, café discovery |
-| 3 | Walk tracking, offline sync, validation, points |
-| 4 | Cart, QR, redemption, transaction history |
+| 1 | Accounts, social login, dog profile, personalised goal calculation |
+| 2 | Partner venues, discovery map, geofencing, check-ins and dwell verification |
+| 3 | Walk tracking, walk validation, points engine, ledger, streaks, expiry |
+| 4 | Redemption orders, in-store collection, charity donations, history, admin notifications |
 
-Each engineer owns the Android UI, API, database changes, tests, and documentation for their use case.
+## Must-Have Scope
+
+The three features that define a successful first release:
+
+```text
+1. tracked walk
+2. venue check-in
+3. redeem points
+```
+
+## Out of Scope
+
+Explicitly **not** built for pilot:
+
+```text
+iOS
+merchant self-service portal
+offline walk tracking and queued sync
+multiple dogs per account
+in-app payments or buying points
+reviews and ratings
+pet wearable integration
+net-walking (parallel-walking boost)
+friends and leaderboards
+merchant-editable offers
+dog-count point multipliers
+point-earning from non-walking activity
+```
 
 ## Source of Truth
 
 - `README.md` — product overview and locked rules
-- `TECH_STACK.md` — detailed architecture and implementation conventions
-- `docs/PROJECT_MAP.md` — detailed product behaviour (planned, not yet created)
+- `TECH_STACK.md` — architecture and implementation conventions
+- `docs/DECISIONS.md` — resolved decisions and open questions
 - OpenAPI — API contract
 - Django models + migrations — physical database structure
 
-If code or AI-generated suggestions conflict with these documents, resolve the conflict before implementation.
+If code or AI-generated suggestions conflict with these documents, resolve the
+conflict before implementation.
