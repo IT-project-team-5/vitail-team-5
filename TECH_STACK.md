@@ -141,8 +141,11 @@ CSV is not the runtime database.
 
 ## 4. Suggested Repository Structure
 
+This is the target layout, not the current state. Only `README.md` and
+`TECH_STACK.md` exist today; everything else is created as work begins.
+
 ```text
-dog-rewards/
+vitail-team-5/
 ├── android/
 │   └── app/
 ├── backend/
@@ -168,10 +171,10 @@ Recommended authority:
 |---|---|
 | `README.md` | Product overview and locked rules |
 | `TECH_STACK.md` | Technical architecture and conventions |
-| `PROJECT_MAP.md` | Detailed product behaviour |
+| `PROJECT_MAP.md` | Detailed product behaviour (planned) |
 | OpenAPI | API request/response contract |
 | Django models + migrations | Physical database |
-| `DECISIONS.md` | Intentional changes and TBD decisions |
+| `DECISIONS.md` | Intentional changes and TBD decisions (planned) |
 
 ---
 

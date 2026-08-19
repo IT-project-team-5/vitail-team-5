@@ -55,12 +55,15 @@ Owner registers
 
 ## Project Structure
 
+Target layout. Only `README.md` and `TECH_STACK.md` exist today; the remaining
+directories are created as each work stream begins.
+
 ```text
-dog-rewards/
-├── android/
-├── backend/
-├── docs/
-├── docker-compose.yml
+vitail-team-5/
+├── android/            (planned)
+├── backend/            (planned)
+├── docs/               (planned)
+├── docker-compose.yml  (planned)
 ├── README.md
 └── TECH_STACK.md
 ```
@@ -82,7 +85,7 @@ Each engineer owns the Android UI, API, database changes, tests, and documentati
 
 - `README.md` — product overview and locked rules
 - `TECH_STACK.md` — detailed architecture and implementation conventions
-- `docs/PROJECT_MAP.md` — detailed product behaviour
+- `docs/PROJECT_MAP.md` — detailed product behaviour (planned, not yet created)
 - OpenAPI — API contract
 - Django models + migrations — physical database structure
 
