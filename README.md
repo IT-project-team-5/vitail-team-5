@@ -1,7 +1,8 @@
 # Vitail — Dog Walking Rewards
 
-Android prototype where dog owners earn points from tracked walks and partner
-check-ins, then spend those points on partner offers or charity donations.
+Native iOS pilot, built with Swift and SwiftUI, where dog owners earn points
+from tracked walks and partner check-ins, then spend those points on partner
+offers or charity donations.
 
 Vitail differs from general fitness apps in two ways. Targets are calculated per
 **dog** rather than per person — using breed energy, age, size and a
@@ -12,7 +13,7 @@ to **local businesses**, which general fitness apps do not do.
 ## Status
 
 Pilot scope, Melbourne. This document and `TECH_STACK.md` reflect the client
-requirements captured on 2026-08-19.
+requirements and platform decisions captured through 2026-08-24.
 
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
@@ -29,11 +30,11 @@ At pilot there are **three** account types.
 
 | Role | Interface | Notes |
 |---|---|---|
-| **Dog owner** | Android app | Tracks walks, checks in, redeems points |
-| **Café staff** | Android app | Signs in and watches incoming orders |
+| **Dog owner** | iOS app | Tracks walks, checks in, redeems points |
+| **Café staff** | iOS app | Signs in and watches incoming orders |
 | **Vitail admin** | Django Admin | Onboards partners, handles support and disputes |
 
-Owners and café staff use the **same Android app**. The account role decides
+Owners and café staff use the **same iOS app**. The account role decides
 which interface loads.
 
 ```text
@@ -46,9 +47,15 @@ Café accounts are created by a Vitail admin, not self-registered. Café staff
 cannot edit their own offers during pilot — they contact Vitail and an admin
 makes the change.
 
+Dog owners use **Sign in with Apple** as the primary authentication method,
+with email and password available as a fallback. Google sign-in is not included
+in the pilot. Café staff use email-and-password accounts created by a Vitail
+admin.
+
 The café screen is **read-only**. It lists orders waiting to be collected and
 refreshes every few seconds, and it cannot mark an order collected. Only the
-owner's app does that, inside the venue geofence.
+owner can do that by tapping Redeem in the iOS app. Order collection has no
+location gate during the pilot.
 
 Vets, councils and dog parks remain **data records, not accounts**.
 
@@ -76,7 +83,7 @@ An account may hold up to **10 dogs**.
 |---|---|---|
 | Walking | 8 per km | Counted up to 5 km/day (40 max) |
 | Personalised daily goal met | 20 | Once per day |
-| Partner venue / dog park / vet check-in | 12 | Once per venue per day, geofenced |
+| Partner venue / dog park / vet check-in | 12 | Once per venue per day, location-verified |
 | Confirmed vet checkup | 200 | Max 2/year, at least 60 days apart |
 | Council registration proof | 300 | Once per registration period, max 1/year |
 | 7-day walking streak | 20 | One-time |
@@ -95,7 +102,8 @@ Points always round down. Points expire **12 months** after they are earned.
 
 ## Check-in Dwell Times
 
-A check-in requires the owner to remain inside the venue geofence for:
+Check-ins are user-initiated, not automatic. The owner opens a venue and taps
+**Start check-in**, then must remain inside its configured check-in radius for:
 
 | Venue type | Dwell |
 |---|---|
@@ -108,7 +116,13 @@ Vet check-ins exist so dogs build a positive association with the vet, not only
 for the reward.
 
 If a check-in is not completed, progress is simply lost. There is no penalty,
-and the owner can return to the same geofence later the same day to complete it.
+and the owner can return later the same day and start another check-in at that
+venue.
+
+After Start check-in, location verification continues if the owner locks the
+phone or switches apps. Background location updates stop when the check-in
+completes, is abandoned, or the owner logs out. Force-quitting the app loses the
+in-progress check-in.
 
 ## Walk Rules
 
@@ -116,12 +130,14 @@ and the owner can return to the same geofence later the same day to complete it.
 Owner selects which dogs are coming
 → taps Start
 → GPS lock required before tracking begins
-→ foreground service records the route
+→ Core Location records the route, including while the app is backgrounded
 → pauses under 5 minutes are forgiven (sniffing)
 → owner taps End
 ```
 
 - Walks are started **manually**. There is no background auto-detection.
+- Background location updates are enabled only while a manually started walk or
+  check-in is active, and stop when that activity ends.
 - A walk auto-ends after 5 minutes of inactivity, or if the owner logs out.
 - Speed sanity checks exclude driving and cycling.
 - GPS readings worse than 30 m accuracy are ignored.
@@ -144,12 +160,15 @@ Owner browses partner and selects items
 → order is marked collected
 ```
 
+The Redeem action is not location-gated during the pilot. In-venue location
+verification for collection is a possible post-MVP enhancement.
+
 Uncollected orders expire at end of day and points are refunded automatically.
 
 **Charity donation**
 
 Owners can donate points to a selected charity. This path needs no merchant, no
-geofence and no collection step.
+location verification and no collection step.
 
 Every redemption carries a reference number and appears in the owner's profile
 history, so owners can see what they spent points on and Vitail can resolve
@@ -165,8 +184,8 @@ interest. The safety net exists to discourage farming, not to police users:
 ```text
 walking-speed sanity checks
 GPS accuracy floor
-mock-location detection
-geofence dwell requirements
+simulated-location detection
+venue proximity and dwell verification
 daily caps
 ```
 
@@ -179,7 +198,7 @@ created as each work stream begins.
 
 ```text
 vitail-team-5/
-├── android/            (planned)
+├── ios/                (planned)
 ├── backend/            (planned)
 ├── docs/
 │   └── DECISIONS.md
@@ -190,13 +209,13 @@ vitail-team-5/
 
 ## Team Ownership
 
-Work is split by vertical use case. Each engineer owns the Android UI, API,
+Work is split by vertical use case. Each engineer owns the iOS UI, API,
 database changes, tests and documentation for their area.
 
 | Engineer | Ownership |
 |---|---|
 | 1 | Accounts, social login, dog profile, personalised goal calculation |
-| 2 | Partner venues, discovery map, geofencing, check-ins and dwell verification |
+| 2 | Partner venues, discovery map, proximity checks, check-ins and dwell verification |
 | 3 | Walk tracking, walk validation, points engine, ledger, streaks, expiry |
 | 4 | Redemption orders, café order screen, in-store collection, charity donations, history |
 
@@ -215,10 +234,12 @@ The three features that define a successful first release:
 Explicitly **not** built for pilot:
 
 ```text
-iOS
+Android
 merchant self-registration and self-service offer editing
-geofence-gated order collection (planned after MVP)
-offline walk tracking and queued sync
+location-gated order collection (planned after MVP)
+multi-walk offline queues and long-lived background sync
+remote push notifications
+App Attest and advanced device integrity
 in-app payments or buying points
 reviews and ratings
 pet wearable integration

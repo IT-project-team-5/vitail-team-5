@@ -3,7 +3,7 @@
 This document defines the technical architecture for the Vitail pilot.
 
 The goal is to keep the system simple enough for a four-engineer junior team
-while using production-style foundations: one Android app, one backend, one
+while using production-style foundations: one native iOS app, one backend, one
 relational database, clear API contracts, and vertical use-case ownership.
 
 Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
@@ -14,17 +14,21 @@ Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 
 | Layer | Technology |
 |---|---|
-| Android language | Kotlin |
-| Android UI | Jetpack Compose |
-| Android architecture | MVVM-style separation |
-| Local persistence | Room |
-| API client | Retrofit + OkHttp |
-| Walk tracking | Android Foreground Service |
-| Location | Fused Location Provider |
-| Geofencing | Android Geofencing API (Play Services) |
-| Maps | Google Maps SDK for Android |
-| Integrity / anti-spoofing | Play Integrity + mock-location detection |
-| Push | Firebase Cloud Messaging |
+| Platform | Native iOS 17+ |
+| iOS language | Swift |
+| iOS UI | SwiftUI |
+| iOS architecture | MVVM-style separation |
+| Local persistence | SwiftData |
+| API client | URLSession + Codable |
+| Concurrency | Swift async/await |
+| Dependency management | Swift Package Manager |
+| Unit and integration tests | Swift Testing |
+| UI tests | XCTest / XCUITest |
+| Walk tracking | Core Location with background location mode |
+| Check-in location | User-initiated Core Location session |
+| Maps | MapKit |
+| Basic anti-spoofing | Location-source checks |
+| Secure token storage | Keychain |
 | Backend language | Python |
 | Backend framework | Django |
 | API framework | Django REST Framework |
@@ -34,6 +38,7 @@ Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 | Local development | Docker Compose |
 | Hosting region | Australian (Sydney or Melbourne) |
 | Version control | Git |
+| Beta and release | TestFlight + App Store |
 
 ---
 
@@ -41,38 +46,39 @@ Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 
 ### One app, two end-user roles
 
-Owners and café staff use the same Android app. The backend role decides which
+Owners and café staff use the same native iOS app. The backend role decides which
 interface loads.
 
 ```text
-Dog owner    → Android app, owner UI
-Café staff   → Android app, café order screen
+Dog owner    → iOS app, owner UI
+Café staff   → iOS app, café order screen
 Vitail admin → Django Admin
 ```
 
 Cafés do not self-register, do not scan codes and do not edit their own offers
 at pilot. Accounts are created by an admin.
 
-Putting the café screen inside the app rather than on a token-protected web page
-buys two things: real authentication instead of a secret URL, and push delivery.
-A café with the screen closed still receives an FCM notification when an order
-arrives, which a left-open browser tab cannot do.
+Putting the café screen inside the app provides real authentication instead of
+a secret URL and lets the team reuse the same client foundation. During the
+MVP, café staff leave the order screen open and it polls for changes.
 
 The backend must still enforce that an account only acts on its own data.
 UI visibility is not security.
 
-### Kotlin + Jetpack Compose
+### Swift + SwiftUI
 
-The product depends heavily on Android-native capability:
+The product depends heavily on iOS-native capability:
 
-- foreground location during walks;
-- geofence transitions with dwell;
-- background service lifecycle;
+- continuous Core Location updates during a manually started walk;
+- user-initiated location verification and dwell tracking at venues;
+- background location lifecycle while an activity is in progress;
 - local buffering while the network drops;
-- notifications;
-- camera (optional photo check-ins).
+- basic location-source checks;
+- camera access for optional photo check-ins.
 
-Compose keeps new UI development simpler than maintaining XML layouts.
+SwiftUI keeps the client native while avoiding a second UI framework. The pilot
+targets iOS 17 or later so SwiftData can provide the short-lived local route
+buffer without adding a third-party database.
 
 ### Django REST Framework
 
@@ -96,8 +102,8 @@ continuous location data plus registration documents. Personal data is hosted in
 an Australian region from day one, because moving it later is far harder than
 starting there.
 
-Note that Google Maps tile and geocoding requests leave for Google
-infrastructure regardless of where our data sits. This is documented rather than
+Note that map tile and related requests may be processed by Apple infrastructure
+regardless of where Vitail's own data sits. This is documented rather than
 solved at pilot.
 
 ---
@@ -105,7 +111,7 @@ solved at pilot.
 ## 3. High-Level Architecture
 
 ```text
-                   ANDROID APP (owner / café staff)
+                    iOS APP (owner / café staff)
                                 │
         ┌───────────┬───────────┼───────────┬────────────┐
         │           │           │           │            │
@@ -140,8 +146,8 @@ Target layout. Only the documents exist today.
 
 ```text
 vitail-team-5/
-├── android/
-│   └── app/
+├── ios/
+│   └── Vitail/
 ├── backend/
 │   ├── accounts/
 │   ├── dogs/
@@ -172,7 +178,7 @@ vitail-team-5/
 ```text
 accounts      authentication, social login, owner profile
 dogs          dog profile, breed reference data, personalised goal
-venues        partner venues, geofences, check-ins, offers
+venues        partner venues, proximity checks, check-ins, offers
 walks         walk sessions, route samples, validation
 wallets       point lots, ledger, balance, expiry, streaks, caps
 redemptions   orders, collection, charity donations, history
@@ -190,8 +196,9 @@ Separate Django apps reduce migration conflicts and make ownership clear.
 ```text
 id
 email
-password_hash
-auth_provider          GOOGLE | EMAIL
+password               Django-managed encoded value
+auth_provider          APPLE | EMAIL
+apple_subject          nullable, unique stable Apple identifier
 role                   OWNER | CAFE | ADMIN
 display_name
 profile_photo
@@ -200,8 +207,8 @@ created_at
 ```
 
 Passwords are hashed by Django authentication. Plaintext is never stored.
-
-Social login is Google at pilot. Apple sign-in is deferred with iOS.
+Apple-only accounts use Django's unusable-password mechanism. The stable Apple
+subject identifies the account because users may hide their email address.
 
 ### Dog
 
@@ -284,7 +291,7 @@ description
 address
 latitude
 longitude
-geofence_radius_m
+checkin_radius_m
 required_dwell_s
 opening_hours
 photo
@@ -319,11 +326,12 @@ entered_at
 dwell_completed_at
 status                 IN_PROGRESS | COMPLETED | ABANDONED
 awarded_points
-local_date
+completed_local_date   nullable; populated only on COMPLETED
 ```
 
-Unique on `(owner_id, venue_id, local_date)` for completed check-ins — one
-check-in per venue per day.
+Unique on `(owner_id, venue_id, completed_local_date)`. MySQL permits several
+null values, so abandoned and in-progress retries do not collide, while only
+one completed check-in can exist for a venue and local date.
 
 ### PointLot
 
@@ -430,21 +438,21 @@ created_at
 
 ---
 
-## 7. Android Architecture
+## 7. iOS Architecture
 
 ```text
-UI / Compose screens
+UI / SwiftUI screens
         ↓
 ViewModel
         ↓
 Repository
    ↙          ↘
-Room       Retrofit
+SwiftData   URLSession
              ↓
          Django API
 ```
 
-The UI never calls Retrofit or Room directly.
+The UI never calls URLSession or SwiftData directly.
 
 Feature packages:
 
@@ -462,25 +470,24 @@ Shared concerns, implemented once:
 
 ```text
 API client configuration
-auth token storage
+Keychain auth token storage
 error mapping
 navigation
 loading and empty states
 image loading
-Room database
+SwiftData container
 location permission handling
 ```
 
 ### On offline behaviour
 
-Full offline tracking and queued sync are **out of scope**. However, GPS
-recording does not need the network, and a phone can lose connectivity
-mid-route. So:
+A multi-walk offline queue and long-lived background sync are **out of scope**.
+GPS recording itself does not need the network, so:
 
-- route samples are buffered in Room **during** the walk;
+- route samples are buffered in SwiftData **during** the walk;
 - the walk uploads when the owner ends it;
 - upload failure retries with backoff while the app is open;
-- there is no long-lived background sync engine, and no multi-day offline queue.
+- there is no queue of several completed offline walks.
 
 ---
 
@@ -489,15 +496,24 @@ mid-route. So:
 ```text
 Owner selects which dogs are coming
 → selects Start
-→ app waits for a GPS lock
-→ foreground service starts
+→ app requests When In Use location permission if needed
+→ app requests temporary Precise Location if reduced accuracy is active
+→ app waits for an accurate GPS lock
+→ Core Location tracking starts with background delivery enabled
 → route renders on the map
-→ samples buffered in Room
+→ samples are buffered in SwiftData
 → Owner selects End
 ```
 
-The foreground service keeps tracking when the app is backgrounded. The phone
-never decides the authoritative reward — the backend does.
+The Core Location session begins only after the owner taps Start. Background
+location delivery remains enabled only while the walk is active, so tracking
+continues if the owner locks the phone or switches apps. It stops immediately
+when the walk ends or the owner logs out. The phone never decides the
+authoritative reward — the backend does.
+
+Precise Location is required because reduced-accuracy coordinates cannot satisfy
+the 30 m accuracy floor. If permission is denied, the app explains the
+requirement and does not start the walk.
 
 ### Auto-end
 
@@ -575,17 +591,23 @@ Heat adjustment requires a weather source. Provider is not yet chosen.
 
 ## 10. Venue Check-ins
 
-Venues are registered with a coordinate, a geofence radius and a required dwell
+Venues are registered with a coordinate, a check-in radius and a required dwell
 time.
 
 ```text
-Owner enters geofence
-→ CheckIn created as IN_PROGRESS
-→ dwell timer runs
+Owner opens a venue and taps Start check-in
+→ app confirms the owner is inside the venue radius
+→ backend creates CheckIn as IN_PROGRESS
+→ active Core Location session sends location reports
 → dwell satisfied → COMPLETED → 12 points
 → owner leaves early → ABANDONED, no penalty
 → owner may return the same day and try again
 ```
+
+The pilot does not start check-ins automatically on region entry and does not
+monitor every venue in the background. Location access is requested in context,
+when the owner starts a check-in. This avoids passive location monitoring and
+the platform limit on simultaneously monitored regions.
 
 Dwell requirements:
 
@@ -596,8 +618,14 @@ café        10 minutes
 restaurant  20 minutes
 ```
 
-Dwell completion is confirmed by the **backend** from timestamped location
-reports. The client must not self-report a completed check-in.
+Dwell completion is confirmed by the **backend** from repeated location reports
+and server receipt times. The client must not self-report a completed check-in.
+Precise Location is required; if the active session ends before the required
+dwell is verified, progress is lost and the owner can retry.
+
+After the explicit Start check-in action, background location delivery may
+continue while the owner locks the phone or switches apps. It stops when the
+check-in completes, is abandoned, the owner logs out, or the app is terminated.
 
 ---
 
@@ -642,7 +670,6 @@ Owner selects venue and items
 → reference number issued
 → the order appears on the café order screen on its next refresh
 → owner travels to the venue
-→ Redeem button enables only inside the venue geofence
 → owner taps Redeem
 → order marked COLLECTED
 ```
@@ -655,17 +682,14 @@ that must be implemented:
 - an admin can cancel and refund an order manually, for example when a venue has
   run out of stock.
 
-At MVP the Redeem button is always tappable, so an order can be marked
-collected away from the venue. This is a known and accepted gap.
-
-Gating that button on the venue geofence is planned **after MVP**. It reuses the
-check-in geofencing rather than adding a new mechanism, so the later change is
-small. Build the collection endpoint so the check can be dropped in without
-reshaping the flow.
+At MVP the Redeem button is always tappable and collection has no location
+gate. An owner can therefore mark an order collected away from the venue. This
+is a known and accepted gap. Build the collection endpoint so a location policy
+can be added later without reshaping the order state machine.
 
 ### Café order screen
 
-Café staff sign in to the Android app with a `CAFE` account and leave the order
+Café staff sign in to the same iOS app with a `CAFE` account and leave the order
 screen open during trading hours.
 
 ```text
@@ -685,8 +709,6 @@ Implementation requirements:
 - respond `304 Not Modified` when nothing changed, so idle polling is nearly
   free;
 - a five second interval is ample at pilot volume;
-- an FCM push is also sent on order creation, so a café with the app closed or
-  backgrounded is still alerted;
 - the screen is a **display surface only**. There is no endpoint a café can call
   to mutate an order — collection is driven by the owner's app, never by the
   café.
@@ -709,7 +731,6 @@ BEGIN
 lock the order row
 check the current status
 check expiry
-verify the geofence for collection
 apply the state change
 write ledger entries
 COMMIT
@@ -721,7 +742,7 @@ state, never apply the change twice.
 ### Charity donation
 
 Points are deducted the same way and a reference number is issued. There is no
-venue, no geofence and no collection step.
+venue, no location verification and no collection step.
 
 ---
 
@@ -743,7 +764,7 @@ Indicative endpoints:
 ```text
 POST   /api/auth/register
 POST   /api/auth/login
-POST   /api/auth/social/google
+POST   /api/auth/social/apple
 POST   /api/auth/password-reset
 DELETE /api/auth/account
 
@@ -796,7 +817,7 @@ order state
 refunds
 ```
 
-Android may compute temporary display values, but the server never trusts them.
+iOS may compute temporary display values, but the server never trusts them.
 
 One shared error shape:
 
@@ -811,9 +832,12 @@ One shared error shape:
 
 ## 15. Authentication and Permissions
 
-Django authentication with token/JWT-style API auth. Google social login at
-pilot; email and password as fallback. Password reset and account deletion are
-both required.
+Django authentication with token/JWT-style API auth. Sign in with Apple is the
+primary owner flow; email and password is the fallback and is also used for
+admin-created café accounts. Google login is not part of the pilot. The backend
+verifies the Apple identity token before it creates a session. Password reset
+and in-app account deletion are both required. API tokens are stored in the iOS
+Keychain, never in SwiftData or user defaults.
 
 ```text
 OWNER
@@ -825,7 +849,6 @@ OWNER
 
 CAFE
 - view orders for own venue only
-- receive order notifications
 - nothing else: cannot edit offers, cannot collect an order
 
 ADMIN
@@ -863,8 +886,8 @@ police users:
 ```text
 walking-speed sanity checks
 30 m GPS accuracy floor
-mock-location detection (isFromMockProvider + Play Integrity)
-server-confirmed geofence dwell
+simulated-location checks (`CLLocation.sourceInformation`)
+server-confirmed venue proximity and dwell
 one check-in per venue per day
 daily point cap
 ```
@@ -883,6 +906,10 @@ the system.
 Requirements:
 
 - personal data hosted in an Australian region;
+- request location access only when the owner starts a walk, check-in or nearby
+  venue search, with purpose strings that explain each use;
+- enable background location delivery only during an active walk or check-in;
+- disclose collected and linked data accurately in App Store Connect;
 - a defined retention period for raw GPS route samples (still open);
 - registration evidence stored with restricted access and deleted after review
   where possible;
@@ -894,19 +921,9 @@ Requirements:
 
 ## 18. Notifications
 
-Categories, with per-category opt-out:
-
-| Type | Frequency |
-|---|---|
-| Walk reminder | Once daily, owner-chosen time, only if the goal is unmet |
-| Heat safety | Temperature-triggered, summer |
-| Nearby check-in | Max once daily, suppressed if already checked in |
-| Streak at risk | Only approaching the 7 and 30-day milestones |
-| Transactional | Uncapped (points awarded, order collected, refund) |
-
-Hard cap of **two promotional notifications per day**, quiet hours 21:00–08:00.
-Transactional messages are exempt. Over-notification is the main uninstall
-driver for reward apps.
+Remote push notifications are deferred to keep the MVP small. The café order
+screen polls every five seconds while open. Owner reminders and transactional
+push can be added later without changing the core API.
 
 ---
 
@@ -946,12 +963,27 @@ MYSQL_USER
 MYSQL_PASSWORD
 MYSQL_HOST
 API_BASE_URL
-GOOGLE_MAPS_API_KEY
-FCM_CREDENTIALS
+APPLE_CLIENT_ID
 WEATHER_API_KEY
 ```
 
 Never commit secrets. Never commit a real API key.
+
+### App Store delivery
+
+The iOS target requires a stable bundle identifier and the following signing
+capabilities as their features are implemented:
+
+```text
+Sign in with Apple
+Background Modes → Location updates
+```
+
+Every release candidate is distributed through TestFlight before App Store
+submission. Submission requires complete App Privacy answers, a public privacy
+policy and support URL, in-app account deletion, and review credentials for
+both `OWNER` and `CAFE` interfaces. Location purpose strings must describe
+manual walk tracking and user-initiated venue check-ins plainly.
 
 ---
 
@@ -960,7 +992,7 @@ Never commit secrets. Never commit a real API key.
 ### Engineer 1 — Accounts and Dog
 
 ```text
-registration, Google login, password reset, account deletion
+registration, Sign in with Apple, email login, password reset, account deletion
 owner profile
 dog profiles, several per account, and breed reference data
 personalised goal calculation
@@ -971,8 +1003,8 @@ heat adjustment
 
 ```text
 venue and offer admin models
-discovery list and map
-geofence registration
+discovery list and MapKit map
+user-initiated Start check-in flow and proximity verification
 dwell tracking and confirmation
 check-in awards and daily uniqueness
 ```
@@ -980,8 +1012,8 @@ check-in awards and daily uniqueness
 ### Engineer 3 — Walks and Wallet
 
 ```text
-foreground tracking service
-route UI and Room buffering
+Core Location walk tracking and background lifecycle
+route UI and SwiftData buffering
 walk upload and validation
 points engine, caps, rounding
 point lots, ledger, FIFO spend, expiry job
@@ -993,14 +1025,14 @@ streaks
 ```text
 order creation and deduction
 café login, café order screen and its polling feed
-collection endpoint, built to accept a geofence check later
+collection endpoint with no MVP location gate, built for a later policy check
 expiry and refund job
 charity donations
 redemption history
 vet and council evidence submission and admin review
 ```
 
-Each engineer owns the Android UI, the API, the migration, the tests and the
+Each engineer owns the iOS UI, the API, the migration, the tests and the
 docs for their area. Do not create permanent frontend/backend silos.
 
 ---
@@ -1011,13 +1043,13 @@ Before creating a new helper, convention, response type or auth method, check
 whether one already exists. Shared concerns get one implementation:
 
 ```text
-auth token handling
-Retrofit client
+Keychain auth token handling
+URLSession API client
 API errors
-Room database
+SwiftData container
 Django permission classes
 point transaction logic
-geofence handling
+Core Location session handling
 reference number generation
 ```
 
@@ -1027,18 +1059,19 @@ reference number generation
 
 A use case is complete only when:
 
-- the Android UI works;
+- the iOS UI works on a physical supported iPhone;
 - the backend API works;
 - the migration runs from a blank database;
 - error states are handled;
 - automated tests exist;
 - OpenAPI and docs are updated;
+- required entitlements, permission states and privacy disclosures are covered;
 - the vertical flow works with no mocked data.
 
 Main acceptance flow:
 
 ```text
-Owner registers with Google
+Owner registers with Sign in with Apple
 → adds one or more dogs
 → sees a personalised daily goal per dog
 → starts a walk
@@ -1046,6 +1079,7 @@ Owner registers with Google
 → ends the walk
 → points are awarded within the cap
 → walks to a partner venue
+→ taps Start check-in
 → dwells and completes a check-in
 → orders an offer
 → points are deducted once
@@ -1060,7 +1094,8 @@ Critical failure tests:
 duplicate walk upload
 driving instead of walking
 GPS accuracy below threshold
-mock location
+simulated location
+location permission denied or reduced accuracy
 second check-in at the same venue the same day
 daily cap boundary
 walk with several dogs earns the same as a walk with one
@@ -1075,10 +1110,12 @@ point expiry at 12 months
 ## 24. Out of Scope
 
 ```text
-iOS
+Android
 merchant self-registration and self-service offer editing
-geofence-gated order collection (planned after MVP)
-offline tracking and queued sync
+location-gated order collection (planned after MVP)
+multi-walk offline queues and long-lived background sync
+remote push notifications
+App Attest and advanced device integrity
 in-app payments
 reviews and ratings
 wearable integration

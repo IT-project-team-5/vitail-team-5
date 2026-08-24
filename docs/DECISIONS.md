@@ -1,6 +1,7 @@
 # Decisions and Open Questions
 
-Requirements captured from the client on 2026-08-19.
+Requirements captured from the client on 2026-08-19. The mobile-platform
+direction was updated on 2026-08-24.
 
 Two kinds of entry live here. **Resolved** decisions are locked and should not be
 relitigated in code review. **Open** decisions have no answer yet — do not invent
@@ -14,8 +15,8 @@ behaviour for them, raise them instead.
 |---|---|---|
 | R1 | Pilot market | Melbourne first, not built to scale from day one |
 | R2 | Business model | B2B2C — insurers, councils and merchants fund the reward catalogue |
-| R3 | Platform | Android only |
-| R4 | Roles | Dog owner and Vitail admin only. Merchants are records, not accounts |
+| R3 | Platform | Android only. **Superseded by R35** |
+| R4 | Roles | Dog owner and Vitail admin only. Merchants are records, not accounts. **Superseded by R38** |
 | R5 | Dogs | Multiple dogs per account. Reversed after delivery-team pushback |
 | R6 | Walk start | Manual only, no background auto-detection |
 | R7 | Walk auto-end | After 5 minutes inactive, or on logout |
@@ -29,7 +30,7 @@ behaviour for them, raise them instead.
 | R15 | Redemption model | Order first, points deducted on order, collected in store |
 | R16 | Redemption record | Every redemption gets a reference number, visible in owner history |
 | R17 | Charity donations | Points can be donated to a selected charity |
-| R18 | Auth | Google social login, plus password reset and account deletion |
+| R18 | Auth | Google social login, plus password reset and account deletion. **Superseded by R36** |
 | R19 | Task model | Tasks are not assigned. Owners choose, with recommendations surfaced |
 | R20 | Missed tasks | Progress lost, no penalty, retryable the same day |
 | R21 | Streaks | Daily walking streak, 7 days and 30 days, one-time bonuses |
@@ -41,11 +42,16 @@ behaviour for them, raise them instead.
 | R27 | Disputes | Email contact is sufficient at pilot |
 | R28 | Budget | Free-tier and low-cost usage-based services preferred |
 | R29 | Points economics | Client owns the earn rates and the points-to-dollar peg |
-| R30 | Café interface | Café staff sign in to the Android app with a `CAFE` account |
+| R30 | Café interface | Café staff sign in to the Android app with a `CAFE` account. **Superseded by R38** |
 | R31 | Daily goal, multiple dogs | Once per day per account, when every dog on that day's walks met its own goal |
 | R32 | Max dogs per account | 10 |
 | R33 | Order abandonment | Uncollected orders expire at end of day and refund automatically |
-| R34 | Geofence gate on collection | Deferred. Not in MVP, planned for a later phase |
+| R34 | Geofence gate on collection | Deferred. Not in MVP, planned for a later phase. **Confirmed and clarified by R39** |
+| R35 | Mobile platform | Native iOS 17+ app built with Swift and SwiftUI, using SwiftData for local persistence. This supersedes the Android-only decision in R3 |
+| R36 | Authentication | Sign in with Apple is the primary sign-in method, with email/password as the fallback. Google sign-in is not in scope. Password reset and in-app account deletion remain required. This supersedes R18 |
+| R37 | Venue check-in | Owner explicitly taps **Start check-in**. The app then verifies venue proximity and required dwell time; passive region entry does not start a check-in automatically |
+| R38 | Roles and café interface | Dog owners and café staff use the same iOS app. Café staff sign in with a `CAFE` account; Vitail admins continue to use the admin interface. This supersedes R4 and R30 |
+| R39 | Location gate on order collection | No location gate in the MVP. An owner can mark an order collected without being at the venue; location-gated collection remains a possible later-phase control. This confirms and clarifies R34 |
 
 ### On R29
 
@@ -56,18 +62,20 @@ and retained the decision. The rates in `README.md` are built as specified.
 
 This is recorded so the reasoning is not lost, not to reopen it.
 
+### On R39
+
+With no location gate at MVP, an owner can mark an order collected without
+being at the venue. The points are already deducted, so the café is not out of
+pocket — the failure is an order shown as collected that nobody picked up.
+Accepted for MVP; build the collection endpoint so the check drops in later
+without reshaping the flow.
+
 ---
 
 ## Open
 
 O2, O3, O4, O14 and O15 were resolved and moved to the table above. Numbering
 is not reused, so earlier references stay valid.
-
-On R34: with no geofence gate at MVP, an owner can mark an order collected
-without being at the venue. The points are already deducted, so the café is not
-out of pocket — the failure is an order shown as collected that nobody picked
-up. Accepted for MVP; build the collection endpoint so the check drops in later
-without reshaping the flow.
 
 ### O1 — Vet checkup confirmation
 
@@ -117,6 +125,8 @@ is the likely default.
 How long raw route samples are kept. Matters for privacy posture with councils
 and insurers, and for database growth.
 
+**Blocks:** App Store submission and pilot release.
+
 ### O10 — Council registration evidence
 
 Registration documents contain name, address and sometimes microchip number.
@@ -143,18 +153,18 @@ project deadline, which the delivery team still needs to state.
 
 ## Reference: cost estimate
 
-Requested by the client. Figures are indicative and should be verified before
-any commitment — Google changed its maps pricing structure in 2025.
+Requested by the client. Figures and programme terms are indicative and should
+be verified before any commitment.
 
 | Item | Pilot cost |
 |---|---|
-| Google Maps SDK for Android (map display) | No cost |
-| Android Geofencing API | No cost |
-| Firebase Cloud Messaging | No cost |
-| Play Integrity | Free tier |
+| Apple Developer Program and App Store distribution | Annual membership; verify the current Australian fee |
+| MapKit (map display) | Included native framework; verify current Apple service terms and quotas |
+| Core Location (proximity and dwell verification) | Included native framework |
 | Weather API | Free tier |
 | Australian hosting (small instance + managed MySQL) | ~AUD 50–150/month |
 
-The core mechanic is cheap because **geofencing needs no maps API**, and because
-partner coordinates are stored by Vitail rather than looked up through a paid
-place-search service.
+The core mechanic does not require a paid place-search service because partner
+coordinates are stored by Vitail. MapKit is used for display, while Core
+Location performs proximity and dwell verification after the owner starts a
+check-in.
