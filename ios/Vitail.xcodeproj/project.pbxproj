@@ -1,0 +1,550 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		000000000000000000000001 /* VitailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* VitailApp.swift */; };
+		000000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* RootView.swift */; };
+		000000000000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000003 /* APIClient.swift */; };
+		000000000000000000000004 /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000004 /* AuthModels.swift */; };
+		000000000000000000000005 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000005 /* AuthService.swift */; };
+		000000000000000000000006 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000006 /* SessionStore.swift */; };
+		000000000000000000000007 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000007 /* AppTheme.swift */; };
+		000000000000000000000008 /* AppComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000008 /* AppComponents.swift */; };
+		000000000000000000000009 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000009 /* KeychainStore.swift */; };
+		00000000000000000000000A /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000A /* AuthView.swift */; };
+		00000000000000000000000B /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000B /* AuthViewModel.swift */; };
+		00000000000000000000000C /* OwnerHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000C /* OwnerHomeView.swift */; };
+		00000000000000000000000D /* CafeOrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* CafeOrdersView.swift */; };
+		00000000000000000000000E /* AuthModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* AuthModelsTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		701000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 500000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 400000000000000000000001;
+			remoteInfo = Vitail;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000001 /* VitailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitailApp.swift; sourceTree = "<group>"; };
+		100000000000000000000002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		100000000000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		100000000000000000000004 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
+		100000000000000000000005 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		100000000000000000000006 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
+		100000000000000000000007 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		100000000000000000000008 /* AppComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppComponents.swift; sourceTree = "<group>"; };
+		100000000000000000000009 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		10000000000000000000000A /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		10000000000000000000000B /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		10000000000000000000000C /* OwnerHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerHomeView.swift; sourceTree = "<group>"; };
+		10000000000000000000000D /* CafeOrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersView.swift; sourceTree = "<group>"; };
+		10000000000000000000000E /* AuthModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModelsTests.swift; sourceTree = "<group>"; };
+		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000003 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000004 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000005 /* Local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Local.xcconfig.example; sourceTree = "<group>"; };
+		120000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		301000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		304000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		200000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				202000000000000000000001 /* Config */,
+				203000000000000000000001 /* Vitail */,
+				20E000000000000000000001 /* VitailTests */,
+				201000000000000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		201000000000000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				110000000000000000000001 /* Vitail.app */,
+				110000000000000000000002 /* VitailTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		202000000000000000000001 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				120000000000000000000001 /* Base.xcconfig */,
+				120000000000000000000002 /* Debug.xcconfig */,
+				120000000000000000000003 /* Staging.xcconfig */,
+				120000000000000000000004 /* Release.xcconfig */,
+				120000000000000000000005 /* Local.xcconfig.example */,
+				120000000000000000000006 /* Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		203000000000000000000001 /* Vitail */ = {
+			isa = PBXGroup;
+			children = (
+				204000000000000000000001 /* App */,
+				205000000000000000000001 /* Core */,
+				20A000000000000000000001 /* Features */,
+			);
+			path = Vitail;
+			sourceTree = "<group>";
+		};
+		204000000000000000000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000001 /* VitailApp.swift */,
+				100000000000000000000002 /* RootView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		205000000000000000000001 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				206000000000000000000001 /* API */,
+				207000000000000000000001 /* Auth */,
+				208000000000000000000001 /* DesignSystem */,
+				209000000000000000000001 /* Storage */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		206000000000000000000001 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000003 /* APIClient.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		207000000000000000000001 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000004 /* AuthModels.swift */,
+				100000000000000000000005 /* AuthService.swift */,
+				100000000000000000000006 /* SessionStore.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		208000000000000000000001 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000007 /* AppTheme.swift */,
+				100000000000000000000008 /* AppComponents.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		209000000000000000000001 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000009 /* KeychainStore.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		20A000000000000000000001 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				20B000000000000000000001 /* Auth */,
+				20C000000000000000000001 /* OwnerHome */,
+				20D000000000000000000001 /* CafeOrders */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		20B000000000000000000001 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000A /* AuthView.swift */,
+				10000000000000000000000B /* AuthViewModel.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		20C000000000000000000001 /* OwnerHome */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000C /* OwnerHomeView.swift */,
+			);
+			path = OwnerHome;
+			sourceTree = "<group>";
+		};
+		20D000000000000000000001 /* CafeOrders */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000D /* CafeOrdersView.swift */,
+			);
+			path = CafeOrders;
+			sourceTree = "<group>";
+		};
+		20E000000000000000000001 /* VitailTests */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000E /* AuthModelsTests.swift */,
+			);
+			path = VitailTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		400000000000000000000001 /* Vitail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 631000000000000000000001 /* Build configuration list for PBXNativeTarget "Vitail" */;
+			buildPhases = (
+				300000000000000000000001 /* Sources */,
+				301000000000000000000001 /* Frameworks */,
+				302000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Vitail;
+			productName = Vitail;
+			productReference = 110000000000000000000001 /* Vitail.app */;
+			productType = "com.apple.product-type.application";
+		};
+		401000000000000000000001 /* VitailTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 632000000000000000000001 /* Build configuration list for PBXNativeTarget "VitailTests" */;
+			buildPhases = (
+				303000000000000000000001 /* Sources */,
+				304000000000000000000001 /* Frameworks */,
+				305000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				700000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = VitailTests;
+			productName = VitailTests;
+			productReference = 110000000000000000000002 /* VitailTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		500000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					400000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					401000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 400000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 630000000000000000000001 /* Build configuration list for PBXProject "Vitail" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 200000000000000000000001;
+			productRefGroup = 201000000000000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				400000000000000000000001 /* Vitail */,
+				401000000000000000000001 /* VitailTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		302000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		305000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		300000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000000001 /* VitailApp.swift in Sources */,
+				000000000000000000000002 /* RootView.swift in Sources */,
+				000000000000000000000003 /* APIClient.swift in Sources */,
+				000000000000000000000004 /* AuthModels.swift in Sources */,
+				000000000000000000000005 /* AuthService.swift in Sources */,
+				000000000000000000000006 /* SessionStore.swift in Sources */,
+				000000000000000000000007 /* AppTheme.swift in Sources */,
+				000000000000000000000008 /* AppComponents.swift in Sources */,
+				000000000000000000000009 /* KeychainStore.swift in Sources */,
+				00000000000000000000000A /* AuthView.swift in Sources */,
+				00000000000000000000000B /* AuthViewModel.swift in Sources */,
+				00000000000000000000000C /* OwnerHomeView.swift in Sources */,
+				00000000000000000000000D /* CafeOrdersView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		303000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00000000000000000000000E /* AuthModelsTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		700000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 400000000000000000000001 /* Vitail */;
+			targetProxy = 701000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		600000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		600000000000000000000002 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "STAGING $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Staging;
+		};
+		600000000000000000000003 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		610000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 120000000000000000000002 /* Debug.xcconfig */;
+			buildSettings = {
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		610000000000000000000002 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 120000000000000000000003 /* Staging.xcconfig */;
+			buildSettings = {
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Staging;
+		};
+		610000000000000000000003 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 120000000000000000000004 /* Release.xcconfig */;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		620000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 120000000000000000000002 /* Debug.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vitail.team5.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vitail.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Vitail";
+			};
+			name = Debug;
+		};
+		620000000000000000000002 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 120000000000000000000003 /* Staging.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vitail.team5.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vitail.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Vitail";
+			};
+			name = Staging;
+		};
+		620000000000000000000003 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 120000000000000000000004 /* Release.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vitail.team5.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vitail.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Vitail";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		630000000000000000000001 /* Build configuration list for PBXProject "Vitail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				600000000000000000000001 /* Debug */,
+				600000000000000000000002 /* Staging */,
+				600000000000000000000003 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		631000000000000000000001 /* Build configuration list for PBXNativeTarget "Vitail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				610000000000000000000001 /* Debug */,
+				610000000000000000000002 /* Staging */,
+				610000000000000000000003 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		632000000000000000000001 /* Build configuration list for PBXNativeTarget "VitailTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				620000000000000000000001 /* Debug */,
+				620000000000000000000002 /* Staging */,
+				620000000000000000000003 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 500000000000000000000001 /* Project object */;
+}

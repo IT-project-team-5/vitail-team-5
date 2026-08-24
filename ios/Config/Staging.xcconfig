@@ -1,0 +1,4 @@
+#include "Base.xcconfig"
+
+API_BASE_URL = https:/$()/staging-api.vitail.example
+PRODUCT_BUNDLE_IDENTIFIER = com.vitail.team5.staging

@@ -1,0 +1,45 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vitail}
+      MYSQL_USER: ${MYSQL_USER:-vitail}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-vitail-local}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-vitail-root-local}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./backend
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-unsafe-local-development-key-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      # Local-only default lets an iPhone reach the Mac by its LAN address.
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-Australia/Melbourne}
+      DATABASE_ENGINE: mysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-vitail}
+      MYSQL_USER: ${MYSQL_USER:-vitail}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-vitail-local}
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      JWT_ACCESS_MINUTES: ${JWT_ACCESS_MINUTES:-15}
+      JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+
+volumes:
+  mysql_data:

@@ -18,6 +18,29 @@ requirements and platform decisions captured through 2026-08-24.
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
 
+### Current build slice: authentication
+
+The first use case is deliberately small:
+
+```text
+User selects "I'm a dog owner" or "I'm a cafe owner"
+Dog owner self-registers or signs in → OWNER tab shell
+Café owner signs in with an admin-created account → CAFE tab shell
+```
+
+Both roles use the same login API and iOS app. The API returns JWT access and
+refresh tokens, which the app stores in Keychain. Sign in with Apple waits until
+the project has its own Apple Developer Program account. Password reset and
+in-app account deletion are later use cases, not part of this first slice.
+
+The role choice makes the login page clear, but it does not grant a role. The
+backend account remains authoritative, and a mismatched login asks the user to
+choose the correct account type. The current post-login UI is deliberately a
+shell: owners can swipe between Account, Walk and Redeem, with the same pages
+available in the bottom navigation and fixed `0 pts` at top right.
+Café owners have Account and Orders pages. Logout lives in Account for both
+roles; Walk, Redeem, Orders and real point data are not implemented yet.
+
 ## Business Model
 
 B2B2C. Vitail sits between dog owners and the partners who fund the reward
@@ -38,8 +61,8 @@ Owners and café staff use the **same iOS app**. The account role decides
 which interface loads.
 
 ```text
-OWNER → Owner UI
-CAFE  → Café order screen
+OWNER → Account / Walk / Redeem shell
+CAFE  → Account / Orders shell
 ADMIN → Django Admin
 ```
 
@@ -47,10 +70,10 @@ Café accounts are created by a Vitail admin, not self-registered. Café staff
 cannot edit their own offers during pilot — they contact Vitail and an admin
 makes the change.
 
-Dog owners use **Sign in with Apple** as the primary authentication method,
-with email and password available as a fallback. Google sign-in is not included
-in the pilot. Café staff use email-and-password accounts created by a Vitail
-admin.
+For the first use case, dog owners self-register with email and password. Café
+staff use email-and-password accounts created by a Vitail admin. Google sign-in
+is not included. Sign in with Apple will be added only after the project has its
+own Apple Developer Program account.
 
 The café screen is **read-only**. It lists orders waiting to be collected and
 refreshes every few seconds, and it cannot mark an order collected. Only the
@@ -193,19 +216,54 @@ Photo check-ins are a desirable optional addition, not a pilot requirement.
 
 ## Project Structure
 
-Target layout. Only the documents exist today; the remaining directories are
-created as each work stream begins.
+The repository now contains the first vertical slice. Future feature folders
+are added only when their work begins.
 
 ```text
 vitail-team-5/
-├── ios/                (planned)
-├── backend/            (planned)
+├── ios/                 SwiftUI app and auth tests
+├── backend/             Django API, accounts app and migration
 ├── docs/
-│   └── DECISIONS.md
-├── docker-compose.yml  (planned)
+│   ├── DECISIONS.md
+│   └── FEATURES.md      (lightweight delivery status)
+├── docker-compose.yml   local API and MySQL
+├── Makefile             short local commands
 ├── README.md
 └── TECH_STACK.md
 ```
+
+## Local Development
+
+Docker Compose has local-only defaults, so no environment file is required to
+start. From the repository root:
+
+```bash
+make up
+```
+
+In a second terminal, create a Vitail admin and open the iOS project:
+
+```bash
+make superuser
+make ios
+```
+
+The simulator uses `http://127.0.0.1:8000` automatically. To run on an iPhone,
+copy the untracked local configuration and edit its Personal Team, unique
+bundle identifier and Mac LAN address:
+
+```bash
+cp ios/Config/Local.xcconfig.example ios/Config/Local.xcconfig
+```
+
+Keep the Mac and iPhone on the same network, select the iPhone in Xcode, then
+Run. A free Personal Team is enough; its development install expires after
+seven days and can be installed again from Xcode.
+
+Create café logins at `http://127.0.0.1:8000/admin/` with role `CAFE`. Useful
+commands are `make test`, `make check`, and `make down`. To override the local
+Compose defaults, copy `backend/.env.example` to a root `.env` and edit it;
+neither `.env` nor `Local.xcconfig` is committed.
 
 ## Team Ownership
 
@@ -214,7 +272,7 @@ database changes, tests and documentation for their area.
 
 | Engineer | Ownership |
 |---|---|
-| 1 | Accounts, social login, dog profile, personalised goal calculation |
+| 1 | Accounts, login, dog profile, personalised goal calculation |
 | 2 | Partner venues, discovery map, proximity checks, check-ins and dwell verification |
 | 3 | Walk tracking, walk validation, points engine, ledger, streaks, expiry |
 | 4 | Redemption orders, café order screen, in-store collection, charity donations, history |
@@ -255,6 +313,7 @@ point-earning from non-walking activity
 - `README.md` — product overview and locked rules
 - `TECH_STACK.md` — architecture and implementation conventions
 - `docs/DECISIONS.md` — resolved decisions and open questions
+- `docs/FEATURES.md` — one-row-per-feature delivery status
 - OpenAPI — API contract
 - Django models + migrations — physical database structure
 

@@ -1,0 +1,19 @@
+.DS_Store
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Xcode / Swift
+DerivedData/
+.build/
+*.xcuserstate
+xcuserdata/
+ios/Config/Local.xcconfig

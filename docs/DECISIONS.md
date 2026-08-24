@@ -48,10 +48,12 @@ behaviour for them, raise them instead.
 | R33 | Order abandonment | Uncollected orders expire at end of day and refund automatically |
 | R34 | Geofence gate on collection | Deferred. Not in MVP, planned for a later phase. **Confirmed and clarified by R39** |
 | R35 | Mobile platform | Native iOS 17+ app built with Swift and SwiftUI, using SwiftData for local persistence. This supersedes the Android-only decision in R3 |
-| R36 | Authentication | Sign in with Apple is the primary sign-in method, with email/password as the fallback. Google sign-in is not in scope. Password reset and in-app account deletion remain required. This supersedes R18 |
+| R36 | Authentication | Sign in with Apple is the primary sign-in method, with email/password as the fallback. Google sign-in is not in scope. Password reset and in-app account deletion remain required. This supersedes R18. **Delivery order superseded by R40** |
 | R37 | Venue check-in | Owner explicitly taps **Start check-in**. The app then verifies venue proximity and required dwell time; passive region entry does not start a check-in automatically |
 | R38 | Roles and café interface | Dog owners and café staff use the same iOS app. Café staff sign in with a `CAFE` account; Vitail admins continue to use the admin interface. This supersedes R4 and R30 |
 | R39 | Location gate on order collection | No location gate in the MVP. An owner can mark an order collected without being at the venue; location-gated collection remains a possible later-phase control. This confirms and clarifies R34 |
+| R40 | First authentication slice | Email/password only: owners self-register, while café accounts are created in Django Admin. Both use the same iOS login and route by `OWNER` or `CAFE`. JWT access/refresh tokens are stored in Keychain. Sign in with Apple waits for a project-owned Apple Developer Program account; password reset and account deletion are later use cases. This supersedes R36's delivery order, not its long-term intent |
+| R41 | MVP development approach | Use feature-first folders, a small central design system and the minimum `View → ViewModel → Service` layers. Review is lightweight: build, happy path, key failures, permissions and secrets; no coverage target or speculative architecture |
 
 ### On R29
 

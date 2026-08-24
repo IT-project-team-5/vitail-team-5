@@ -50,13 +50,14 @@ Owners and café staff use the same native iOS app. The backend role decides whi
 interface loads.
 
 ```text
-Dog owner    → iOS app, owner UI
-Café staff   → iOS app, café order screen
+Dog owner    → iOS app, Account / Walk / Redeem shell
+Café staff   → iOS app, Account / Orders shell
 Vitail admin → Django Admin
 ```
 
 Cafés do not self-register, do not scan codes and do not edit their own offers
-at pilot. Accounts are created by an admin.
+at pilot. Their accounts are created by an admin. Owners self-register with
+email and password.
 
 Putting the café screen inside the app provides real authentication instead of
 a secret URL and lets the team reuse the same client foundation. During the
@@ -142,23 +143,30 @@ solved at pilot.
 
 ## 4. Repository Structure
 
-Target layout. Only the documents exist today.
+Use a feature-first layout. Create a feature directory only when work on that
+feature begins.
 
 ```text
 vitail-team-5/
 ├── ios/
 │   └── Vitail/
+│       ├── App/
+│       ├── Core/
+│       │   ├── API/
+│       │   ├── Auth/
+│       │   └── DesignSystem/
+│       └── Features/
+│           ├── Auth/
+│           ├── OwnerHome/
+│           └── CafeOrders/
 ├── backend/
-│   ├── accounts/
-│   ├── dogs/
-│   ├── venues/
-│   ├── walks/
-│   ├── wallets/
-│   ├── redemptions/
-│   └── rewards/
+│   ├── config/
+│   └── accounts/
 ├── docs/
-│   └── DECISIONS.md
+│   ├── DECISIONS.md
+│   └── FEATURES.md
 ├── docker-compose.yml
+├── Makefile
 ├── README.md
 └── TECH_STACK.md
 ```
@@ -168,6 +176,7 @@ vitail-team-5/
 | `README.md` | Product overview and locked rules |
 | `TECH_STACK.md` | Technical architecture and conventions |
 | `docs/DECISIONS.md` | Resolved decisions and open questions |
+| `docs/FEATURES.md` | Lightweight feature status and MVP acceptance |
 | OpenAPI | API request/response contract |
 | Django models + migrations | Physical database |
 
@@ -176,7 +185,7 @@ vitail-team-5/
 ## 5. Backend Domain Split
 
 ```text
-accounts      authentication, social login, owner profile
+accounts      email authentication, roles, owner profile
 dogs          dog profile, breed reference data, personalised goal
 venues        partner venues, proximity checks, check-ins, offers
 walks         walk sessions, route samples, validation
@@ -195,10 +204,8 @@ Separate Django apps reduce migration conflicts and make ownership clear.
 
 ```text
 id
-email
+email                  unique login identifier
 password               Django-managed encoded value
-auth_provider          APPLE | EMAIL
-apple_subject          nullable, unique stable Apple identifier
 role                   OWNER | CAFE | ADMIN
 display_name
 profile_photo
@@ -206,9 +213,9 @@ is_active
 created_at
 ```
 
-Passwords are hashed by Django authentication. Plaintext is never stored.
-Apple-only accounts use Django's unusable-password mechanism. The stable Apple
-subject identifies the account because users may hide their email address.
+Passwords are hashed by Django authentication. Plaintext is never stored. Apple
+identity fields are added later, when the project has its own Apple Developer
+Program account and Sign in with Apple is implemented.
 
 ### Dog
 
@@ -445,16 +452,16 @@ UI / SwiftUI screens
         ↓
 ViewModel
         ↓
-Repository
-   ↙          ↘
-SwiftData   URLSession
-             ↓
-         Django API
+Service
+   ↙       ↘
+Keychain  URLSession → Django API
 ```
 
-The UI never calls URLSession or SwiftData directly.
+The UI never calls URLSession, Keychain or SwiftData directly. Do not add a
+repository interface, use-case layer or dependency framework until a real need
+appears. Extract shared code after it is used by more than one feature.
 
-Feature packages:
+Feature folders:
 
 ```text
 auth
@@ -478,6 +485,19 @@ image loading
 SwiftData container
 location permission handling
 ```
+
+### Small design system
+
+Keep styling central without building a UI framework. Start with only:
+
+```text
+AppColors, AppSpacing, AppRadius
+PrimaryButton, AppTextField
+LoadingView, ErrorView
+```
+
+Use system fonts, SF Symbols and semantic colours. Add a shared component only
+when a feature needs it.
 
 ### On offline behaviour
 
@@ -764,9 +784,8 @@ Indicative endpoints:
 ```text
 POST   /api/auth/register
 POST   /api/auth/login
-POST   /api/auth/social/apple
-POST   /api/auth/password-reset
-DELETE /api/auth/account
+POST   /api/auth/refresh
+GET    /api/auth/me
 
 GET    /api/dogs
 POST   /api/dogs
@@ -798,6 +817,8 @@ POST   /api/rewards/council-registration
 ```
 
 Exact routes are ultimately defined by OpenAPI, not copied between developers.
+Sign in with Apple, password reset and account deletion endpoints are added in
+their later use cases.
 
 ---
 
@@ -819,7 +840,9 @@ refunds
 
 iOS may compute temporary display values, but the server never trusts them.
 
-One shared error shape:
+Authentication currently uses DRF's standard `detail` and field-validation
+messages to keep the first slice small. Business endpoints converge on this
+shared error shape as they are added:
 
 ```json
 {
@@ -832,12 +855,25 @@ One shared error shape:
 
 ## 15. Authentication and Permissions
 
-Django authentication with token/JWT-style API auth. Sign in with Apple is the
-primary owner flow; email and password is the fallback and is also used for
-admin-created café accounts. Google login is not part of the pilot. The backend
-verifies the Apple identity token before it creates a session. Password reset
-and in-app account deletion are both required. API tokens are stored in the iOS
-Keychain, never in SwiftData or user defaults.
+Django authentication uses JWT access and refresh tokens. Owners self-register
+with email and password; registration always creates an `OWNER` and never
+accepts a client-selected role. Café accounts are created in Django Admin and
+use the same login endpoint. The login response includes the account role, so
+the same iOS app routes to the owner or café interface.
+
+The login UI first asks the user to choose the `I'm a dog owner` or
+`I'm a cafe owner` option. This is the intended login context only: it never
+sets or changes the account role. Registration remains available only to dog
+owners. The backend-returned role must match the chosen context before the app
+stores the session and routes to its shell.
+
+Both tokens are stored in iOS Keychain, never in SwiftData or UserDefaults. On
+logout, the app removes them. Backend permissions remain authoritative; hiding
+a screen is not access control.
+
+Sign in with Apple is deferred until the project has its own Apple Developer
+Program account. Password reset and in-app account deletion are separate later
+use cases. Google login is not included.
 
 ```text
 OWNER
@@ -913,7 +949,8 @@ Requirements:
 - a defined retention period for raw GPS route samples (still open);
 - registration evidence stored with restricted access and deleted after review
   where possible;
-- account deletion must actually remove or irreversibly anonymise personal data;
+- when the later account-deletion use case is built, it must remove or
+  irreversibly anonymise personal data;
 - the owner's name is displayed on the café order screen, which must be stated
   in the privacy notice.
 
@@ -950,24 +987,43 @@ exists, use forward migrations and back up before risky changes.
 Docker Compose services:
 
 ```text
-backend
-mysql
+api
+db
 ```
 
-Environment variables:
+Compose environment overrides:
 
 ```text
 DJANGO_SECRET_KEY
+DJANGO_DEBUG
+DJANGO_ALLOWED_HOSTS
+DJANGO_TIME_ZONE
 MYSQL_DATABASE
 MYSQL_USER
 MYSQL_PASSWORD
-MYSQL_HOST
+MYSQL_ROOT_PASSWORD
+JWT_ACCESS_MINUTES
+JWT_REFRESH_DAYS
+```
+
+iOS local configuration:
+
+```text
 API_BASE_URL
-APPLE_CLIENT_ID
-WEATHER_API_KEY
+DEVELOPMENT_TEAM
+PRODUCT_BUNDLE_IDENTIFIER
 ```
 
 Never commit secrets. Never commit a real API key.
+
+For local iPhone testing, each developer uses their own free Personal Team and
+a local bundle identifier. Signing details and the Mac's LAN API address belong
+in an uncommitted local configuration file. No shared or personal paid Apple
+Developer account is part of the project.
+
+Keep environment management to three levels: local Docker Compose now, one
+shared staging environment when remote team testing starts, and production for
+release. Each environment has a separate database and secrets.
 
 ### App Store delivery
 
@@ -975,7 +1031,7 @@ The iOS target requires a stable bundle identifier and the following signing
 capabilities as their features are implemented:
 
 ```text
-Sign in with Apple
+Sign in with Apple (after the project has its own Developer Program account)
 Background Modes → Location updates
 ```
 
@@ -992,7 +1048,8 @@ manual walk tracking and user-initiated venue check-ins plainly.
 ### Engineer 1 — Accounts and Dog
 
 ```text
-registration, Sign in with Apple, email login, password reset, account deletion
+owner email registration and login, café login, role routing
+Sign in with Apple, password reset and account deletion in later use cases
 owner profile
 dog profiles, several per account, and breed reference data
 personalised goal calculation
@@ -1046,6 +1103,7 @@ whether one already exists. Shared concerns get one implementation:
 Keychain auth token handling
 URLSession API client
 API errors
+small design-system tokens and controls
 SwiftData container
 Django permission classes
 point transaction logic
@@ -1057,21 +1115,39 @@ reference number generation
 
 ## 23. Definition of Done
 
-A use case is complete only when:
+A use case is complete when:
 
 - the iOS UI works on a physical supported iPhone;
-- the backend API works;
-- the migration runs from a blank database;
-- error states are handled;
-- automated tests exist;
-- OpenAPI and docs are updated;
-- required entitlements, permission states and privacy disclosures are covered;
-- the vertical flow works with no mocked data.
+- its real backend API and any migration work from a blank database;
+- the happy path and important failure states work;
+- secrets are not committed;
+- focused tests cover important business or permission rules;
+- OpenAPI and relevant docs are updated.
+
+Review is lightweight: confirm the build, the use-case flow, key errors and
+security basics. Do not require coverage targets, speculative abstractions or a
+large review process for the MVP.
+
+First authentication-slice acceptance flow:
+
+```text
+User explicitly chooses dog owner or café owner on the login page
+Owner registers with email/password → receives OWNER role → owner tab shell
+Café account is created in Django Admin → logs in → café tab shell
+Owner shell: swipe or tap between Account / Walk / Redeem; fixed `0 pts`
+Café shell: tap between Account / Orders
+Logout is available from Account for both roles
+App relaunch refreshes the session from Keychain
+Logout removes the local session
+```
+
+Walk, Redeem and Orders are navigation placeholders in this slice. They do not
+claim that tracking, redemption, order polling or real point balances exist.
 
 Main acceptance flow:
 
 ```text
-Owner registers with Sign in with Apple
+Owner registers with email and password
 → adds one or more dogs
 → sees a personalised daily goal per dog
 → starts a walk
@@ -1140,5 +1216,4 @@ charity partners
 minimum walk length
 whether the daily goal is measured in minutes or kilometres
 deployment provider within the AU region
-final API auth token implementation
 ```
