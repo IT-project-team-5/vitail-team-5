@@ -29,6 +29,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vitail connects to the development server on your local network.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Vitail uses your location to show your current position on the walk map.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

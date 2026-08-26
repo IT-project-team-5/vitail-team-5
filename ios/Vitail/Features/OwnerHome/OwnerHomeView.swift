@@ -41,12 +41,8 @@ struct OwnerHomeView: View {
                 TabView(selection: $selection) {
                     accountPage
                         .tag(Page.account)
-                    placeholderPage(
-                        icon: "figure.walk",
-                        title: "Walk",
-                        message: "Walk tracking will appear here."
-                    )
-                    .tag(Page.walk)
+                    WalkMapView(isActive: selection == .walk)
+                        .tag(Page.walk)
                     placeholderPage(
                         icon: "gift.fill",
                         title: "Redeem",

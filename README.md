@@ -39,7 +39,9 @@ choose the correct account type. The current post-login UI is deliberately a
 shell: owners can swipe between Account, Walk and Redeem, with the same pages
 available in the bottom navigation and fixed `0 pts` at top right.
 Café owners have Account and Orders pages. Logout lives in Account for both
-roles; Walk, Redeem, Orders and real point data are not implemented yet.
+roles. Walk shows the owner's current foreground location on a map and supports
+manual start, pause, resume and finish with a live distance counter. Route
+storage, Redeem, Orders and real point data are not implemented yet.
 
 ## Business Model
 

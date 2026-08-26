@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import Vitail
 
@@ -69,6 +70,80 @@ final class AuthModelsTests: XCTestCase {
         XCTAssertEqual(
             error.localizedDescription,
             "This is a café account. Choose “I'm a cafe owner” to sign in."
+        )
+    }
+}
+
+@MainActor
+final class WalkSessionTrackerTests: XCTestCase {
+    func testDistanceOnlyCountsWhileWalking() {
+        let tracker = WalkSessionTracker()
+        let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
+        let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
+        let third = location(latitude: -37.8116, longitude: 144.9631, seconds: 20)
+        let fourth = location(latitude: -37.8106, longitude: 144.9631, seconds: 30)
+
+        tracker.start(from: first)
+        tracker.record(second)
+        let distanceBeforePause = tracker.distanceMetres
+
+        tracker.pause()
+        tracker.record(third)
+        XCTAssertEqual(tracker.distanceMetres, distanceBeforePause, accuracy: 0.01)
+
+        tracker.resume(from: third)
+        tracker.record(fourth)
+
+        let expectedDistance = second.distance(from: first) + fourth.distance(from: third)
+        XCTAssertEqual(tracker.distanceMetres, expectedDistance, accuracy: 0.01)
+    }
+
+    func testPoorAccuracyLocationsAreIgnored() {
+        let tracker = WalkSessionTracker()
+        let accurate = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
+        let inaccurate = location(
+            latitude: -37.8036,
+            longitude: 144.9631,
+            accuracy: 50,
+            seconds: 10
+        )
+
+        tracker.start(from: accurate)
+        tracker.record(inaccurate)
+
+        XCTAssertEqual(tracker.distanceMetres, 0)
+    }
+
+    func testStartingANewWalkResetsDistance() {
+        let tracker = WalkSessionTracker()
+        let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
+        let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
+
+        tracker.start(from: first)
+        tracker.record(second)
+        XCTAssertGreaterThan(tracker.distanceMetres, 0)
+
+        tracker.finish()
+        tracker.start(from: second)
+
+        XCTAssertEqual(tracker.distanceMetres, 0)
+        XCTAssertEqual(tracker.status, .walking)
+    }
+
+    private func location(
+        latitude: CLLocationDegrees,
+        longitude: CLLocationDegrees,
+        accuracy: CLLocationAccuracy = 5,
+        seconds: TimeInterval
+    ) -> CLLocation {
+        CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+            altitude: 0,
+            horizontalAccuracy: accuracy,
+            verticalAccuracy: accuracy,
+            course: 0,
+            speed: 1,
+            timestamp: Date(timeIntervalSince1970: seconds)
         )
     }
 }
