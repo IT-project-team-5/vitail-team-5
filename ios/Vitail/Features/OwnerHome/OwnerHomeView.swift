@@ -4,7 +4,8 @@ struct OwnerHomeView: View {
     private enum Page: String, CaseIterable, Identifiable {
         case account = "Account"
         case walk = "Walk"
-        case redeem = "Redeem"
+        case rewards = "Rewards"
+        case order = "Order"
 
         var id: Self { self }
 
@@ -14,8 +15,10 @@ struct OwnerHomeView: View {
                 return "person.crop.circle"
             case .walk:
                 return "figure.walk"
-            case .redeem:
+            case .rewards:
                 return "gift"
+            case .order:
+                return "bag"
             }
         }
 
@@ -25,15 +28,19 @@ struct OwnerHomeView: View {
                 return "person.crop.circle.fill"
             case .walk:
                 return "figure.walk"
-            case .redeem:
+            case .rewards:
                 return "gift.fill"
+            case .order:
+                return "bag.fill"
             }
         }
     }
 
     let user: User
     @ObservedObject var session: SessionStore
+    @StateObject private var redemptionStore = RedemptionStore()
     @State private var selection: Page = .walk
+    @State private var isShowingOrderHistory = false
 
     var body: some View {
         NavigationStack {
@@ -43,12 +50,14 @@ struct OwnerHomeView: View {
                         .tag(Page.account)
                     WalkMapView(isActive: selection == .walk)
                         .tag(Page.walk)
-                    placeholderPage(
-                        icon: "gift.fill",
-                        title: "Redeem",
-                        message: "Rewards will appear here."
-                    )
-                    .tag(Page.redeem)
+                    RewardsView(store: redemptionStore) {
+                        selection = .order
+                    }
+                    .tag(Page.rewards)
+                    OrderView(store: redemptionStore) {
+                        selection = .rewards
+                    }
+                    .tag(Page.order)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -58,14 +67,29 @@ struct OwnerHomeView: View {
             .navigationTitle(selection.rawValue)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if selection == .order {
+                        Button {
+                            isShowingOrderHistory = true
+                        } label: {
+                            Label("History", systemImage: "clock.arrow.circlepath")
+                        }
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 4) {
                         Image(systemName: "pawprint.fill")
-                        Text("0 pts")
+                        Text("\(redemptionStore.pointsBalance) pts")
                     }
                         .fontWeight(.semibold)
                         .foregroundStyle(AppColors.brand)
                 }
+            }
+            .sheet(isPresented: $isShowingOrderHistory) {
+                OrderHistoryView(store: redemptionStore)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -89,20 +113,6 @@ struct OwnerHomeView: View {
 
             Spacer()
         }
-        .padding(AppSpacing.large)
-    }
-
-    private func placeholderPage(icon: String, title: String, message: String) -> some View {
-        VStack(spacing: AppSpacing.medium) {
-            Image(systemName: icon)
-                .font(.system(size: 44))
-                .foregroundStyle(AppColors.brand)
-            Text(title)
-                .font(.title2.bold())
-            Text(message)
-                .foregroundStyle(AppColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(AppSpacing.large)
     }
 

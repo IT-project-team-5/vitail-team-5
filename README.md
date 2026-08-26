@@ -35,13 +35,18 @@ in-app account deletion are later use cases, not part of this first slice.
 
 The role choice makes the login page clear, but it does not grant a role. The
 backend account remains authoritative, and a mismatched login asks the user to
-choose the correct account type. The current post-login UI is deliberately a
-shell: owners can swipe between Account, Walk and Redeem, with the same pages
-available in the bottom navigation and fixed `0 pts` at top right.
-Café owners have Account and Orders pages. Logout lives in Account for both
-roles. Walk shows the owner's current foreground location on a map and supports
-manual start, pause, resume and finish with a live distance counter. Route
-storage, Redeem, Orders and real point data are not implemented yet.
+choose the correct account type. Owners can swipe between Account, Walk, Rewards
+and Order, with the same pages available in the bottom navigation. Café owners
+have Account and Orders pages. Logout lives in Account for both roles. Walk shows
+the owner's current foreground location on a map and supports manual start,
+pause, resume and finish with a live distance counter. Rewards has a local
+demonstration catalogue with sample merchants and products. Order contains ready
+orders, swipe-to-collect and order history. Route storage, backend redemption,
+café Orders and real point data are not implemented yet.
+
+The Rewards and Order demonstration data is held in memory. Its sample point
+balance and orders reset when the owner session view is recreated; this is
+intentional until the redemption API is connected.
 
 ## Business Model
 
@@ -63,7 +68,7 @@ Owners and café staff use the **same iOS app**. The account role decides
 which interface loads.
 
 ```text
-OWNER → Account / Walk / Redeem shell
+OWNER → Account / Walk / Rewards / Order shell
 CAFE  → Account / Orders shell
 ADMIN → Django Admin
 ```
@@ -79,8 +84,8 @@ own Apple Developer Program account.
 
 The café screen is **read-only**. It lists orders waiting to be collected and
 refreshes every few seconds, and it cannot mark an order collected. Only the
-owner can do that by tapping Redeem in the iOS app. Order collection has no
-location gate during the pilot.
+owner can do that by opening Order and swiping to confirm pickup in the iOS app.
+Order collection has no location gate during the pilot.
 
 Vets, councils and dog parks remain **data records, not accounts**.
 
@@ -181,12 +186,12 @@ Owner browses partner and selects items
 → order receives a reference number
 → the order appears on the café's order screen within seconds
 → owner travels to the venue
-→ owner taps Redeem
+→ owner opens Order and swipes to confirm pickup
 → order is marked collected
 ```
 
-The Redeem action is not location-gated during the pilot. In-venue location
-verification for collection is a possible post-MVP enhancement.
+The pickup confirmation is not location-gated during the pilot. In-venue
+location verification for collection is a possible post-MVP enhancement.
 
 Uncollected orders expire at end of day and points are refunded automatically.
 

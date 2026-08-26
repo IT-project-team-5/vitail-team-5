@@ -22,6 +22,7 @@
 		00000000000000000000000D /* CafeOrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* CafeOrdersView.swift */; };
 		00000000000000000000000E /* AuthModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* AuthModelsTests.swift */; };
 		00000000000000000000000F /* WalkMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* WalkMapView.swift */; };
+		000000000000000000000010 /* RedeemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* RedeemView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +51,7 @@
 		10000000000000000000000D /* CafeOrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersView.swift; sourceTree = "<group>"; };
 		10000000000000000000000E /* AuthModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModelsTests.swift; sourceTree = "<group>"; };
 		10000000000000000000000F /* WalkMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMapView.swift; sourceTree = "<group>"; };
+		100000000000000000000010 /* RedeemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedeemView.swift; sourceTree = "<group>"; };
 		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -181,6 +183,7 @@
 				20B000000000000000000001 /* Auth */,
 				20C000000000000000000001 /* OwnerHome */,
 				20D000000000000000000001 /* CafeOrders */,
+				20F000000000000000000001 /* Redeem */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -209,6 +212,14 @@
 				10000000000000000000000D /* CafeOrdersView.swift */,
 			);
 			path = CafeOrders;
+			sourceTree = "<group>";
+		};
+		20F000000000000000000001 /* Redeem */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000010 /* RedeemView.swift */,
+			);
+			path = Redeem;
 			sourceTree = "<group>";
 		};
 		20E000000000000000000001 /* VitailTests */ = {
@@ -331,6 +342,7 @@
 				00000000000000000000000C /* OwnerHomeView.swift in Sources */,
 				00000000000000000000000D /* CafeOrdersView.swift in Sources */,
 				00000000000000000000000F /* WalkMapView.swift in Sources */,
+				000000000000000000000010 /* RedeemView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -50,7 +50,7 @@ Owners and café staff use the same native iOS app. The backend role decides whi
 interface loads.
 
 ```text
-Dog owner    → iOS app, Account / Walk / Redeem shell
+Dog owner    → iOS app, Account / Walk / Rewards / Order shell
 Café staff   → iOS app, Account / Orders shell
 Vitail admin → Django Admin
 ```
@@ -690,7 +690,7 @@ Owner selects venue and items
 → reference number issued
 → the order appears on the café order screen on its next refresh
 → owner travels to the venue
-→ owner taps Redeem
+→ owner opens Order and swipes to confirm pickup
 → order marked COLLECTED
 ```
 
@@ -702,10 +702,10 @@ that must be implemented:
 - an admin can cancel and refund an order manually, for example when a venue has
   run out of stock.
 
-At MVP the Redeem button is always tappable and collection has no location
-gate. An owner can therefore mark an order collected away from the venue. This
-is a known and accepted gap. Build the collection endpoint so a location policy
-can be added later without reshaping the order state machine.
+At MVP the swipe-to-confirm control is always available and collection has no
+location gate. An owner can therefore mark an order collected away from the
+venue. This is a known and accepted gap. Build the collection endpoint so a
+location policy can be added later without reshaping the order state machine.
 
 ### Café order screen
 
@@ -718,8 +718,8 @@ GET  /api/cafe/orders?since={cursor}       polled by the café screen
 
 The screen polls every few seconds and lists orders still `PENDING` for that
 café, showing the reference number, the owner's name, the items and the time
-ordered. When the owner taps Redeem the order becomes `COLLECTED` and drops off
-the list on the next poll.
+ordered. When the owner confirms pickup in Order the order becomes `COLLECTED`
+and drops off the list on the next poll.
 
 Implementation requirements:
 
@@ -1134,15 +1134,18 @@ First authentication-slice acceptance flow:
 User explicitly chooses dog owner or café owner on the login page
 Owner registers with email/password → receives OWNER role → owner tab shell
 Café account is created in Django Admin → logs in → café tab shell
-Owner shell: swipe or tap between Account / Walk / Redeem; fixed `0 pts`
+Owner shell: swipe or tap between Account / Walk / Rewards / Order
 Café shell: tap between Account / Orders
 Logout is available from Account for both roles
 App relaunch refreshes the session from Keychain
 Logout removes the local session
 ```
 
-Walk, Redeem and Orders are navigation placeholders in this slice. They do not
-claim that tracking, redemption, order polling or real point balances exist.
+Walk is a foreground-only prototype with live location and distance. Rewards is
+a local merchant and product catalogue; Order shows ready orders, pickup
+confirmation and history. Both use sample points and in-memory order state and
+do not claim backend redemption or real point balances. Café Orders remains a
+placeholder and does not claim order polling exists.
 
 Main acceptance flow:
 
@@ -1159,7 +1162,7 @@ Owner registers with email and password
 → dwells and completes a check-in
 → orders an offer
 → points are deducted once
-→ taps Redeem
+→ opens Order and confirms pickup
 → order is marked collected
 → the redemption appears in history with a reference number
 ```

@@ -147,3 +147,69 @@ final class WalkSessionTrackerTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class RedemptionStoreTests: XCTestCase {
+    func testDemoStoreStartsWithReadyAndHistoryExamples() {
+        let store = RedemptionStore()
+
+        XCTAssertEqual(store.pointsBalance, 760)
+        XCTAssertEqual(store.readyOrders.count, 2)
+        XCTAssertEqual(store.historyOrders.count, 3)
+        XCTAssertTrue(store.readyOrders.allSatisfy { $0.status == .pending })
+    }
+
+    func testPlacingOrderDeductsPointsAndAddsReadyOrder() throws {
+        let merchant = try XCTUnwrap(RedemptionMerchant.demoMerchants.first)
+        let product = try XCTUnwrap(merchant.products.first)
+        let store = RedemptionStore(
+            pointsBalance: 500,
+            merchants: [merchant],
+            readyOrders: [],
+            historyOrders: [],
+            nextReferenceSequence: 300
+        )
+
+        let order = try XCTUnwrap(
+            store.placeOrder(merchantID: merchant.id, productID: product.id)
+        )
+
+        XCTAssertEqual(store.pointsBalance, 500 - product.pointPrice)
+        XCTAssertEqual(store.readyOrders, [order])
+        XCTAssertEqual(order.referenceNumber, "VT-DEMO-300")
+        XCTAssertEqual(order.status, .pending)
+    }
+
+    func testOrderIsRejectedWhenPointsAreTooLow() throws {
+        let merchant = try XCTUnwrap(RedemptionMerchant.demoMerchants.first)
+        let product = try XCTUnwrap(merchant.products.first)
+        let store = RedemptionStore(
+            pointsBalance: product.pointPrice - 1,
+            merchants: [merchant],
+            readyOrders: [],
+            historyOrders: []
+        )
+
+        let order = store.placeOrder(merchantID: merchant.id, productID: product.id)
+
+        XCTAssertNil(order)
+        XCTAssertEqual(store.pointsBalance, product.pointPrice - 1)
+        XCTAssertTrue(store.readyOrders.isEmpty)
+    }
+
+    func testCollectionMovesOrderToHistoryOnlyOnce() throws {
+        let order = try XCTUnwrap(RedemptionOrder.demoReadyOrders().first)
+        let collectedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = RedemptionStore(
+            readyOrders: [order],
+            historyOrders: []
+        )
+
+        XCTAssertTrue(store.collect(orderID: order.id, at: collectedAt))
+        XCTAssertFalse(store.collect(orderID: order.id, at: collectedAt))
+        XCTAssertTrue(store.readyOrders.isEmpty)
+        XCTAssertEqual(store.historyOrders.count, 1)
+        XCTAssertEqual(store.historyOrders.first?.status, .collected)
+        XCTAssertEqual(store.historyOrders.first?.collectedAt, collectedAt)
+    }
+}
