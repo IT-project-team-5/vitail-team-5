@@ -792,6 +792,7 @@ GET    /api/dogs
 POST   /api/dogs
 GET    /api/dogs/breeds
 PATCH  /api/dogs/{id}
+DELETE /api/dogs/{id}
 GET    /api/dogs/{id}/goal
 
 POST   /api/walks

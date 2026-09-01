@@ -119,6 +119,22 @@ class DogApiTests(APITestCase):
         dog.refresh_from_db()
         self.assertEqual(dog.name, "Milo")
 
+    def test_owner_can_delete_own_dog(self):
+        dog = self.create_dog()
+
+        response = self.client.delete(f"{self.list_url}/{dog.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Dog.objects.filter(pk=dog.id).exists())
+
+    def test_owner_cannot_delete_another_owners_dog(self):
+        dog = self.create_dog(owner=self.other_owner)
+
+        response = self.client.delete(f"{self.list_url}/{dog.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Dog.objects.filter(pk=dog.id).exists())
+
     def test_ten_dogs_allowed_and_eleventh_rejected(self):
         for index in range(10):
             response = self.client.post(

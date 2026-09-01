@@ -23,10 +23,10 @@ class DogListCreateView(generics.ListCreateAPIView):
         return Dog.objects.filter(owner=self.request.user).select_related("breed")
 
 
-class DogDetailView(generics.UpdateAPIView):
+class DogDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsOwner]
     serializer_class = DogSerializer
-    http_method_names = ["patch", "options"]
+    http_method_names = ["patch", "delete", "options"]
 
     def get_queryset(self):
         return Dog.objects.filter(owner=self.request.user).select_related("breed")

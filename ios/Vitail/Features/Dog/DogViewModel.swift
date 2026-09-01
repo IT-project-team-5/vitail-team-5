@@ -59,4 +59,19 @@ final class DogViewModel: ObservableObject {
             return false
         }
     }
+
+    func delete(_ dog: Dog) async -> Bool {
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        do {
+            try await service.deleteDog(id: dog.id)
+            dogs.removeAll { $0.id == dog.id }
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
 }

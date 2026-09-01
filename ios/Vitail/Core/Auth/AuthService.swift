@@ -107,6 +107,17 @@ actor AuthService {
         }
     }
 
+    func authenticatedDelete(_ path: String) async throws {
+        let tokens = try requireTokens()
+        do {
+            try await apiClient.delete(path, bearerToken: tokens.access)
+        } catch let APIError.http(status, _) where status == 401 {
+            let refreshedTokens = try await refresh(tokens)
+            try keychain.save(refreshedTokens)
+            try await apiClient.delete(path, bearerToken: refreshedTokens.access)
+        }
+    }
+
     private func currentUser(accessToken: String) async throws -> User {
         let response: CurrentUserResponse = try await apiClient.get(
             "/api/auth/me",

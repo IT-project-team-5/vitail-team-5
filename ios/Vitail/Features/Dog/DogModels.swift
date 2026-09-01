@@ -15,6 +15,25 @@ enum DogSize: String, Codable, CaseIterable, Identifiable, Sendable {
     var label: String { rawValue.capitalized }
 }
 
+enum DogAgeInput {
+    static let monthOptions = Array(1...12)
+
+    static func formValues(forAgeMonths ageMonths: Int) -> (years: Int, months: Int) {
+        let normalizedAge = max(ageMonths, 1)
+        return (
+            years: (normalizedAge - 1) / 12,
+            months: ((normalizedAge - 1) % 12) + 1
+        )
+    }
+
+    static func totalMonths(years: Int, months: Int) -> Int? {
+        guard years >= 0, monthOptions.contains(months) else { return nil }
+        let (yearMonths, yearOverflow) = years.multipliedReportingOverflow(by: 12)
+        let (totalMonths, totalOverflow) = yearMonths.addingReportingOverflow(months)
+        return yearOverflow || totalOverflow ? nil : totalMonths
+    }
+}
+
 struct Breed: Codable, Equatable, Identifiable, Sendable {
     let id: Int
     let name: String

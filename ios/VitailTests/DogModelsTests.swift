@@ -69,4 +69,19 @@ final class DogModelsTests: XCTestCase {
         XCTAssertEqual(goal.status, "RULES_PENDING")
         XCTAssertNil(goal.recommendedDurationMinutes)
     }
+
+    func testDogAgeInputUsesOneThroughTwelveMonthsAndPreservesStoredAge() {
+        XCTAssertEqual(DogAgeInput.monthOptions, Array(1...12))
+
+        let age = DogAgeInput.formValues(forAgeMonths: 36)
+        XCTAssertEqual(age.years, 2)
+        XCTAssertEqual(age.months, 12)
+        XCTAssertEqual(DogAgeInput.totalMonths(years: age.years, months: age.months), 36)
+    }
+
+    func testDogAgeInputDefaultsZeroMonthDogsToOneMonth() {
+        let age = DogAgeInput.formValues(forAgeMonths: 0)
+        XCTAssertEqual(age.years, 0)
+        XCTAssertEqual(age.months, 1)
+    }
 }

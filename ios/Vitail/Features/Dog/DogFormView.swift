@@ -7,18 +7,20 @@ struct DogFormView: View {
     @State private var name: String
     @State private var breedID: Int?
     @State private var years: String
-    @State private var months: String
+    @State private var months: Int
     @State private var size: DogSize
     @State private var isBrachycephalic: Bool
     @State private var validationMessage: String?
+    @State private var isConfirmingDelete = false
 
     init(viewModel: DogViewModel, dog: Dog? = nil) {
         self.viewModel = viewModel
         self.dog = dog
+        let age = DogAgeInput.formValues(forAgeMonths: dog?.ageMonths ?? 1)
         _name = State(initialValue: dog?.name ?? "")
         _breedID = State(initialValue: dog?.breed.id)
-        _years = State(initialValue: dog.map { String($0.ageMonths / 12) } ?? "0")
-        _months = State(initialValue: dog.map { String($0.ageMonths % 12) } ?? "0")
+        _years = State(initialValue: String(age.years))
+        _months = State(initialValue: age.months)
         _size = State(initialValue: dog?.size ?? .medium)
         _isBrachycephalic = State(initialValue: dog?.isBrachycephalic ?? false)
     }
@@ -45,12 +47,25 @@ struct DogFormView: View {
                 Section("Age") {
                     TextField("Years", text: $years)
                         .keyboardType(.numberPad)
-                    TextField("Months (0–11)", text: $months)
-                        .keyboardType(.numberPad)
+                    Picker("Months", selection: $months) {
+                        ForEach(DogAgeInput.monthOptions, id: \.self) { month in
+                            Text("\(month)").tag(month)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
 
                 if let message = validationMessage ?? viewModel.errorMessage {
                     Section { Text(message).foregroundStyle(AppColors.error) }
+                }
+
+                if dog != nil {
+                    Section {
+                        Button("Delete Dog", role: .destructive) {
+                            isConfirmingDelete = true
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
                 }
             }
             .navigationTitle(dog == nil ? "Add Dog" : "Edit Dog")
@@ -73,6 +88,14 @@ struct DogFormView: View {
                 size = breed.defaultSize
                 isBrachycephalic = breed.isBrachycephalic
             }
+            .alert("Delete \(dog?.name ?? "this dog")?", isPresented: $isConfirmingDelete) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task { await deleteDog() }
+                }
+            } message: {
+                Text("This dog profile will be permanently deleted.")
+            }
         }
     }
 
@@ -87,16 +110,10 @@ struct DogFormView: View {
             return
         }
         guard
-            let yearValue = Int(years), yearValue >= 0,
-            let monthValue = Int(months), (0...11).contains(monthValue)
+            let yearValue = Int(years),
+            let ageMonths = DogAgeInput.totalMonths(years: yearValue, months: months)
         else {
-            validationMessage = "Enter a valid age using non-negative years and 0–11 months."
-            return
-        }
-        let (yearMonths, yearOverflow) = yearValue.multipliedReportingOverflow(by: 12)
-        let (ageMonths, ageOverflow) = yearMonths.addingReportingOverflow(monthValue)
-        guard !yearOverflow, !ageOverflow else {
-            validationMessage = "Enter a valid age."
+            validationMessage = "Enter a valid non-negative number of years."
             return
         }
 
@@ -109,5 +126,10 @@ struct DogFormView: View {
             isBrachycephalic: isBrachycephalic
         )
         if await viewModel.save(dog: dog, request: request) { dismiss() }
+    }
+
+    private func deleteDog() async {
+        guard let dog else { return }
+        if await viewModel.delete(dog) { dismiss() }
     }
 }
