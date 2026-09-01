@@ -47,6 +47,66 @@ actor AuthService {
         try keychain.delete()
     }
 
+    func updateProfile(displayName: String) async throws -> User {
+        try await authenticatedPatch(
+            "/api/auth/me",
+            body: ProfileUpdateRequest(displayName: displayName),
+            as: User.self
+        )
+    }
+
+    func authenticatedGet<Response: Decodable & Sendable>(
+        _ path: String,
+        as responseType: Response.Type = Response.self
+    ) async throws -> Response {
+        let tokens = try requireTokens()
+        do {
+            return try await apiClient.get(path, bearerToken: tokens.access)
+        } catch let APIError.http(status, _) where status == 401 {
+            let refreshedTokens = try await refresh(tokens)
+            try keychain.save(refreshedTokens)
+            return try await apiClient.get(path, bearerToken: refreshedTokens.access)
+        }
+    }
+
+    func authenticatedPost<Body: Encodable & Sendable, Response: Decodable & Sendable>(
+        _ path: String,
+        body: Body,
+        as responseType: Response.Type = Response.self
+    ) async throws -> Response {
+        let tokens = try requireTokens()
+        do {
+            return try await apiClient.post(path, body: body, bearerToken: tokens.access)
+        } catch let APIError.http(status, _) where status == 401 {
+            let refreshedTokens = try await refresh(tokens)
+            try keychain.save(refreshedTokens)
+            return try await apiClient.post(
+                path,
+                body: body,
+                bearerToken: refreshedTokens.access
+            )
+        }
+    }
+
+    func authenticatedPatch<Body: Encodable & Sendable, Response: Decodable & Sendable>(
+        _ path: String,
+        body: Body,
+        as responseType: Response.Type = Response.self
+    ) async throws -> Response {
+        let tokens = try requireTokens()
+        do {
+            return try await apiClient.patch(path, body: body, bearerToken: tokens.access)
+        } catch let APIError.http(status, _) where status == 401 {
+            let refreshedTokens = try await refresh(tokens)
+            try keychain.save(refreshedTokens)
+            return try await apiClient.patch(
+                path,
+                body: body,
+                bearerToken: refreshedTokens.access
+            )
+        }
+    }
+
     private func currentUser(accessToken: String) async throws -> User {
         let response: CurrentUserResponse = try await apiClient.get(
             "/api/auth/me",
@@ -64,5 +124,12 @@ actor AuthService {
             access: response.access,
             refresh: response.refresh ?? tokens.refresh
         )
+    }
+
+    private func requireTokens() throws -> AuthTokens {
+        guard let tokens = try keychain.load() else {
+            throw APIError.http(status: 401, message: "Your session has expired. Please sign in again.")
+        }
+        return tokens
     }
 }

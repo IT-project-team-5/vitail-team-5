@@ -18,7 +18,7 @@ requirements and platform decisions captured through 2026-08-24.
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
 
-### Current build slice: authentication
+### Current build slices: authentication and owner/dog profiles
 
 The first use case is deliberately small:
 
@@ -33,11 +33,17 @@ refresh tokens, which the app stores in Keychain. Sign in with Apple waits until
 the project has its own Apple Developer Program account. Password reset and
 in-app account deletion are later use cases, not part of this first slice.
 
+An authenticated owner can also edit their display name and manage up to 10
+persistent dog profiles using breed reference data supplied by the backend.
+Personalised-goal inputs are stored, but no duration is displayed until the
+open numeric welfare and heat-adjustment rules are resolved.
+
 The role choice makes the login page clear, but it does not grant a role. The
 backend account remains authoritative, and a mismatched login asks the user to
-choose the correct account type. The current post-login UI is deliberately a
-shell: owners can swipe between Account, Walk and Redeem, with the same pages
-available in the bottom navigation and fixed `0 pts` at top right.
+choose the correct account type. The current post-login navigation lets owners
+swipe between Account, Walk and Redeem, with the same pages available in the
+bottom navigation and fixed `0 pts` at top right. Account contains owner and
+dog profiles; Walk and Redeem remain shells.
 Café owners have Account and Orders pages. Logout lives in Account for both
 roles; Walk, Redeem, Orders and real point data are not implemented yet.
 
@@ -222,7 +228,7 @@ are added only when their work begins.
 ```text
 vitail-team-5/
 ├── ios/                 SwiftUI app and auth tests
-├── backend/             Django API, accounts app and migration
+├── backend/             Django API, accounts/dogs apps and migrations
 ├── docs/
 │   ├── DECISIONS.md
 │   └── FEATURES.md      (lightweight delivery status)

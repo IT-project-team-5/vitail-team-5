@@ -39,7 +39,7 @@ struct OwnerHomeView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $selection) {
-                    accountPage
+                    OwnerProfileView(user: user, session: session)
                         .tag(Page.account)
                     placeholderPage(
                         icon: "figure.walk",
@@ -72,28 +72,6 @@ struct OwnerHomeView: View {
                 }
             }
         }
-    }
-
-    private var accountPage: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.large) {
-            VStack(alignment: .leading, spacing: AppSpacing.small) {
-                Text(user.displayName)
-                    .font(.title2.bold())
-                Text(user.email)
-                    .foregroundStyle(AppColors.secondaryText)
-            }
-            .padding(AppSpacing.large)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppColors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
-
-            Button("Log Out", role: .destructive) {
-                Task { await session.logout() }
-            }
-
-            Spacer()
-        }
-        .padding(AppSpacing.large)
     }
 
     private func placeholderPage(icon: String, title: String, message: String) -> some View {

@@ -92,6 +92,27 @@ struct APIClient: Sendable {
         )
     }
 
+    func patch<Body: Encodable & Sendable, Response: Decodable & Sendable>(
+        _ path: String,
+        body: Body,
+        bearerToken: String? = nil,
+        as responseType: Response.Type = Response.self
+    ) async throws -> Response {
+        let encodedBody: Data
+        do {
+            encodedBody = try JSONEncoder().encode(body)
+        } catch {
+            throw APIError.invalidResponse
+        }
+
+        return try await send(
+            path: path,
+            method: "PATCH",
+            body: encodedBody,
+            bearerToken: bearerToken
+        )
+    }
+
     private func send<Response: Decodable & Sendable>(
         path: String,
         method: String,

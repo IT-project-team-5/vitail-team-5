@@ -71,4 +71,22 @@ final class AuthModelsTests: XCTestCase {
             "This is a café account. Choose “I'm a cafe owner” to sign in."
         )
     }
+
+    func testOwnerProfileViewModelRequiresAChangedNonBlankName() async {
+        await MainActor.run {
+            let user = User(
+                id: 1,
+                email: "owner@example.com",
+                displayName: "Taylor",
+                role: .owner
+            )
+            let viewModel = OwnerProfileViewModel(user: user)
+
+            XCTAssertFalse(viewModel.canSave)
+            viewModel.displayName = "   "
+            XCTAssertFalse(viewModel.canSave)
+            viewModel.displayName = "Cache"
+            XCTAssertTrue(viewModel.canSave)
+        }
+    }
 }
