@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "venues",
     "wallets",
     "redemptions",
+    "rewards",
 ]
 
 MIDDLEWARE = [
