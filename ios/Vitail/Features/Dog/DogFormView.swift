@@ -19,7 +19,7 @@ struct DogFormView: View {
         let age = DogAgeInput.formValues(forAgeMonths: dog?.ageMonths ?? 1)
         _name = State(initialValue: dog?.name ?? "")
         _breedID = State(initialValue: dog?.breed.id)
-        _years = State(initialValue: String(age.years))
+        _years = State(initialValue: dog == nil ? "" : String(age.years))
         _months = State(initialValue: age.months)
         _size = State(initialValue: dog?.size ?? .medium)
         _isBrachycephalic = State(initialValue: dog?.isBrachycephalic ?? false)
