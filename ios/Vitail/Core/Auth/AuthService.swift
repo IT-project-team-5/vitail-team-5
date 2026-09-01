@@ -47,6 +47,25 @@ actor AuthService {
         try keychain.delete()
     }
 
+    /// Runs `perform` with the current access token, refreshing once and
+    /// retrying on a 401 so other features (e.g. RedemptionService) don't
+    /// each duplicate this logic (TECH_STACK.md, section 22, shared-code rule).
+    func performAuthorized<Response: Decodable & Sendable>(
+        _ perform: @Sendable (String) async throws -> Response
+    ) async throws -> Response {
+        guard let tokens = try keychain.load() else {
+            throw APIError.http(status: 401, message: "You are signed out.")
+        }
+
+        do {
+            return try await perform(tokens.access)
+        } catch let APIError.http(status, _) where status == 401 {
+            let refreshedTokens = try await refresh(tokens)
+            try keychain.save(refreshedTokens)
+            return try await perform(refreshedTokens.access)
+        }
+    }
+
     private func currentUser(accessToken: String) async throws -> User {
         let response: CurrentUserResponse = try await apiClient.get(
             "/api/auth/me",

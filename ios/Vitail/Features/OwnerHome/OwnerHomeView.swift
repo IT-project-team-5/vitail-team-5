@@ -34,6 +34,7 @@ struct OwnerHomeView: View {
     let user: User
     @ObservedObject var session: SessionStore
     @State private var selection: Page = .walk
+    @StateObject private var redemptionViewModel = RedemptionViewModel()
 
     var body: some View {
         NavigationStack {
@@ -47,12 +48,8 @@ struct OwnerHomeView: View {
                         message: "Walk tracking will appear here."
                     )
                     .tag(Page.walk)
-                    placeholderPage(
-                        icon: "gift.fill",
-                        title: "Redeem",
-                        message: "Rewards will appear here."
-                    )
-                    .tag(Page.redeem)
+                    RedemptionView(viewModel: redemptionViewModel)
+                        .tag(Page.redeem)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -65,12 +62,15 @@ struct OwnerHomeView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 4) {
                         Image(systemName: "pawprint.fill")
-                        Text("0 pts")
+                        Text("\(redemptionViewModel.balance ?? 0) pts")
                     }
                         .fontWeight(.semibold)
                         .foregroundStyle(AppColors.brand)
                 }
             }
+        }
+        .task {
+            await redemptionViewModel.loadInitialData()
         }
     }
 
