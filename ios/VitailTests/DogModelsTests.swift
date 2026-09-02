@@ -70,18 +70,25 @@ final class DogModelsTests: XCTestCase {
         XCTAssertNil(goal.recommendedDurationMinutes)
     }
 
-    func testDogAgeInputUsesOneThroughTwelveMonthsAndPreservesStoredAge() {
-        XCTAssertEqual(DogAgeInput.monthOptions, Array(1...12))
-
-        let age = DogAgeInput.formValues(forAgeMonths: 36)
-        XCTAssertEqual(age.years, 2)
-        XCTAssertEqual(age.months, 12)
-        XCTAssertEqual(DogAgeInput.totalMonths(years: age.years, months: age.months), 36)
+    func testDogAgeInputUsesZeroThroughElevenMonths() {
+        XCTAssertEqual(DogAgeInput.monthOptions, Array(0...11))
     }
 
-    func testDogAgeInputDefaultsZeroMonthDogsToOneMonth() {
-        let age = DogAgeInput.formValues(forAgeMonths: 0)
-        XCTAssertEqual(age.years, 0)
-        XCTAssertEqual(age.months, 1)
+    func testDogAgeInputRoundTripsBackendValuesIncludingZero() throws {
+        for storedAge in [0, 1, 11, 12, 13, 36, 38, 119] {
+            let age = DogAgeInput.formValues(forAgeMonths: storedAge)
+            let reconstructedAge = try XCTUnwrap(
+                DogAgeInput.totalMonths(years: age.years, months: age.months)
+            )
+
+            XCTAssertEqual(reconstructedAge, storedAge)
+        }
+    }
+
+    func testDogAgeInputRejectsInvalidAndOverflowingValues() {
+        XCTAssertNil(DogAgeInput.totalMonths(years: -1, months: 0))
+        XCTAssertNil(DogAgeInput.totalMonths(years: 0, months: -1))
+        XCTAssertNil(DogAgeInput.totalMonths(years: 0, months: 12))
+        XCTAssertNil(DogAgeInput.totalMonths(years: Int.max, months: 0))
     }
 }

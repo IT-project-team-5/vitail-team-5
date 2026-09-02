@@ -181,6 +181,27 @@ class DogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("age_months", response.data)
 
+    def test_zero_month_age_is_preserved_when_dog_is_created_and_edited(self):
+        create_response = self.client.post(
+            self.list_url,
+            self.dog_payload(age_months=0),
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.data["age_months"], 0)
+
+        update_response = self.client.patch(
+            f"{self.list_url}/{create_response.data['id']}",
+            self.dog_payload(name="Updated", age_months=0),
+            format="json",
+        )
+
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["age_months"], 0)
+        dog = Dog.objects.get(pk=create_response.data["id"])
+        self.assertEqual(dog.age_months, 0)
+
     def test_omitted_brachycephalic_defaults_from_breed(self):
         payload = self.dog_payload(breed_id=self.flat_faced_breed.id)
         del payload["is_brachycephalic"]

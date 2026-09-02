@@ -29,22 +29,6 @@ def seed_breeds(apps, schema_editor):
     )
 
 
-def remove_seed_breeds(apps, schema_editor):
-    Breed = apps.get_model("dogs", "Breed")
-    Breed.objects.filter(
-        name__in=(
-            "Australian Kelpie",
-            "Cavalier King Charles Spaniel",
-            "French Bulldog",
-            "German Shepherd",
-            "Golden Retriever",
-            "Labrador Retriever",
-            "Mixed Breed",
-            "Pug",
-        )
-    ).delete()
-
-
 class Migration(migrations.Migration):
     initial = True
 
@@ -77,5 +61,5 @@ class Migration(migrations.Migration):
             ],
             options={"ordering": ("created_at", "id")},
         ),
-        migrations.RunPython(seed_breeds, remove_seed_breeds),
+        migrations.RunPython(seed_breeds, migrations.RunPython.noop),
     ]

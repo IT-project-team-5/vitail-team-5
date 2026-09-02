@@ -16,13 +16,13 @@ enum DogSize: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum DogAgeInput {
-    static let monthOptions = Array(1...12)
+    static let monthOptions = Array(0...11)
 
     static func formValues(forAgeMonths ageMonths: Int) -> (years: Int, months: Int) {
-        let normalizedAge = max(ageMonths, 1)
+        let normalizedAge = max(ageMonths, 0)
         return (
-            years: (normalizedAge - 1) / 12,
-            months: ((normalizedAge - 1) % 12) + 1
+            years: normalizedAge / 12,
+            months: normalizedAge % 12
         )
     }
 
