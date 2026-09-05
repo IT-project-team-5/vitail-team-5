@@ -92,6 +92,62 @@ struct APIClient: Sendable {
         )
     }
 
+    func patch<Body: Encodable & Sendable, Response: Decodable & Sendable>(
+        _ path: String,
+        body: Body,
+        bearerToken: String? = nil,
+        as responseType: Response.Type = Response.self
+    ) async throws -> Response {
+        let encodedBody: Data
+        do {
+            encodedBody = try JSONEncoder().encode(body)
+        } catch {
+            throw APIError.invalidResponse
+        }
+
+        return try await send(
+            path: path,
+            method: "PATCH",
+            body: encodedBody,
+            bearerToken: bearerToken
+        )
+    }
+
+    func delete(
+        _ path: String,
+        bearerToken: String? = nil
+    ) async throws {
+        guard let baseURL else {
+            throw APIError.invalidConfiguration
+        }
+
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let endpoint = baseURL.appendingPathComponent(cleanPath)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let bearerToken {
+            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let response = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            guard (200..<300).contains(response.statusCode) else {
+                throw APIError.http(
+                    status: response.statusCode,
+                    message: Self.serverMessage(from: data)
+                )
+            }
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.network(error.localizedDescription)
+        }
+    }
+
     private func send<Response: Decodable & Sendable>(
         path: String,
         method: String,

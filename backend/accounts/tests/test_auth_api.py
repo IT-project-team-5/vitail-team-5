@@ -135,3 +135,75 @@ class AuthApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
+
+    def test_authenticated_user_can_update_own_display_name(self):
+        user = User.objects.create_user(
+            email="profile@example.com",
+            password=self.password,
+            display_name="Before",
+            role=User.Role.OWNER,
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.patch(
+            self.me_url,
+            {"display_name": "  Cache  "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["display_name"], "Cache")
+        user.refresh_from_db()
+        self.assertEqual(user.display_name, "Cache")
+
+    def test_blank_display_name_is_rejected(self):
+        user = User.objects.create_user(
+            email="profile@example.com",
+            password=self.password,
+            display_name="Before",
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.patch(
+            self.me_url,
+            {"display_name": "   "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertEqual(user.display_name, "Before")
+
+    def test_profile_patch_cannot_modify_role_or_email(self):
+        user = User.objects.create_user(
+            email="profile@example.com",
+            password=self.password,
+            display_name="Before",
+            role=User.Role.OWNER,
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.patch(
+            self.me_url,
+            {
+                "display_name": "After",
+                "email": "changed@example.com",
+                "role": User.Role.ADMIN,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertEqual(user.email, "profile@example.com")
+        self.assertEqual(user.role, User.Role.OWNER)
+        self.assertEqual(user.display_name, "After")
+
+    def test_profile_patch_requires_authentication(self):
+        response = self.client.patch(
+            self.me_url,
+            {"display_name": "No Access"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

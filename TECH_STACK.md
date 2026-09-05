@@ -786,10 +786,13 @@ POST   /api/auth/register
 POST   /api/auth/login
 POST   /api/auth/refresh
 GET    /api/auth/me
+PATCH  /api/auth/me
 
 GET    /api/dogs
 POST   /api/dogs
+GET    /api/dogs/breeds
 PATCH  /api/dogs/{id}
+DELETE /api/dogs/{id}
 GET    /api/dogs/{id}/goal
 
 POST   /api/walks
