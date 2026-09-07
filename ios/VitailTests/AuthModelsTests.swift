@@ -211,7 +211,7 @@ final class WalkSessionTrackerTests: XCTestCase {
         let third = location(latitude: -37.8116, longitude: 144.9631, seconds: 20)
         let fourth = location(latitude: -37.8106, longitude: 144.9631, seconds: 30)
 
-        tracker.start(from: first)
+        tracker.start(from: first, dogs: [dog()])
         tracker.record(second)
         let distanceBeforePause = tracker.distanceMetres
 
@@ -236,7 +236,7 @@ final class WalkSessionTrackerTests: XCTestCase {
             seconds: 10
         )
 
-        tracker.start(from: accurate)
+        tracker.start(from: accurate, dogs: [dog()])
         tracker.record(inaccurate)
 
         XCTAssertEqual(tracker.distanceMetres, 0)
@@ -247,15 +247,34 @@ final class WalkSessionTrackerTests: XCTestCase {
         let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
         let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
 
-        tracker.start(from: first)
+        tracker.start(from: first, dogs: [dog()])
         tracker.record(second)
         XCTAssertGreaterThan(tracker.distanceMetres, 0)
 
         tracker.finish()
-        tracker.start(from: second)
+        tracker.start(from: second, dogs: [dog()])
 
         XCTAssertEqual(tracker.distanceMetres, 0)
         XCTAssertEqual(tracker.status, .walking)
+    }
+
+    private func dog() -> Dog {
+        Dog(
+            id: 1,
+            name: "Milo",
+            photo: nil,
+            breed: Breed(
+                id: 1,
+                name: "Mixed Breed",
+                energyLevel: .moderate,
+                defaultSize: .medium,
+                isBrachycephalic: false
+            ),
+            ageMonths: 24,
+            size: .medium,
+            isBrachycephalic: false,
+            createdAt: "2026-09-08T00:00:00Z"
+        )
     }
 
     private func location(

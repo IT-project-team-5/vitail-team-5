@@ -41,7 +41,10 @@ struct OwnerHomeView: View {
                 TabView(selection: $selection) {
                     OwnerProfileView(user: user, session: session)
                         .tag(Page.account)
-                    WalkMapView(isActive: selection == .walk)
+                    WalkMapView(ownerID: user.id, isActive: selection == .walk) {
+                        selection = .account
+                    }
+                        .id(user.id)
                         .tag(Page.walk)
                     placeholderPage(
                         icon: "gift.fill",

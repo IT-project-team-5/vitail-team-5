@@ -113,8 +113,23 @@ final class WalkSessionTracker: ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var distanceMetres: CLLocationDistance = 0
+    @Published private(set) var participatingDogs: [Dog] = []
+    @Published private(set) var routeSegments: [[WalkRoutePoint]] = []
+    @Published private(set) var completedWalk: WalkRecord?
 
     private var lastTrackedLocation: CLLocation?
+    private var lastRouteTimestamp: Date?
+    private var startsNewSegment = true
+    private var startedAt: Date?
+    private var activeIntervalStartedAt: Date?
+    private var activeDuration: TimeInterval = 0
+    private let now: () -> Date
+    private let onFinish: (WalkRecord) -> Void
+
+    init(now: @escaping () -> Date = Date.init, onFinish: @escaping (WalkRecord) -> Void = { _ in }) {
+        self.now = now
+        self.onFinish = onFinish
+    }
 
     var distanceKilometres: Double {
         distanceMetres / 1_000
@@ -128,47 +143,83 @@ final class WalkSessionTracker: ObservableObject {
         status == .walking || status == .paused
     }
 
+    var isInProgress: Bool {
+        status == .walking || status == .paused
+    }
+
     var canFinish: Bool {
         status == .walking || status == .paused
     }
 
     static func canUse(_ location: CLLocation?) -> Bool {
         guard let location else { return false }
-        return location.horizontalAccuracy >= 0
+        return CLLocationCoordinate2DIsValid(location.coordinate)
+            && location.timestamp.timeIntervalSince1970.isFinite
+            && location.horizontalAccuracy.isFinite && location.horizontalAccuracy >= 0
             && location.horizontalAccuracy <= maximumAcceptedAccuracy
     }
 
-    func start(from location: CLLocation?) {
-        guard canStart, Self.canUse(location) else { return }
+    func start(from location: CLLocation?, dogs: [Dog]) {
+        guard canStart, let location, Self.canUse(location), !dogs.isEmpty else { return }
 
+        let startTime = now()
+        var seenDogIDs: Set<Int> = []
+        participatingDogs = dogs.filter { seenDogIDs.insert($0.id).inserted }
         distanceMetres = 0
+        routeSegments = []
+        completedWalk = nil
+        lastRouteTimestamp = nil
+        startsNewSegment = true
+        startedAt = startTime
+        activeIntervalStartedAt = startTime
+        activeDuration = 0
         lastTrackedLocation = location
+        appendRoutePoint(location)
         status = .walking
     }
 
     func pause() {
         guard status == .walking else { return }
+        finishActiveInterval(at: now())
         lastTrackedLocation = nil
+        startsNewSegment = true
         status = .paused
     }
 
     func resume(from location: CLLocation?) {
         guard status == .paused else { return }
-        lastTrackedLocation = Self.canUse(location) ? location : nil
+        lastTrackedLocation = nil
+        startsNewSegment = true
+        activeIntervalStartedAt = now()
+        if let location, Self.canUse(location), isNewRouteTimestamp(location.timestamp) {
+            lastTrackedLocation = location
+            appendRoutePoint(location)
+        }
         status = .walking
     }
 
     func finish() {
-        guard canFinish else { return }
+        guard canFinish, let startedAt else { return }
+        let endTime = max(now(), startedAt)
+        finishActiveInterval(at: endTime)
         lastTrackedLocation = nil
+        let record = WalkRecord(
+            id: UUID(), startedAt: startedAt, endedAt: endTime,
+            activeDuration: activeDuration, distanceMetres: distanceMetres,
+            dogs: participatingDogs.map { WalkDogSnapshot(id: $0.id, name: $0.name) },
+            routeSegments: routeSegments
+        )
+        completedWalk = record
         status = .finished
+        onFinish(record)
     }
 
     func record(_ location: CLLocation) {
-        guard status == .walking, Self.canUse(location) else { return }
+        guard status == .walking, Self.canUse(location), isNewRouteTimestamp(location.timestamp) else { return }
 
         guard let previousLocation = lastTrackedLocation else {
             lastTrackedLocation = location
+            appendRoutePoint(location)
             return
         }
 
@@ -179,14 +230,43 @@ final class WalkSessionTracker: ObservableObject {
 
         distanceMetres += segmentDistance
         lastTrackedLocation = location
+        appendRoutePoint(location)
+    }
+
+    private func isNewRouteTimestamp(_ timestamp: Date) -> Bool {
+        guard let lastRouteTimestamp else { return true }
+        return timestamp > lastRouteTimestamp
+    }
+
+    private func appendRoutePoint(_ location: CLLocation) {
+        let point = WalkRoutePoint(
+            latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
+            timestamp: location.timestamp
+        )
+        if startsNewSegment || routeSegments.isEmpty {
+            routeSegments.append([point])
+            startsNewSegment = false
+        } else {
+            routeSegments[routeSegments.count - 1].append(point)
+        }
+        lastRouteTimestamp = location.timestamp
+    }
+
+    private func finishActiveInterval(at endTime: Date) {
+        guard let activeIntervalStartedAt else { return }
+        activeDuration += max(0, endTime.timeIntervalSince(activeIntervalStartedAt))
+        self.activeIntervalStartedAt = nil
     }
 }
 
 struct WalkMapView: View {
     let isActive: Bool
+    let onManageDogs: () -> Void
 
     @StateObject private var locationManager = WalkLocationManager()
-    @StateObject private var walkTracker = WalkSessionTracker()
+    @StateObject private var walkTracker: WalkSessionTracker
+    @StateObject private var dogSelection: WalkDogSelectionViewModel
+    @StateObject private var walkHistory: WalkHistoryStore
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: -37.8136, longitude: 144.9631),
@@ -194,40 +274,64 @@ struct WalkMapView: View {
         )
     )
     @State private var hasCentredOnUser = false
+    @State private var walkCardHeight: CGFloat = 300
     @Environment(\.openURL) private var openURL
+
+    init(ownerID: Int, isActive: Bool, onManageDogs: @escaping () -> Void) {
+        self.isActive = isActive
+        self.onManageDogs = onManageDogs
+        let history = WalkHistoryStore(persistence: WalkHistoryFileStore(
+            ownerID: ownerID, serverURL: AppConfiguration.apiBaseURL
+        ))
+        let tracker = WalkSessionTracker(onFinish: { history.append($0) })
+        _walkHistory = StateObject(wrappedValue: history)
+        _walkTracker = StateObject(wrappedValue: tracker)
+        _dogSelection = StateObject(wrappedValue: WalkDogSelectionViewModel(session: tracker))
+    }
 
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
-                VStack(alignment: .leading, spacing: AppSpacing.large) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Current location")
-                            .font(.title3.bold())
-                        Text("Move and zoom the map to explore your area.")
-                            .font(.subheadline)
-                            .foregroundStyle(AppColors.secondaryText)
+                VStack(alignment: .leading, spacing: AppSpacing.medium) {
+                    WalkDogSelectionCard(
+                        selection: dogSelection,
+                        session: walkTracker,
+                        location: locationManager.location,
+                        onManageDogs: onManageDogs
+                    )
+                    .background {
+                        GeometryReader { cardGeometry in
+                            Color.clear.preference(key: WalkCardHeightKey.self, value: cardGeometry.size.height)
+                        }
                     }
 
                     mapCard
-                        .frame(height: max(260, geometry.size.height * 0.5))
+                        .frame(height: Self.mapHeight(availableHeight: geometry.size.height, cardHeight: walkCardHeight))
 
-                    walkControlsCard
+                    WalkHistorySection(store: walkHistory)
                 }
                 .padding(AppSpacing.medium)
             }
             .background(AppColors.background)
+            .refreshable { await dogSelection.load() }
+            .onPreferenceChange(WalkCardHeightKey.self) { height in
+                if height > 0 { walkCardHeight = height }
+            }
         }
         .onAppear {
             updateLocationActivity(isActive)
+            if isActive { reloadDogs() }
         }
         .onDisappear {
             updateLocationActivity(false)
         }
         .onChange(of: isActive) { _, active in
             updateLocationActivity(active)
+            if active { reloadDogs() }
         }
-        .onChange(of: walkTracker.status) { _, _ in
+        .onChange(of: walkTracker.status) { _, status in
             updateLocationActivity(isActive)
+            if status == .finished { reloadDogs() }
         }
         .onChange(of: locationManager.location?.timestamp) { _, _ in
             if let location = locationManager.location {
@@ -240,8 +344,24 @@ struct WalkMapView: View {
         }
     }
 
+    static func mapHeight(availableHeight: CGFloat, cardHeight: CGFloat) -> CGFloat {
+        // Use the space below the controls, but keep the map usable on short screens.
+        // The outer ScrollView handles extra height, including larger accessibility text.
+        max(220, availableHeight - cardHeight - AppSpacing.medium * 3)
+    }
+
+    private func reloadDogs() {
+        Task { await dogSelection.load() }
+    }
+
     private var mapCard: some View {
         Map(position: $cameraPosition, interactionModes: .all) {
+            ForEach(Array(walkTracker.routeSegments.enumerated()), id: \.offset) { _, segment in
+                if segment.count > 1 {
+                    MapPolyline(coordinates: segment.map(\.coordinate))
+                        .stroke(AppColors.brand, lineWidth: 5)
+                }
+            }
             if let location = locationManager.location {
                 MapCircle(
                     center: location.coordinate,
@@ -286,78 +406,6 @@ struct WalkMapView: View {
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.1), radius: 6, y: 3)
-    }
-
-    private var walkControlsCard: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            HStack {
-                Text("This walk")
-                    .font(.headline)
-                Spacer()
-                Text(walkStatusTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(walkStatusColour)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(walkStatusColour.opacity(0.12))
-                    .clipShape(Capsule())
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Distance")
-                    .font(.subheadline)
-                    .foregroundStyle(AppColors.secondaryText)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(walkTracker.distanceKilometres, format: .number.precision(.fractionLength(2)))
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Text("km")
-                        .font(.headline)
-                        .foregroundStyle(AppColors.secondaryText)
-                }
-            }
-
-            Divider()
-
-            HStack(spacing: AppSpacing.small) {
-                WalkControlButton(
-                    title: "Start Walk",
-                    icon: "play.fill",
-                    colour: AppColors.brand,
-                    isDisabled: !canStartWalk
-                ) {
-                    walkTracker.start(from: locationManager.location)
-                }
-
-                WalkControlButton(
-                    title: walkTracker.status == .paused ? "Resume" : "Pause",
-                    icon: walkTracker.status == .paused ? "playpause.fill" : "pause.fill",
-                    colour: .orange,
-                    isDisabled: !walkTracker.canPauseOrResume
-                ) {
-                    togglePause()
-                }
-
-                WalkControlButton(
-                    title: "Finish Walk",
-                    icon: "stop.fill",
-                    colour: AppColors.error,
-                    isDisabled: !walkTracker.canFinish
-                ) {
-                    walkTracker.finish()
-                }
-            }
-
-            if walkTracker.canStart && !hasAccurateLocation {
-                Label("Waiting for an accurate location before starting.", systemImage: "location.magnifyingglass")
-                    .font(.footnote)
-                    .foregroundStyle(AppColors.secondaryText)
-            }
-        }
-        .padding(AppSpacing.medium)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
     }
 
     private var currentLocationMarker: some View {
@@ -429,51 +477,6 @@ struct WalkMapView: View {
         }
     }
 
-    private var hasAccurateLocation: Bool {
-        WalkSessionTracker.canUse(locationManager.location)
-    }
-
-    private var canStartWalk: Bool {
-        walkTracker.canStart && hasAccurateLocation
-    }
-
-    private var walkStatusTitle: String {
-        switch walkTracker.status {
-        case .idle:
-            return "Ready"
-        case .walking:
-            return "Walking"
-        case .paused:
-            return "Paused"
-        case .finished:
-            return "Finished"
-        }
-    }
-
-    private var walkStatusColour: Color {
-        switch walkTracker.status {
-        case .idle:
-            return AppColors.secondaryText
-        case .walking:
-            return AppColors.brand
-        case .paused:
-            return .orange
-        case .finished:
-            return .blue
-        }
-    }
-
-    private func togglePause() {
-        switch walkTracker.status {
-        case .walking:
-            walkTracker.pause()
-        case .paused:
-            walkTracker.resume(from: locationManager.location)
-        case .idle, .finished:
-            break
-        }
-    }
-
     private func centreOnCurrentLocation() {
         guard let location = locationManager.location else { return }
 
@@ -491,35 +494,11 @@ struct WalkMapView: View {
     }
 }
 
-private struct WalkControlButton: View {
-    let title: String
-    let icon: String
-    let colour: Color
-    let isDisabled: Bool
-    let action: () -> Void
+private struct WalkCardHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
 
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.headline)
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 64)
-            .foregroundStyle(isDisabled ? AppColors.secondaryText : colour)
-            .background(isDisabled ? Color.secondary.opacity(0.08) : colour.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.field, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: AppRadius.field, style: .continuous)
-                    .stroke(isDisabled ? Color.secondary.opacity(0.12) : colour.opacity(0.35))
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

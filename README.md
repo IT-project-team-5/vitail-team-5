@@ -45,8 +45,19 @@ swipe between Account, Walk and Redeem, with the same pages available in the
 bottom navigation and fixed `0 pts` at top right. Account contains owner and
 dog profiles. Walk shows the owner's current foreground location on a map and
 supports manual start, pause, resume and finish with a live distance counter.
+Before starting, owners select one or more of their saved dogs. The selection
+is fixed while walking or paused. Owners without a dog profile are directed to Account.
+Dog choices, distance and walk controls share a compact card above the map.
+Swipe the dog list horizontally for more dogs; the map uses the remaining screen
+height, with vertical scrolling available on smaller screens or with large text.
+Walk History appears below the map. Finishing a walk saves its dates, walking
+time (excluding pauses), distance, dog names and GPS route to protected local
+storage, separated by account and backend. Tap a history card for route details;
+paused sections are not joined. Finished walks survive app restarts but do not
+sync to the server or other devices. Earlier unrecorded walks cannot be recovered.
+Unfinished walks are still in memory only. Save failures show a retry message.
 Café owners have Account and Orders pages. Logout lives in Account for both
-roles. Background walk tracking, route storage, Redeem, Orders and real point
+roles. Background walk tracking, server-side walk history, Redeem, Orders and real point
 data are not implemented yet.
 
 ## Business Model
