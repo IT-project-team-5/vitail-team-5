@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "accounts",
+    "venues",
+    "redemptions",
 ]
 
 MIDDLEWARE = [
@@ -115,3 +117,9 @@ SIMPLE_JWT = {
         days=int(os.getenv("JWT_REFRESH_DAYS", "7"))
     ),
 }
+
+# Each venue retains enough feed events for normal polling gaps. Older cursors
+# recover with a full snapshot instead of requiring unbounded history.
+CAFE_ORDER_EVENT_RETENTION = int(
+    os.getenv("CAFE_ORDER_EVENT_RETENTION", "1000")
+)

@@ -161,9 +161,12 @@ vitail-team-5/
 │           └── CafeOrders/
 ├── backend/
 │   ├── config/
-│   └── accounts/
+│   ├── accounts/
+│   ├── venues/
+│   └── redemptions/
 ├── docs/
 │   ├── DECISIONS.md
+│   ├── openapi.yaml
 │   └── FEATURES.md
 ├── docker-compose.yml
 ├── Makefile
@@ -304,6 +307,7 @@ opening_hours
 photo
 is_active
 account_id             the CAFE account that signs in for this venue
+order_feed_cursor      internal per-venue polling sequence
 created_at
 ```
 
@@ -322,6 +326,9 @@ point_price
 is_available
 created_at
 ```
+
+An offer cannot move to another venue after it has appeared in a redemption
+order; the order-item snapshots and venue boundary must remain consistent.
 
 ### CheckIn
 
@@ -411,9 +418,11 @@ id
 owner_id
 venue_id
 reference_number       shown to owner and merchant
+owner_name_snapshot    customer name when the order was placed
 status                 PENDING | COLLECTED | EXPIRED | CANCELLED
 total_points
 created_at
+updated_at
 collected_at
 expires_at             end of the day it was created
 ```
@@ -429,8 +438,23 @@ point_price_snapshot
 quantity
 ```
 
-Names and prices are snapshotted so history stays correct after a venue edits
-its catalogue.
+Customer names, item names and prices are snapshotted so order history and the
+café feed stay correct after an account or venue edits its details.
+
+### CafeOrderEvent
+
+```text
+id
+venue_id
+cursor                 monotonically increasing within one venue
+order_id
+kind                   UPSERT | REMOVE
+created_at
+```
+
+The short-lived event log powers incremental café polling. Cursor assignment
+and the order change commit in the same transaction. Old event rows are bounded;
+a client behind the retained range receives a full reset snapshot.
 
 ### CharityDonation
 
@@ -716,7 +740,7 @@ screen open during trading hours.
 GET  /api/cafe/orders?since={cursor}       polled by the café screen
 ```
 
-The screen polls every few seconds and lists orders still `PENDING` for that
+The screen polls every five seconds and lists orders still `PENDING` for that
 café, showing the reference number, the owner's name, the items and the time
 ordered. When the owner taps Redeem the order becomes `COLLECTED` and drops off
 the list on the next poll.
@@ -728,7 +752,10 @@ Implementation requirements:
 - it accepts a `since` cursor and returns only what changed;
 - respond `304 Not Modified` when nothing changed, so idle polling is nearly
   free;
+- if retained history no longer covers the cursor, return a full snapshot with
+  `reset: true` so the app can repair its cache;
 - a five second interval is ample at pilot volume;
+- polling runs only while the Orders page is visible and the app is active;
 - the screen is a **display surface only**. There is no endpoint a café can call
   to mutate an order — collection is driven by the owner's app, never by the
   café.
@@ -1141,8 +1168,10 @@ App relaunch refreshes the session from Keychain
 Logout removes the local session
 ```
 
-Walk, Redeem and Orders are navigation placeholders in this slice. They do not
-claim that tracking, redemption, order polling or real point balances exist.
+Walk and owner-side Redeem remain navigation placeholders. The café Orders page
+is implemented as a separate slice using the authenticated polling feed
+documented in `docs/openapi.yaml`; real point balances and owner-side redemption
+are not implemented yet.
 
 Main acceptance flow:
 

@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: Vitail API
+  version: 0.2.0
+  description: Contract for implemented Vitail business endpoints.
+paths:
+  /api/cafe/orders:
+    get:
+      operationId: getCafeOrders
+      summary: Read pending orders for the authenticated café's venue
+      description: |
+        The first request omits `since` and returns every pending order with
+        `reset: true`. Later requests pass the last cursor and receive only
+        changed orders. Orders that are no longer pending are returned in
+        `removed_ids`. If a cursor is older than retained history, the server
+        recovers with a full snapshot and `reset: true`; clients must replace
+        their cached orders. A response with no changes is `304`.
+      tags:
+        - Café orders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: Non-negative venue-feed cursor from the previous response.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        "200":
+          description: Initial pending orders or an incremental feed update.
+          headers:
+            X-Cafe-Orders-Cursor:
+              $ref: "#/components/headers/CafeOrdersCursor"
+            Cache-Control:
+              description: Prevents storage of the customer order feed.
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CafeOrderFeed"
+        "304":
+          description: No order changes relevant to this café.
+          headers:
+            X-Cafe-Orders-Cursor:
+              $ref: "#/components/headers/CafeOrdersCursor"
+            Cache-Control:
+              description: Prevents storage of the customer order feed.
+              schema:
+                type: string
+                const: no-store
+        "400":
+          description: The cursor is malformed or ahead of this venue's feed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessError"
+        "401":
+          description: A valid JWT access token is required.
+        "403":
+          description: The authenticated account is not a CAFE account.
+        "404":
+          description: No venue is attached to the authenticated café account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusinessError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  headers:
+    CafeOrdersCursor:
+      description: Venue-specific high-water cursor to send as `since` on the next poll.
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+  schemas:
+    CafeOrderFeed:
+      type: object
+      required:
+        - cursor
+        - reset
+        - upserts
+        - removed_ids
+      properties:
+        cursor:
+          type: integer
+          format: int64
+          minimum: 0
+        reset:
+          type: boolean
+          description: Replace all cached orders with `upserts` when true.
+        upserts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CafeOrder"
+        removed_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+    CafeOrder:
+      type: object
+      required:
+        - id
+        - reference_number
+        - owner_name
+        - items
+        - ordered_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        reference_number:
+          type: string
+          pattern: '^RDM-[0-9A-F]{12}$'
+        owner_name:
+          type: string
+          description: Customer display name captured when the order was placed.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CafeOrderItem"
+        ordered_at:
+          type: string
+          format: date-time
+    CafeOrderItem:
+      type: object
+      required:
+        - name
+        - quantity
+      properties:
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+    BusinessError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string

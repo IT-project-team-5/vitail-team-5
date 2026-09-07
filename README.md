@@ -18,14 +18,14 @@ requirements and platform decisions captured through 2026-08-24.
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
 
-### Current build slice: authentication
+### Current build slices: authentication and café orders
 
-The first use case is deliberately small:
+The delivered flow is deliberately small:
 
 ```text
 User selects "I'm a dog owner" or "I'm a cafe owner"
 Dog owner self-registers or signs in → OWNER tab shell
-Café owner signs in with an admin-created account → CAFE tab shell
+Café owner signs in with an admin-created account → live CAFE order feed
 ```
 
 Both roles use the same login API and iOS app. The API returns JWT access and
@@ -35,11 +35,13 @@ in-app account deletion are later use cases, not part of this first slice.
 
 The role choice makes the login page clear, but it does not grant a role. The
 backend account remains authoritative, and a mismatched login asks the user to
-choose the correct account type. The current post-login UI is deliberately a
-shell: owners can swipe between Account, Walk and Redeem, with the same pages
-available in the bottom navigation and fixed `0 pts` at top right.
-Café owners have Account and Orders pages. Logout lives in Account for both
-roles; Walk, Redeem, Orders and real point data are not implemented yet.
+choose the correct account type. The current post-login owner UI is deliberately
+a shell: owners can swipe between Account, Walk and Redeem, with the same pages
+available in the bottom navigation and fixed `0 pts` at top right. Café owners
+have Account and Orders pages. Orders is backed by an authenticated,
+venue-scoped feed of pending redemptions, refreshes every five seconds while
+visible, and remains read-only. Logout lives in Account for both roles; Walk,
+owner-side Redeem and real point data are not implemented yet.
 
 ## Business Model
 
@@ -76,7 +78,7 @@ is not included. Sign in with Apple will be added only after the project has its
 own Apple Developer Program account.
 
 The café screen is **read-only**. It lists orders waiting to be collected and
-refreshes every few seconds, and it cannot mark an order collected. Only the
+refreshes every five seconds, and it cannot mark an order collected. Only the
 owner can do that by tapping Redeem in the iOS app. Order collection has no
 location gate during the pilot.
 
@@ -216,15 +218,16 @@ Photo check-ins are a desirable optional addition, not a pilot requirement.
 
 ## Project Structure
 
-The repository now contains the first vertical slice. Future feature folders
-are added only when their work begins.
+The repository contains the current vertical slices. Future feature folders are
+added only when their work begins.
 
 ```text
 vitail-team-5/
-├── ios/                 SwiftUI app and auth tests
-├── backend/             Django API, accounts app and migration
+├── ios/                 SwiftUI app and focused feature tests
+├── backend/             Django API, accounts, venues and redemptions apps
 ├── docs/
 │   ├── DECISIONS.md
+│   ├── openapi.yaml     API contract for implemented business endpoints
 │   └── FEATURES.md      (lightweight delivery status)
 ├── docker-compose.yml   local API and MySQL
 ├── Makefile             short local commands
@@ -260,10 +263,12 @@ Keep the Mac and iPhone on the same network, select the iPhone in Xcode, then
 Run. A free Personal Team is enough; its development install expires after
 seven days and can be installed again from Xcode.
 
-Create café logins at `http://127.0.0.1:8000/admin/` with role `CAFE`. Useful
-commands are `make test`, `make check`, and `make down`. To override the local
-Compose defaults, copy `backend/.env.example` to a root `.env` and edit it;
-neither `.env` nor `Local.xcconfig` is committed.
+Create café logins at `http://127.0.0.1:8000/admin/` with role `CAFE`, then
+create a Venue and attach that account. Until owner-side ordering is delivered,
+admins can create offers and pending redemption orders there to exercise the
+café feed. Useful commands are `make test`, `make check`, and `make down`. To
+override the local Compose defaults, copy `backend/.env.example` to a root
+`.env` and edit it; neither `.env` nor `Local.xcconfig` is committed.
 
 ## Team Ownership
 

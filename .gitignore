@@ -10,6 +10,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+backend/db.sqlite3
 
 # Xcode / Swift
 DerivedData/

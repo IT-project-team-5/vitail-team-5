@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @ObservedObject var session: SessionStore
+    let cafeOrdersService: any CafeOrdersServing
 
     var body: some View {
         Group {
@@ -37,7 +38,12 @@ struct RootView: View {
         case .owner:
             OwnerHomeView(user: user, session: session)
         case .cafe:
-            CafeOrdersView(user: user, session: session)
+            CafeOrdersView(
+                user: user,
+                session: session,
+                service: cafeOrdersService
+            )
+            .id(user.id)
         case .admin:
             AppErrorView(
                 message: APIError.unsupportedRole.localizedDescription,

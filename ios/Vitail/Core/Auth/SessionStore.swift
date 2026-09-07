@@ -12,10 +12,27 @@ final class SessionStore: ObservableObject {
 
     @Published private(set) var state: State = .restoring
 
-    private let authService: AuthService
+    private let authService: any AuthServing
+    private var credentialEventsTask: Task<Void, Never>?
 
-    init(authService: AuthService = AuthService()) {
+    init(authService: any AuthServing = AuthService()) {
         self.authService = authService
+        let credentialEvents = authService.credentialEvents
+        credentialEventsTask = Task { @MainActor [weak self] in
+            for await event in credentialEvents {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+
+                switch event {
+                case .sessionExpired:
+                    state = .signedOut
+                }
+            }
+        }
+    }
+
+    deinit {
+        credentialEventsTask?.cancel()
     }
 
     func restore() async {
@@ -29,6 +46,10 @@ final class SessionStore: ObservableObject {
             try validateMobileRole(user)
             state = .signedIn(user)
         } catch {
+            if error as? APIError == .missingSession {
+                state = .signedOut
+                return
+            }
             if error as? APIError == .unsupportedRole {
                 try? await authService.clearSession()
             }

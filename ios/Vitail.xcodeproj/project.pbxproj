@@ -21,6 +21,14 @@
 		00000000000000000000000C /* OwnerHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000C /* OwnerHomeView.swift */; };
 		00000000000000000000000D /* CafeOrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* CafeOrdersView.swift */; };
 		00000000000000000000000E /* AuthModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* AuthModelsTests.swift */; };
+		00000000000000000000000F /* AuthenticatedAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* AuthenticatedAPIClient.swift */; };
+		000000000000000000000010 /* CafeOrderModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* CafeOrderModels.swift */; };
+		000000000000000000000011 /* CafeOrdersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* CafeOrdersService.swift */; };
+		000000000000000000000012 /* CafeOrdersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* CafeOrdersViewModel.swift */; };
+		000000000000000000000013 /* CafeOrdersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* CafeOrdersTests.swift */; };
+		000000000000000000000014 /* CredentialAuthority.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* CredentialAuthority.swift */; };
+		000000000000000000000015 /* AppDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* AppDependencies.swift */; };
+		000000000000000000000016 /* CredentialAuthorityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* CredentialAuthorityTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +56,14 @@
 		10000000000000000000000C /* OwnerHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerHomeView.swift; sourceTree = "<group>"; };
 		10000000000000000000000D /* CafeOrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersView.swift; sourceTree = "<group>"; };
 		10000000000000000000000E /* AuthModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModelsTests.swift; sourceTree = "<group>"; };
+		10000000000000000000000F /* AuthenticatedAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedAPIClient.swift; sourceTree = "<group>"; };
+		100000000000000000000010 /* CafeOrderModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrderModels.swift; sourceTree = "<group>"; };
+		100000000000000000000011 /* CafeOrdersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersService.swift; sourceTree = "<group>"; };
+		100000000000000000000012 /* CafeOrdersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000013 /* CafeOrdersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersTests.swift; sourceTree = "<group>"; };
+		100000000000000000000014 /* CredentialAuthority.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthority.swift; sourceTree = "<group>"; };
+		100000000000000000000015 /* AppDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDependencies.swift; sourceTree = "<group>"; };
+		100000000000000000000016 /* CredentialAuthorityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthorityTests.swift; sourceTree = "<group>"; };
 		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -121,6 +137,7 @@
 		204000000000000000000001 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				100000000000000000000015 /* AppDependencies.swift */,
 				100000000000000000000001 /* VitailApp.swift */,
 				100000000000000000000002 /* RootView.swift */,
 			);
@@ -142,6 +159,7 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000003 /* APIClient.swift */,
+				10000000000000000000000F /* AuthenticatedAPIClient.swift */,
 			);
 			path = API;
 			sourceTree = "<group>";
@@ -149,6 +167,7 @@
 		207000000000000000000001 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				100000000000000000000014 /* CredentialAuthority.swift */,
 				100000000000000000000004 /* AuthModels.swift */,
 				100000000000000000000005 /* AuthService.swift */,
 				100000000000000000000006 /* SessionStore.swift */,
@@ -203,6 +222,9 @@
 		20D000000000000000000001 /* CafeOrders */ = {
 			isa = PBXGroup;
 			children = (
+				100000000000000000000010 /* CafeOrderModels.swift */,
+				100000000000000000000011 /* CafeOrdersService.swift */,
+				100000000000000000000012 /* CafeOrdersViewModel.swift */,
 				10000000000000000000000D /* CafeOrdersView.swift */,
 			);
 			path = CafeOrders;
@@ -212,6 +234,8 @@
 			isa = PBXGroup;
 			children = (
 				10000000000000000000000E /* AuthModelsTests.swift */,
+				100000000000000000000013 /* CafeOrdersTests.swift */,
+				100000000000000000000016 /* CredentialAuthorityTests.swift */,
 			);
 			path = VitailTests;
 			sourceTree = "<group>";
@@ -315,10 +339,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				000000000000000000000001 /* VitailApp.swift in Sources */,
+				000000000000000000000015 /* AppDependencies.swift in Sources */,
 				000000000000000000000002 /* RootView.swift in Sources */,
 				000000000000000000000003 /* APIClient.swift in Sources */,
+				00000000000000000000000F /* AuthenticatedAPIClient.swift in Sources */,
 				000000000000000000000004 /* AuthModels.swift in Sources */,
 				000000000000000000000005 /* AuthService.swift in Sources */,
+				000000000000000000000014 /* CredentialAuthority.swift in Sources */,
 				000000000000000000000006 /* SessionStore.swift in Sources */,
 				000000000000000000000007 /* AppTheme.swift in Sources */,
 				000000000000000000000008 /* AppComponents.swift in Sources */,
@@ -327,6 +354,9 @@
 				00000000000000000000000B /* AuthViewModel.swift in Sources */,
 				00000000000000000000000C /* OwnerHomeView.swift in Sources */,
 				00000000000000000000000D /* CafeOrdersView.swift in Sources */,
+				000000000000000000000010 /* CafeOrderModels.swift in Sources */,
+				000000000000000000000011 /* CafeOrdersService.swift in Sources */,
+				000000000000000000000012 /* CafeOrdersViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -335,6 +365,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				00000000000000000000000E /* AuthModelsTests.swift in Sources */,
+				000000000000000000000013 /* CafeOrdersTests.swift in Sources */,
+				000000000000000000000016 /* CredentialAuthorityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
