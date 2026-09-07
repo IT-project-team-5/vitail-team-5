@@ -271,6 +271,23 @@ commands are `make test`, `make check`, and `make down`. To override the local
 Compose defaults, copy `backend/.env.example` to a root `.env` and edit it;
 neither `.env` nor `Local.xcconfig` is committed.
 
+### Temporary Backend URL setting
+
+In a Debug build, sign out and use **Backend URL (Debug Only)** on the login
+page. Enter the backend's full `http://` or `https://` address, without `/api`,
+and tap **Save**. All new requests use it immediately, and it stays saved on
+that device. **Reset** returns to the build's configured address.
+
+Testers can enter the same HTTPS tunnel URL, such as an ngrok address, to use
+one backend without sharing a Wi-Fi network. The backend and tunnel must stay
+running; if the tunnel address changes, testers need to save the new address.
+Use test accounts and data when exposing the local development server.
+
+The override is excluded from Staging and Release. To remove it later, search
+for `TEMPORARY DEBUG BACKEND URL OVERRIDE` in `APIClient.swift` and `AuthView.swift`
+and remove the matching Debug tests. Keep personal signing values in the
+ignored `ios/Config/Local.xcconfig`, not in the shared Xcode project.
+
 ## Team Ownership
 
 Work is split by vertical use case. Each engineer owns the iOS UI, API,
