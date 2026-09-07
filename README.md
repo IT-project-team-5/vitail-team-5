@@ -18,7 +18,7 @@ requirements and platform decisions captured through 2026-08-24.
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
 
-### Current build slice: authentication
+### Current build slices: authentication, owner/dog profiles and foreground walks
 
 The first use case is deliberately small:
 
@@ -33,15 +33,21 @@ refresh tokens, which the app stores in Keychain. Sign in with Apple waits until
 the project has its own Apple Developer Program account. Password reset and
 in-app account deletion are later use cases, not part of this first slice.
 
+An authenticated owner can also edit their display name and manage up to 10
+persistent dog profiles using breed reference data supplied by the backend.
+Personalised-goal inputs are stored, but no duration is displayed until the
+open numeric welfare and heat-adjustment rules are resolved.
+
 The role choice makes the login page clear, but it does not grant a role. The
 backend account remains authoritative, and a mismatched login asks the user to
-choose the correct account type. The current post-login UI is deliberately a
-shell: owners can swipe between Account, Walk and Redeem, with the same pages
-available in the bottom navigation and fixed `0 pts` at top right.
+choose the correct account type. The current post-login navigation lets owners
+swipe between Account, Walk and Redeem, with the same pages available in the
+bottom navigation and fixed `0 pts` at top right. Account contains owner and
+dog profiles. Walk shows the owner's current foreground location on a map and
+supports manual start, pause, resume and finish with a live distance counter.
 Café owners have Account and Orders pages. Logout lives in Account for both
-roles. Walk shows the owner's current foreground location on a map and supports
-manual start, pause, resume and finish with a live distance counter. Route
-storage, Redeem, Orders and real point data are not implemented yet.
+roles. Background walk tracking, route storage, Redeem, Orders and real point
+data are not implemented yet.
 
 ## Business Model
 
@@ -224,7 +230,7 @@ are added only when their work begins.
 ```text
 vitail-team-5/
 ├── ios/                 SwiftUI app and auth tests
-├── backend/             Django API, accounts app and migration
+├── backend/             Django API, accounts/dogs apps and migrations
 ├── docs/
 │   ├── DECISIONS.md
 │   └── FEATURES.md      (lightweight delivery status)
@@ -266,6 +272,23 @@ Create café logins at `http://127.0.0.1:8000/admin/` with role `CAFE`. Useful
 commands are `make test`, `make check`, and `make down`. To override the local
 Compose defaults, copy `backend/.env.example` to a root `.env` and edit it;
 neither `.env` nor `Local.xcconfig` is committed.
+
+### Temporary Backend URL setting
+
+In a Debug build, sign out and use **Backend URL (Debug Only)** on the login
+page. Enter the backend's full `http://` or `https://` address, without `/api`,
+and tap **Save**. All new requests use it immediately, and it stays saved on
+that device. **Reset** returns to the build's configured address.
+
+Testers can enter the same HTTPS tunnel URL, such as an ngrok address, to use
+one backend without sharing a Wi-Fi network. The backend and tunnel must stay
+running; if the tunnel address changes, testers need to save the new address.
+Use test accounts and data when exposing the local development server.
+
+The override is excluded from Staging and Release. To remove it later, search
+for `TEMPORARY DEBUG BACKEND URL OVERRIDE` in `APIClient.swift` and `AuthView.swift`
+and remove the matching Debug tests. Keep personal signing values in the
+ignored `ios/Config/Local.xcconfig`, not in the shared Xcode project.
 
 ## Team Ownership
 

@@ -21,7 +21,15 @@
 		00000000000000000000000C /* OwnerHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000C /* OwnerHomeView.swift */; };
 		00000000000000000000000D /* CafeOrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* CafeOrdersView.swift */; };
 		00000000000000000000000E /* AuthModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* AuthModelsTests.swift */; };
-		00000000000000000000000F /* WalkMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* WalkMapView.swift */; };
+		00000000000000000000000F /* OwnerProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* OwnerProfileView.swift */; };
+		000000000000000000000010 /* OwnerProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* OwnerProfileViewModel.swift */; };
+		000000000000000000000011 /* DogModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* DogModels.swift */; };
+		000000000000000000000012 /* DogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* DogService.swift */; };
+		000000000000000000000013 /* DogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* DogViewModel.swift */; };
+		000000000000000000000014 /* DogListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* DogListView.swift */; };
+		000000000000000000000015 /* DogFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* DogFormView.swift */; };
+		000000000000000000000016 /* DogModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* DogModelsTests.swift */; };
+		000000000000000000000017 /* WalkMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* WalkMapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -49,7 +57,15 @@
 		10000000000000000000000C /* OwnerHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerHomeView.swift; sourceTree = "<group>"; };
 		10000000000000000000000D /* CafeOrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersView.swift; sourceTree = "<group>"; };
 		10000000000000000000000E /* AuthModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModelsTests.swift; sourceTree = "<group>"; };
-		10000000000000000000000F /* WalkMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMapView.swift; sourceTree = "<group>"; };
+		10000000000000000000000F /* OwnerProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerProfileView.swift; sourceTree = "<group>"; };
+		100000000000000000000010 /* OwnerProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerProfileViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000011 /* DogModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogModels.swift; sourceTree = "<group>"; };
+		100000000000000000000012 /* DogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogService.swift; sourceTree = "<group>"; };
+		100000000000000000000013 /* DogViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000014 /* DogListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogListView.swift; sourceTree = "<group>"; };
+		100000000000000000000015 /* DogFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogFormView.swift; sourceTree = "<group>"; };
+		100000000000000000000016 /* DogModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogModelsTests.swift; sourceTree = "<group>"; };
+		100000000000000000000017 /* WalkMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMapView.swift; sourceTree = "<group>"; };
 		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -181,6 +197,8 @@
 				20B000000000000000000001 /* Auth */,
 				20C000000000000000000001 /* OwnerHome */,
 				20D000000000000000000001 /* CafeOrders */,
+				20F000000000000000000001 /* OwnerProfile */,
+				210000000000000000000001 /* Dog */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -198,7 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				10000000000000000000000C /* OwnerHomeView.swift */,
-				10000000000000000000000F /* WalkMapView.swift */,
+				100000000000000000000017 /* WalkMapView.swift */,
 			);
 			path = OwnerHome;
 			sourceTree = "<group>";
@@ -215,8 +233,30 @@
 			isa = PBXGroup;
 			children = (
 				10000000000000000000000E /* AuthModelsTests.swift */,
+				100000000000000000000016 /* DogModelsTests.swift */,
 			);
 			path = VitailTests;
+			sourceTree = "<group>";
+		};
+		20F000000000000000000001 /* OwnerProfile */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000F /* OwnerProfileView.swift */,
+				100000000000000000000010 /* OwnerProfileViewModel.swift */,
+			);
+			path = OwnerProfile;
+			sourceTree = "<group>";
+		};
+		210000000000000000000001 /* Dog */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000011 /* DogModels.swift */,
+				100000000000000000000012 /* DogService.swift */,
+				100000000000000000000013 /* DogViewModel.swift */,
+				100000000000000000000014 /* DogListView.swift */,
+				100000000000000000000015 /* DogFormView.swift */,
+			);
+			path = Dog;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -330,7 +370,14 @@
 				00000000000000000000000B /* AuthViewModel.swift in Sources */,
 				00000000000000000000000C /* OwnerHomeView.swift in Sources */,
 				00000000000000000000000D /* CafeOrdersView.swift in Sources */,
-				00000000000000000000000F /* WalkMapView.swift in Sources */,
+				00000000000000000000000F /* OwnerProfileView.swift in Sources */,
+				000000000000000000000010 /* OwnerProfileViewModel.swift in Sources */,
+				000000000000000000000011 /* DogModels.swift in Sources */,
+				000000000000000000000012 /* DogService.swift in Sources */,
+				000000000000000000000013 /* DogViewModel.swift in Sources */,
+				000000000000000000000014 /* DogListView.swift in Sources */,
+				000000000000000000000015 /* DogFormView.swift in Sources */,
+				000000000000000000000017 /* WalkMapView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -339,6 +386,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				00000000000000000000000E /* AuthModelsTests.swift in Sources */,
+				000000000000000000000016 /* DogModelsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

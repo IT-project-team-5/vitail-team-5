@@ -6,7 +6,9 @@ acceptance criteria; detailed behaviour remains in `README.md`.
 | Feature | Status | MVP acceptance |
 |---|---|---|
 | Authentication | Ready for device test | User chooses owner or café context; owner can register; both can log in and log out from Account; backend role controls routing |
-| App navigation shell | Ready for device test | Owner sees Account/Walk/Redeem with fixed `0 pts`; café sees Account/Orders; domain pages remain placeholders |
-| Walk tracking | In progress | Owner can see their location, start, pause, resume and finish a foreground walk, and see its distance; route storage and point awards remain planned |
+| Debug backend selection | Ready for device test | Signed-out testers can save or reset a backend URL in Debug builds; it applies immediately to all requests and is absent from Staging/Release |
+| App navigation shell | Ready for device test | Owner sees Account/Walk/Redeem with fixed `0 pts`; Account contains profiles and Walk supports foreground tracking; café sees Account/Orders; Redeem and café Orders remain placeholders |
+| Owner and dog profiles | Ready for device test | Owner can edit their display name, view read-only email, and add/edit/delete up to 10 persistent dogs using backend breed reference data; dog data is owner-isolated. Goal API exposes stored inputs but returns no duration until numeric welfare and heat rules are agreed |
+| Walk tracking | In progress | Owner can see their location, start, pause, resume and finish a foreground walk, and see its distance; background tracking, route storage and point awards remain planned |
 | Venue check-in | Planned | A user-started dwell check awards points once per venue per day |
 | Redemption | Planned | Owner orders, points deduct once, café sees order, owner redeems |

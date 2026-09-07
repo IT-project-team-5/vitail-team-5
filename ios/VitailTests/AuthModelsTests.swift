@@ -1,4 +1,5 @@
 import CoreLocation
+import Foundation
 import XCTest
 @testable import Vitail
 
@@ -72,6 +73,133 @@ final class AuthModelsTests: XCTestCase {
             "This is a café account. Choose “I'm a cafe owner” to sign in."
         )
     }
+
+    func testOwnerProfileViewModelRequiresAChangedNonBlankName() async {
+        await MainActor.run {
+            let user = User(
+                id: 1,
+                email: "owner@example.com",
+                displayName: "Taylor",
+                role: .owner
+            )
+            let viewModel = OwnerProfileViewModel(user: user)
+
+            XCTAssertFalse(viewModel.canSave)
+            viewModel.displayName = "   "
+            XCTAssertFalse(viewModel.canSave)
+            viewModel.displayName = "Cache"
+            XCTAssertTrue(viewModel.canSave)
+        }
+    }
+
+    #if DEBUG
+    func testDebugBackendURLCanBeSavedAndReset() throws {
+        let suiteName = "DebugBackendURLTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let url = try AppConfiguration.saveDebugAPIBaseURL(
+            "  http://192.168.1.50:8000/  ",
+            defaults: defaults
+        )
+
+        XCTAssertEqual(url.absoluteString, "http://192.168.1.50:8000")
+        XCTAssertEqual(AppConfiguration.debugAPIBaseURL(defaults: defaults), url)
+
+        AppConfiguration.resetDebugAPIBaseURL(defaults: defaults)
+        XCTAssertNil(AppConfiguration.debugAPIBaseURL(defaults: defaults))
+    }
+
+    func testDebugBackendURLRejectsInvalidValues() throws {
+        let suiteName = "DebugBackendURLTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        for value in [
+            "", "example.com", "ftp://example.com", "http://", "https://:8000",
+            "https:///missing", "https://example.com/path",
+            "https://user:password@example.com", "https://example.com?query=1",
+            "https://example.com#fragment"
+        ] {
+            XCTAssertThrowsError(
+                try AppConfiguration.saveDebugAPIBaseURL(value, defaults: defaults),
+                "Expected \(value) to be rejected"
+            )
+        }
+        XCTAssertNil(AppConfiguration.debugAPIBaseURL(defaults: defaults))
+    }
+
+    func testExistingAPIClientUsesSavedAndResetDebugURLForAllMethods() async throws {
+        let defaults = UserDefaults.standard
+        let originalValue = defaults.object(forKey: AppConfiguration.debugAPIBaseURLKey)
+        defer {
+            if let originalValue {
+                defaults.set(originalValue, forKey: AppConfiguration.debugAPIBaseURLKey)
+            } else {
+                defaults.removeObject(forKey: AppConfiguration.debugAPIBaseURLKey)
+            }
+            DebugBackendURLProtocol.handler = nil
+        }
+
+        try AppConfiguration.saveDebugAPIBaseURL("https://before.example")
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DebugBackendURLProtocol.self]
+        let urlSession = URLSession(configuration: configuration)
+        defer { urlSession.invalidateAndCancel() }
+        let client = APIClient(session: urlSession)
+        let fixedClient = APIClient(baseURL: URL(string: "https://fixed.example"), session: urlSession)
+
+        try AppConfiguration.saveDebugAPIBaseURL("https://after.example")
+        for method in ["GET", "POST", "PATCH", "DELETE"] {
+            DebugBackendURLProtocol.handler = { request in
+                XCTAssertEqual(request.url?.host, "after.example")
+                XCTAssertEqual(request.url?.path, "/api/dogs")
+                XCTAssertEqual(request.httpMethod, method)
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+                return DebugBackendURLProtocol.response(
+                    for: request,
+                    statusCode: method == "DELETE" ? 204 : 200,
+                    json: method == "DELETE" ? "" : #"{"ok":true}"#
+                )
+            }
+
+            switch method {
+            case "GET":
+                let response: DebugProbeResponse = try await client.get("/api/dogs", bearerToken: "test-token")
+                XCTAssertTrue(response.ok)
+            case "POST":
+                let response: DebugProbeResponse = try await client.post(
+                    "/api/dogs", body: ["name": "Milo"], bearerToken: "test-token"
+                )
+                XCTAssertTrue(response.ok)
+            case "PATCH":
+                let response: DebugProbeResponse = try await client.patch(
+                    "/api/dogs", body: ["name": "Milo"], bearerToken: "test-token"
+                )
+                XCTAssertTrue(response.ok)
+            default:
+                try await client.delete("/api/dogs", bearerToken: "test-token")
+            }
+        }
+
+        DebugBackendURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.host, "fixed.example")
+            return DebugBackendURLProtocol.response(for: request, json: #"{"ok":true}"#)
+        }
+        let fixedResponse: DebugProbeResponse = try await fixedClient.get("/probe")
+        XCTAssertTrue(fixedResponse.ok)
+
+        AppConfiguration.resetDebugAPIBaseURL()
+        let bundledURL = try XCTUnwrap(AppConfiguration.apiBaseURL)
+        DebugBackendURLProtocol.handler = { request in
+            XCTAssertEqual(request.url, bundledURL.appendingPathComponent("probe"))
+            return DebugBackendURLProtocol.response(for: request, json: #"{"ok":true}"#)
+        }
+        let resetResponse: DebugProbeResponse = try await client.get("/probe")
+        XCTAssertTrue(resetResponse.ok)
+    }
+    #endif
 }
 
 @MainActor
@@ -147,3 +275,45 @@ final class WalkSessionTrackerTests: XCTestCase {
         )
     }
 }
+
+#if DEBUG
+private struct DebugProbeResponse: Decodable, Sendable {
+    let ok: Bool
+}
+
+private final class DebugBackendURLProtocol: URLProtocol {
+    static var handler: ((URLRequest) -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: APIError.invalidResponse)
+            return
+        }
+
+        let (response, data) = handler(request)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+
+    static func response(
+        for request: URLRequest,
+        statusCode: Int = 200,
+        json: String
+    ) -> (HTTPURLResponse, Data) {
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        return (response, Data(json.utf8))
+    }
+}
+#endif
