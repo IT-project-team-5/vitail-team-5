@@ -5,102 +5,6 @@ import SwiftUI
 import UIKit
 
 @MainActor
-final class WalkLocationManager: NSObject, ObservableObject {
-    enum State: Equatable {
-        case idle
-        case requestingPermission
-        case locating
-        case ready
-        case denied
-        case restricted
-        case servicesDisabled
-        case failed(String)
-    }
-
-    @Published private(set) var state: State = .idle
-    @Published private(set) var location: CLLocation?
-
-    private let manager = CLLocationManager()
-    private var wantsUpdates = false
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 5
-    }
-
-    func start() {
-        wantsUpdates = true
-
-        guard CLLocationManager.locationServicesEnabled() else {
-            state = .servicesDisabled
-            return
-        }
-
-        handleAuthorization(manager.authorizationStatus)
-    }
-
-    func stop() {
-        wantsUpdates = false
-        manager.stopUpdatingLocation()
-    }
-
-    private func handleAuthorization(_ status: CLAuthorizationStatus) {
-        switch status {
-        case .notDetermined:
-            state = .requestingPermission
-            manager.requestWhenInUseAuthorization()
-        case .authorizedAlways, .authorizedWhenInUse:
-            state = location == nil ? .locating : .ready
-            manager.startUpdatingLocation()
-        case .denied:
-            manager.stopUpdatingLocation()
-            state = .denied
-        case .restricted:
-            manager.stopUpdatingLocation()
-            state = .restricted
-        @unknown default:
-            manager.stopUpdatingLocation()
-            state = .failed("Vitail could not read the location permission status.")
-        }
-    }
-}
-
-extension WalkLocationManager: CLLocationManagerDelegate {
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        guard wantsUpdates else { return }
-        handleAuthorization(manager.authorizationStatus)
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let latestLocation = locations.last, latestLocation.horizontalAccuracy >= 0 else {
-            return
-        }
-
-        location = latestLocation
-        state = .ready
-    }
-
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        let nsError = error as NSError
-
-        if nsError.domain == kCLErrorDomain,
-           nsError.code == CLError.Code.locationUnknown.rawValue {
-            return
-        }
-
-        if nsError.domain == kCLErrorDomain,
-           nsError.code == CLError.Code.denied.rawValue {
-            handleAuthorization(manager.authorizationStatus)
-            return
-        }
-
-        state = .failed(error.localizedDescription)
-    }
-}
-
-@MainActor
 final class WalkSessionTracker: ObservableObject {
     enum Status: Equatable {
         case idle
@@ -110,21 +14,27 @@ final class WalkSessionTracker: ObservableObject {
     }
 
     static let maximumAcceptedAccuracy: CLLocationAccuracy = 30
+    static let maximumRouteGap: TimeInterval = 60
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var distanceMetres: CLLocationDistance = 0
     @Published private(set) var participatingDogs: [Dog] = []
     @Published private(set) var routeSegments: [[WalkRoutePoint]] = []
     @Published private(set) var completedWalk: WalkRecord?
+    @Published private(set) var trackingNotice: String?
+
+    // These callbacks run with the location delegate, not with a SwiftUI render.
+    var onChange: (() -> Void)?
+    var onFinish: (WalkRecord) -> Void
 
     private var lastTrackedLocation: CLLocation?
     private var lastRouteTimestamp: Date?
     private var startsNewSegment = true
     private var startedAt: Date?
+    private var sessionID: UUID?
     private var activeIntervalStartedAt: Date?
     private var activeDuration: TimeInterval = 0
     private let now: () -> Date
-    private let onFinish: (WalkRecord) -> Void
 
     init(now: @escaping () -> Date = Date.init, onFinish: @escaping (WalkRecord) -> Void = { _ in }) {
         self.now = now
@@ -159,6 +69,12 @@ final class WalkSessionTracker: ObservableObject {
             && location.horizontalAccuracy <= maximumAcceptedAccuracy
     }
 
+    static func isFresh(_ location: CLLocation?, at date: Date = Date()) -> Bool {
+        guard let location, canUse(location) else { return false }
+        let age = date.timeIntervalSince(location.timestamp)
+        return age.isFinite && age >= -5 && age <= 15
+    }
+
     func start(from location: CLLocation?, dogs: [Dog]) {
         guard canStart, let location, Self.canUse(location), !dogs.isEmpty else { return }
 
@@ -168,14 +84,22 @@ final class WalkSessionTracker: ObservableObject {
         distanceMetres = 0
         routeSegments = []
         completedWalk = nil
+        trackingNotice = nil
+        sessionID = UUID()
         lastRouteTimestamp = nil
         startsNewSegment = true
         startedAt = startTime
         activeIntervalStartedAt = startTime
         activeDuration = 0
-        lastTrackedLocation = location
-        appendRoutePoint(location)
+        // A fresh map fix can still predate the Start tap. Do not count that
+        // movement; the first fix in the active interval becomes the anchor.
+        lastTrackedLocation = nil
+        if location.timestamp >= startTime {
+            lastTrackedLocation = location
+            appendRoutePoint(location)
+        }
         status = .walking
+        onChange?()
     }
 
     func pause() {
@@ -184,53 +108,135 @@ final class WalkSessionTracker: ObservableObject {
         lastTrackedLocation = nil
         startsNewSegment = true
         status = .paused
+        onChange?()
     }
 
     func resume(from location: CLLocation?) {
         guard status == .paused else { return }
         lastTrackedLocation = nil
         startsNewSegment = true
-        activeIntervalStartedAt = now()
-        if let location, Self.canUse(location), isNewRouteTimestamp(location.timestamp) {
+        let resumeTime = now()
+        activeIntervalStartedAt = resumeTime
+        trackingNotice = nil
+        if let location, Self.canUse(location), location.timestamp >= resumeTime,
+           isNewRouteTimestamp(location.timestamp) {
             lastTrackedLocation = location
             appendRoutePoint(location)
         }
         status = .walking
+        onChange?()
     }
 
     func finish() {
-        guard canFinish, let startedAt else { return }
+        guard canFinish, let startedAt, let sessionID else { return }
         let endTime = max(now(), startedAt)
         finishActiveInterval(at: endTime)
         lastTrackedLocation = nil
         let record = WalkRecord(
-            id: UUID(), startedAt: startedAt, endedAt: endTime,
+            id: sessionID, startedAt: startedAt, endedAt: endTime,
             activeDuration: activeDuration, distanceMetres: distanceMetres,
             dogs: participatingDogs.map { WalkDogSnapshot(id: $0.id, name: $0.name) },
             routeSegments: routeSegments
         )
         completedWalk = record
         status = .finished
+        trackingNotice = nil
         onFinish(record)
+        onChange?()
     }
 
     func record(_ location: CLLocation) {
-        guard status == .walking, Self.canUse(location), isNewRouteTimestamp(location.timestamp) else { return }
+        if recordLocation(location) { onChange?() }
+    }
+
+    func recordBatch(_ locations: [CLLocation]) {
+        guard status == .walking, let activeIntervalStartedAt else { return }
+        let latestAllowedTime = now().addingTimeInterval(5)
+        var changed = false
+        for location in locations.sorted(by: { $0.timestamp < $1.timestamp }) {
+            // Delayed batches are valid; samples from before Start/Resume are not.
+            guard location.timestamp >= activeIntervalStartedAt,
+                  location.timestamp <= latestAllowedTime else { continue }
+            if recordLocation(location) { changed = true }
+        }
+        if changed { onChange?() }
+    }
+
+    func interruptRoute(message: String) {
+        guard status == .walking else { return }
+        lastTrackedLocation = nil
+        startsNewSegment = true
+        trackingNotice = message
+        onChange?()
+    }
+
+    func pauseForInterruption(message: String) {
+        guard status == .walking else { return }
+        finishActiveInterval(at: now())
+        lastTrackedLocation = nil
+        startsNewSegment = true
+        trackingNotice = message
+        status = .paused
+        onChange?()
+    }
+
+    func makeDraft() -> WalkDraft? {
+        guard isInProgress, let sessionID, let startedAt else { return nil }
+        let checkpoint = max(now(), startedAt)
+        let elapsed = activeIntervalStartedAt.map { max(0, checkpoint.timeIntervalSince($0)) } ?? 0
+        return WalkDraft(
+            id: sessionID, startedAt: startedAt, checkpointAt: checkpoint,
+            activeDuration: activeDuration + elapsed, distanceMetres: distanceMetres,
+            dogs: participatingDogs, routeSegments: routeSegments
+        )
+    }
+
+    @discardableResult
+    func restore(_ draft: WalkDraft) -> Bool {
+        guard canStart, draft.isValid, draft.finishedRecord == nil else { return false }
+        sessionID = draft.id
+        startedAt = draft.startedAt
+        activeDuration = draft.activeDuration
+        activeIntervalStartedAt = nil
+        participatingDogs = draft.dogs
+        distanceMetres = draft.distanceMetres
+        routeSegments = draft.routeSegments
+        completedWalk = nil
+        lastRouteTimestamp = draft.routeSegments.last?.last?.timestamp
+        lastTrackedLocation = nil
+        startsNewSegment = true
+        trackingNotice = "Previous walk recovered. Tap Resume when ready. Time while the app was closed is not counted."
+        status = .paused
+        onChange?()
+        return true
+    }
+
+    private func recordLocation(_ location: CLLocation) -> Bool {
+        guard status == .walking, Self.canUse(location), isNewRouteTimestamp(location.timestamp) else { return false }
+
+        if let previous = lastTrackedLocation,
+           location.timestamp.timeIntervalSince(previous.timestamp) > Self.maximumRouteGap {
+            lastTrackedLocation = nil
+            startsNewSegment = true
+        }
 
         guard let previousLocation = lastTrackedLocation else {
             lastTrackedLocation = location
             appendRoutePoint(location)
-            return
+            trackingNotice = nil
+            return true
         }
 
-        guard location.timestamp > previousLocation.timestamp else { return }
+        guard location.timestamp > previousLocation.timestamp else { return false }
 
         let segmentDistance = location.distance(from: previousLocation)
-        guard segmentDistance.isFinite, segmentDistance >= 0 else { return }
+        guard segmentDistance.isFinite, segmentDistance >= 0 else { return false }
 
         distanceMetres += segmentDistance
         lastTrackedLocation = location
         appendRoutePoint(location)
+        trackingNotice = nil
+        return true
     }
 
     private func isNewRouteTimestamp(_ timestamp: Date) -> Bool {
@@ -263,10 +269,11 @@ struct WalkMapView: View {
     let isActive: Bool
     let onManageDogs: () -> Void
 
-    @StateObject private var locationManager = WalkLocationManager()
-    @StateObject private var walkTracker: WalkSessionTracker
-    @StateObject private var dogSelection: WalkDogSelectionViewModel
-    @StateObject private var walkHistory: WalkHistoryStore
+    @ObservedObject private var coordinator: WalkSessionCoordinator
+    @ObservedObject private var locationManager: WalkLocationManager
+    @ObservedObject private var walkTracker: WalkSessionTracker
+    @ObservedObject private var dogSelection: WalkDogSelectionViewModel
+    @ObservedObject private var walkHistory: WalkHistoryStore
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: -37.8136, longitude: 144.9631),
@@ -277,16 +284,14 @@ struct WalkMapView: View {
     @State private var walkCardHeight: CGFloat = 300
     @Environment(\.openURL) private var openURL
 
-    init(ownerID: Int, isActive: Bool, onManageDogs: @escaping () -> Void) {
+    init(coordinator: WalkSessionCoordinator, isActive: Bool, onManageDogs: @escaping () -> Void) {
         self.isActive = isActive
         self.onManageDogs = onManageDogs
-        let history = WalkHistoryStore(persistence: WalkHistoryFileStore(
-            ownerID: ownerID, serverURL: AppConfiguration.apiBaseURL
-        ))
-        let tracker = WalkSessionTracker(onFinish: { history.append($0) })
-        _walkHistory = StateObject(wrappedValue: history)
-        _walkTracker = StateObject(wrappedValue: tracker)
-        _dogSelection = StateObject(wrappedValue: WalkDogSelectionViewModel(session: tracker))
+        self.coordinator = coordinator
+        locationManager = coordinator.locationManager
+        walkTracker = coordinator.tracker
+        dogSelection = coordinator.dogSelection
+        walkHistory = coordinator.history
     }
 
     var body: some View {
@@ -297,12 +302,21 @@ struct WalkMapView: View {
                         selection: dogSelection,
                         session: walkTracker,
                         location: locationManager.location,
+                        canStartNewWalk: coordinator.canStartNewWalk,
                         onManageDogs: onManageDogs
                     )
                     .background {
                         GeometryReader { cardGeometry in
                             Color.clear.preference(key: WalkCardHeightKey.self, value: cardGeometry.size.height)
                         }
+                    }
+
+                    if let message = coordinator.storageErrorMessage {
+                        LocationStatusCard(
+                            icon: "exclamationmark.triangle.fill",
+                            title: "Walk storage needs attention",
+                            message: message, actionTitle: "Retry", action: coordinator.retryStorage
+                        )
                     }
 
                     mapCard
@@ -319,26 +333,21 @@ struct WalkMapView: View {
             }
         }
         .onAppear {
-            updateLocationActivity(isActive)
+            coordinator.setWalkPageVisible(isActive)
             if isActive { reloadDogs() }
         }
         .onDisappear {
-            updateLocationActivity(false)
+            coordinator.setWalkPageVisible(false)
         }
         .onChange(of: isActive) { _, active in
-            updateLocationActivity(active)
+            coordinator.setWalkPageVisible(active)
             if active { reloadDogs() }
         }
         .onChange(of: walkTracker.status) { _, status in
-            updateLocationActivity(isActive)
             if status == .finished { reloadDogs() }
         }
         .onChange(of: locationManager.location?.timestamp) { _, _ in
-            if let location = locationManager.location {
-                walkTracker.record(location)
-            }
-
-            guard !hasCentredOnUser else { return }
+            guard !hasCentredOnUser, locationManager.location != nil else { return }
             centreOnCurrentLocation()
             hasCentredOnUser = true
         }
@@ -460,20 +469,19 @@ struct WalkMapView: View {
                 actionTitle: "Open Settings",
                 action: openSettings
             )
+        case .preciseLocationRequired:
+            LocationStatusCard(
+                icon: "location.slash.fill",
+                title: "Precise Location is off",
+                message: "Enable Precise Location in Settings to track your walk accurately.",
+                actionTitle: "Open Settings", action: openSettings
+            )
         case let .failed(message):
             LocationStatusCard(
                 icon: "exclamationmark.triangle.fill",
                 title: "Could not find your location",
                 message: message
             )
-        }
-    }
-
-    private func updateLocationActivity(_ active: Bool) {
-        if active || walkTracker.status == .walking {
-            locationManager.start()
-        } else {
-            locationManager.stop()
         }
     }
 

@@ -30,7 +30,11 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vitail connects to the development server on your local network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Vitail uses your location to show your current position on the walk map.</string>
+	<string>Vitail shows your position and records the route and distance of walks you start, including while the screen is locked or you use another app. Pause or finish a walk to stop background tracking.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

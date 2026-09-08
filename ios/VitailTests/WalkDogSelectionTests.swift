@@ -7,6 +7,8 @@ import XCTest
 
 @MainActor
 final class WalkDogSelectionTests: XCTestCase {
+    private var referenceDate = Date()
+
     func testLoadingDogsRequiresAnExplicitSelectionBeforeStarting() async {
         let dogs = [dog(id: 1, name: "Milo"), dog(id: 2, name: "Luna")]
         let model = WalkDogSelectionViewModel(
@@ -216,12 +218,13 @@ final class WalkDogSelectionTests: XCTestCase {
     }
 
     func testDogSelectionCardLayoutSnapshots() async throws {
+        referenceDate = Date()
         let dogs = [
             dog(id: 1, name: "Milo"),
             dog(id: 2, name: "Luna"),
             dog(id: 3, name: "Max")
         ]
-        let tracker = WalkSessionTracker()
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
         let model = WalkDogSelectionViewModel(
             session: tracker,
             service: WalkDogServiceStub(dogs: dogs)
@@ -318,6 +321,66 @@ final class WalkDogSelectionTests: XCTestCase {
         }
     }
 
+    func testRecoveredWalkCardShowsSavedDogsBeforeAnyProfileRequest() async throws {
+        referenceDate = Date()
+        let savedDogs = [dog(id: 1, name: "Milo"), dog(id: 2, name: "Luna")]
+        let startedAt = referenceDate.addingTimeInterval(-300)
+        let draft = WalkDraft(
+            id: UUID(),
+            startedAt: startedAt,
+            checkpointAt: startedAt.addingTimeInterval(60),
+            activeDuration: 60,
+            distanceMetres: 120,
+            dogs: savedDogs,
+            routeSegments: [[
+                WalkRoutePoint(latitude: -37.8136, longitude: 144.9631, timestamp: startedAt),
+                WalkRoutePoint(latitude: -37.8125, longitude: 144.9631, timestamp: startedAt.addingTimeInterval(60))
+            ]]
+        )
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
+        XCTAssertTrue(tracker.restore(draft))
+        let service = WalkDogServiceStub(dogs: [])
+        let model = WalkDogSelectionViewModel(session: tracker, service: service)
+
+        // A recovered walk is usable from its saved participants even before
+        // the server is reachable; a profile refresh must not replace them.
+        await model.load()
+        let requestsBeforeRendering = await service.getDogsCallCount
+        XCTAssertEqual(requestsBeforeRendering, 0)
+        XCTAssertFalse(model.hasLoaded)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertTrue(model.dogs.isEmpty)
+        XCTAssertEqual(tracker.participatingDogs, savedDogs)
+        XCTAssertEqual(tracker.status, .paused)
+        XCTAssertNotNil(tracker.trackingNotice)
+        XCTAssertTrue(tracker.canFinish)
+        XCTAssertFalse(tracker.canStart)
+        XCTAssertFalse(model.canEditSelection)
+
+        try await attachCardSnapshot(
+            name: "07 Recovered walk - saved dogs and waiting for GPS",
+            selection: model,
+            session: tracker,
+            location: nil,
+            width: 375
+        )
+        try await attachCardSnapshot(
+            name: "08 Recovered walk - narrow accessible large text",
+            selection: model,
+            session: tracker,
+            location: nil,
+            width: 320,
+            dynamicTypeSize: .accessibility1
+        )
+
+        let requestsAfterRendering = await service.getDogsCallCount
+        XCTAssertEqual(requestsAfterRendering, 0)
+        XCTAssertFalse(model.hasLoaded)
+        XCTAssertEqual(tracker.participatingDogs, savedDogs)
+        XCTAssertEqual(tracker.status, .paused)
+        XCTAssertEqual(tracker.makeDraft()?.id, draft.id)
+    }
+
     func testMapKeepsUsableMinimumHeightWhenPageNeedsScrolling() {
         let pageSpacing = AppSpacing.medium * 3
         let layouts: [(CGFloat, CGFloat)] = [(450, 300), (700, 500)]
@@ -336,7 +399,7 @@ final class WalkDogSelectionTests: XCTestCase {
     func testWalkingAndPausedSessionsLockSelectionAndSkipReloads() async {
         let dogs = [dog(id: 1, name: "Milo"), dog(id: 2, name: "Luna")]
         let service = WalkDogServiceStub(dogs: dogs)
-        let tracker = WalkSessionTracker()
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
         let model = WalkDogSelectionViewModel(session: tracker, service: service)
         await model.load()
         model.toggleDog(id: 1)
@@ -369,7 +432,7 @@ final class WalkDogSelectionTests: XCTestCase {
     }
 
     func testTrackerRequiresDogsAndAccurateLocationBeforeStarting() {
-        let tracker = WalkSessionTracker()
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
         let milo = dog(id: 1, name: "Milo")
 
         tracker.start(from: location(), dogs: [])
@@ -388,7 +451,7 @@ final class WalkDogSelectionTests: XCTestCase {
     }
 
     func testParticipantsAreDeduplicatedAndCopiedForEachWalk() {
-        let tracker = WalkSessionTracker()
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
         let milo = dog(id: 1, name: "Milo")
         let luna = dog(id: 2, name: "Luna")
         var selectedDogs = [milo, luna, milo]
@@ -472,7 +535,8 @@ final class WalkDogSelectionTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000)
         host.view.layoutIfNeeded()
 
-        if !selection.dogs.isEmpty {
+        let displayedDogs = session.isInProgress ? session.participatingDogs : selection.dogs
+        if !displayedDogs.isEmpty {
             let scrollView = try XCTUnwrap(scrollViews(in: host.view).first, "\(name) must render the dog list.")
             XCTAssertGreaterThan(scrollView.bounds.height, 40)
             XCTAssertGreaterThan(scrollView.contentSize.width, 0)
@@ -512,7 +576,7 @@ final class WalkDogSelectionTests: XCTestCase {
             altitude: 0,
             horizontalAccuracy: accuracy,
             verticalAccuracy: accuracy,
-            timestamp: Date()
+            timestamp: referenceDate
         )
     }
 }

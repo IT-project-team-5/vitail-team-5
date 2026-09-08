@@ -205,13 +205,15 @@ final class AuthModelsTests: XCTestCase {
 @MainActor
 final class WalkSessionTrackerTests: XCTestCase {
     func testDistanceOnlyCountsWhileWalking() {
-        let tracker = WalkSessionTracker()
+        var now = Date(timeIntervalSince1970: 0)
+        let tracker = WalkSessionTracker(now: { now })
         let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
         let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
         let third = location(latitude: -37.8116, longitude: 144.9631, seconds: 20)
         let fourth = location(latitude: -37.8106, longitude: 144.9631, seconds: 30)
 
         tracker.start(from: first, dogs: [dog()])
+        now = second.timestamp
         tracker.record(second)
         let distanceBeforePause = tracker.distanceMetres
 
@@ -219,7 +221,9 @@ final class WalkSessionTrackerTests: XCTestCase {
         tracker.record(third)
         XCTAssertEqual(tracker.distanceMetres, distanceBeforePause, accuracy: 0.01)
 
+        now = third.timestamp
         tracker.resume(from: third)
+        now = fourth.timestamp
         tracker.record(fourth)
 
         let expectedDistance = second.distance(from: first) + fourth.distance(from: third)
@@ -227,7 +231,7 @@ final class WalkSessionTrackerTests: XCTestCase {
     }
 
     func testPoorAccuracyLocationsAreIgnored() {
-        let tracker = WalkSessionTracker()
+        let tracker = WalkSessionTracker(now: { Date(timeIntervalSince1970: 0) })
         let accurate = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
         let inaccurate = location(
             latitude: -37.8036,
@@ -243,11 +247,13 @@ final class WalkSessionTrackerTests: XCTestCase {
     }
 
     func testStartingANewWalkResetsDistance() {
-        let tracker = WalkSessionTracker()
+        var now = Date(timeIntervalSince1970: 0)
+        let tracker = WalkSessionTracker(now: { now })
         let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
         let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
 
         tracker.start(from: first, dogs: [dog()])
+        now = second.timestamp
         tracker.record(second)
         XCTAssertGreaterThan(tracker.distanceMetres, 0)
 

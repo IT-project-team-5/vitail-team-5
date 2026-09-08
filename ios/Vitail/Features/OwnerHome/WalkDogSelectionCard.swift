@@ -5,6 +5,7 @@ struct WalkDogSelectionCard: View {
     @ObservedObject var selection: WalkDogSelectionViewModel
     @ObservedObject var session: WalkSessionTracker
     let location: CLLocation?
+    let canStartNewWalk: Bool
     let onManageDogs: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -12,11 +13,13 @@ struct WalkDogSelectionCard: View {
         selection: WalkDogSelectionViewModel,
         session: WalkSessionTracker,
         location: CLLocation? = nil,
+        canStartNewWalk: Bool = true,
         onManageDogs: @escaping () -> Void
     ) {
         self.selection = selection
         self.session = session
         self.location = location
+        self.canStartNewWalk = canStartNewWalk
         self.onManageDogs = onManageDogs
     }
 
@@ -38,7 +41,9 @@ struct WalkDogSelectionCard: View {
                 .font(.caption)
                 .foregroundStyle(AppColors.secondaryText)
 
-            if selection.isLoading || (!selection.hasLoaded && selection.errorMessage == nil) {
+            if session.isInProgress {
+                dogChips
+            } else if selection.isLoading || (!selection.hasLoaded && selection.errorMessage == nil) {
                 HStack(spacing: AppSpacing.small) {
                     ProgressView()
                     Text("Loading your dogs...")
@@ -70,15 +75,7 @@ struct WalkDogSelectionCard: View {
                     }
                 }
             } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: AppSpacing.small) {
-                        ForEach(displayedDogs) { dog in
-                            dogSelectionButton(dog)
-                        }
-                    }
-                    .padding(2)
-                }
-                .scrollIndicators(.hidden)
+                dogChips
             }
 
             Divider()
@@ -94,6 +91,18 @@ struct WalkDogSelectionCard: View {
     private var selectionTitle: some View {
         Label("Who's walking?", systemImage: "dog.fill")
             .font(.headline)
+    }
+
+    private var dogChips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: AppSpacing.small) {
+                ForEach(displayedDogs) { dog in
+                    dogSelectionButton(dog)
+                }
+            }
+            .padding(2)
+        }
+        .scrollIndicators(.hidden)
     }
 
     private var selectionCount: some View {
@@ -158,7 +167,7 @@ struct WalkDogSelectionCard: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(!selection.canEditSelection)
+        .disabled(session.isInProgress || !selection.canEditSelection)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(dog.name), \(dog.breed.name)")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -215,19 +224,24 @@ struct WalkDogSelectionCard: View {
             layout {
                 WalkControlButton(
                     title: "Start Walk", icon: "play.fill", colour: AppColors.brand,
-                    isDisabled: !selection.canStartWalk || !WalkSessionTracker.canUse(location)
+                    isDisabled: !canStartNewWalk || !session.canStart || !selection.canStartWalk
+                        || !WalkSessionTracker.isFresh(location)
                 ) {
-                    guard selection.canStartWalk else { return }
+                    guard canStartNewWalk, session.canStart, selection.canStartWalk,
+                          WalkSessionTracker.isFresh(location) else { return }
                     session.start(from: location, dogs: selection.selectedDogs)
                 }
                 WalkControlButton(
                     title: session.status == .paused ? "Resume" : "Pause",
                     icon: session.status == .paused ? "playpause.fill" : "pause.fill",
-                    colour: .orange, isDisabled: !session.canPauseOrResume
+                    colour: .orange,
+                    isDisabled: !session.canPauseOrResume
+                        || (session.status == .paused && !WalkSessionTracker.isFresh(location))
                 ) {
                     if session.status == .walking {
                         session.pause()
                     } else if session.status == .paused {
+                        guard WalkSessionTracker.isFresh(location) else { return }
                         session.resume(from: location)
                     }
                 }
@@ -244,10 +258,23 @@ struct WalkDogSelectionCard: View {
                 Text("Select at least one dog to start.")
                     .font(.caption)
                     .foregroundStyle(AppColors.secondaryText)
-            } else if session.canStart && !WalkSessionTracker.canUse(location) {
+            } else if (session.canStart || session.status == .paused)
+                        && !WalkSessionTracker.isFresh(location) {
                 Label("Waiting for an accurate location...", systemImage: "location.magnifyingglass")
                     .font(.caption)
                     .foregroundStyle(AppColors.secondaryText)
+            }
+
+            if let notice = session.trackingNotice {
+                Label(notice, systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if session.status == .walking {
+                Label("Keeps tracking when the screen is locked.", systemImage: "lock.iphone")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -36,6 +36,7 @@ struct RootView: View {
         switch user.role {
         case .owner:
             OwnerHomeView(user: user, session: session)
+                .id(user.id)
         case .cafe:
             CafeOrdersView(user: user, session: session)
         case .admin:

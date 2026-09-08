@@ -128,6 +128,10 @@ final class WalkHistoryStore: ObservableObject {
         }
     }
 
+    func containsSavedRecord(id: UUID) -> Bool {
+        savedRecords.contains { $0.id == id }
+    }
+
     func retry() {
         if !hasLoaded {
             do {
