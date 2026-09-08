@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The owner's Redeem tab: current point balance, pending orders waiting to
-/// be collected in-store, and the partner venues an owner can order from
+/// The owner's Redeem tab: current point balance, pending redemptions
+/// waiting to be collected in-store, and the rewards an owner can redeem
 /// (README.md, "Redeeming Points").
 struct RedemptionView: View {
     @ObservedObject var viewModel: RedemptionViewModel
@@ -18,14 +18,14 @@ struct RedemptionView: View {
                         .accessibilityIdentifier("redemptionError")
                 }
 
-                if !viewModel.pendingOrders.isEmpty {
-                    pendingOrdersSection
+                if !viewModel.pendingRedemptions.isEmpty {
+                    pendingRedemptionsSection
                 }
 
-                venuesSection
+                rewardsSection
 
-                if !viewModel.recentlyCollectedOrders.isEmpty {
-                    recentOrdersSection
+                if !viewModel.recentlyCollectedRedemptions.isEmpty {
+                    recentRedemptionsSection
                 }
             }
             .padding(AppSpacing.large)
@@ -35,7 +35,7 @@ struct RedemptionView: View {
             await viewModel.refresh()
         }
         .overlay {
-            if viewModel.isLoading && viewModel.venues.isEmpty {
+            if viewModel.isLoading && viewModel.rewards.isEmpty {
                 LoadingView(message: "Loading rewards…")
             }
         }
@@ -64,51 +64,52 @@ struct RedemptionView: View {
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
     }
 
-    private var pendingOrdersSection: some View {
+    private var pendingRedemptionsSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             Text("Ready to collect")
                 .font(.headline)
 
-            ForEach(viewModel.pendingOrders) { order in
-                PendingOrderRow(order: order) {
-                    Task { await viewModel.collect(orderID: order.id) }
+            ForEach(viewModel.pendingRedemptions) { redemption in
+                PendingRedemptionRow(redemption: redemption) {
+                    Task { await viewModel.collect(redemptionID: redemption.id) }
                 }
             }
         }
     }
 
-    private var venuesSection: some View {
+    private var rewardsSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
-            Text("Partner venues")
+            Text("Rewards")
                 .font(.headline)
 
-            if viewModel.venues.isEmpty && !viewModel.isLoading {
-                Text("No partner venues yet.")
+            if viewModel.rewards.isEmpty && !viewModel.isLoading {
+                Text("No rewards available yet.")
                     .foregroundStyle(AppColors.secondaryText)
             }
 
-            ForEach(viewModel.venues) { venue in
-                NavigationLink {
-                    VenueOfferView(venue: venue, viewModel: viewModel)
-                } label: {
-                    VenueRow(venue: venue)
+            ForEach(viewModel.rewards) { reward in
+                RewardRow(
+                    reward: reward,
+                    isRedeeming: viewModel.redeemingRewardID == reward.id,
+                    canAfford: (viewModel.balance ?? 0) >= reward.pointCost
+                ) {
+                    Task { await viewModel.redeem(rewardID: reward.id) }
                 }
-                .buttonStyle(.plain)
             }
         }
     }
 
-    private var recentOrdersSection: some View {
+    private var recentRedemptionsSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             Text("Recently redeemed")
                 .font(.headline)
 
-            ForEach(viewModel.recentlyCollectedOrders) { order in
+            ForEach(viewModel.recentlyCollectedRedemptions) { redemption in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(order.venueName)
+                        Text(redemption.rewardNameSnapshot)
                             .fontWeight(.medium)
-                        Text("Ref \(order.referenceNumber) · \(order.totalPoints) pts")
+                        Text("Ref \(redemption.referenceNumber) · \(redemption.pointCostSnapshot) pts")
                             .font(.caption)
                             .foregroundStyle(AppColors.secondaryText)
                     }
@@ -124,22 +125,34 @@ struct RedemptionView: View {
     }
 }
 
-private struct VenueRow: View {
-    let venue: Venue
+private struct RewardRow: View {
+    let reward: Reward
+    let isRedeeming: Bool
+    let canAfford: Bool
+    let onRedeem: () -> Void
 
     var body: some View {
-        HStack {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(venue.name)
+                Text(reward.name)
                     .fontWeight(.semibold)
-                Text(venue.venueType.capitalized)
+                Text("\(reward.cafeName) · \(reward.pointCost) pts")
                     .font(.caption)
                     .foregroundStyle(AppColors.secondaryText)
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(AppColors.secondaryText)
+
+            if !reward.description.isEmpty {
+                Text(reward.description)
+                    .font(.caption)
+                    .foregroundStyle(AppColors.secondaryText)
+            }
+
+            PrimaryButton(
+                title: canAfford ? "Redeem" : "Not enough points",
+                isLoading: isRedeeming,
+                isDisabled: !canAfford,
+                action: onRedeem
+            )
         }
         .padding(AppSpacing.medium)
         .background(AppColors.surface)
@@ -147,20 +160,20 @@ private struct VenueRow: View {
     }
 }
 
-private struct PendingOrderRow: View {
-    let order: RedemptionOrder
-    let onRedeem: () -> Void
+private struct PendingRedemptionRow: View {
+    let redemption: Redemption
+    let onCollect: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(order.venueName)
+                Text(redemption.rewardNameSnapshot)
                     .fontWeight(.semibold)
-                Text("Ref \(order.referenceNumber) · \(order.totalPoints) pts")
+                Text("Ref \(redemption.referenceNumber) · \(redemption.pointCostSnapshot) pts")
                     .font(.caption)
                     .foregroundStyle(AppColors.secondaryText)
             }
-            PrimaryButton(title: "Redeem", action: onRedeem)
+            PrimaryButton(title: "Collect", action: onCollect)
         }
         .padding(AppSpacing.medium)
         .background(AppColors.surface)

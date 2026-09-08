@@ -1,8 +1,8 @@
 import Foundation
 
-/// Talks to /api/venues, /api/wallet and /api/redemptions. Every call goes
-/// through AuthService.performAuthorized so a stale access token is
-/// refreshed once and retried instead of failing the request.
+/// Talks to /api/wallet and /api/redemptions. Every call goes through
+/// AuthService.performAuthorized so a stale access token is refreshed once
+/// and retried instead of failing the request.
 actor RedemptionService {
     private let apiClient: APIClient
     private let authService: AuthService
@@ -18,38 +18,32 @@ actor RedemptionService {
         }
     }
 
-    func fetchVenues() async throws -> [Venue] {
+    func fetchRewards() async throws -> [Reward] {
         try await authService.performAuthorized { token in
-            try await self.apiClient.get("/api/venues/", bearerToken: token)
+            try await self.apiClient.get("/api/redemptions/rewards", bearerToken: token)
         }
     }
 
-    func fetchVenueDetail(id: Int) async throws -> VenueDetail {
+    func fetchRedemptions() async throws -> [Redemption] {
         try await authService.performAuthorized { token in
-            try await self.apiClient.get("/api/venues/\(id)", bearerToken: token)
+            try await self.apiClient.get("/api/redemptions/", bearerToken: token)
         }
     }
 
-    func fetchOrders() async throws -> [RedemptionOrder] {
-        try await authService.performAuthorized { token in
-            try await self.apiClient.get("/api/redemptions/orders", bearerToken: token)
-        }
-    }
-
-    func createOrder(venueId: Int, items: [CreateOrderItemRequest]) async throws -> RedemptionOrder {
+    func createRedemption(rewardId: Int) async throws -> Redemption {
         try await authService.performAuthorized { token in
             try await self.apiClient.post(
-                "/api/redemptions/orders",
-                body: CreateOrderRequest(venueId: venueId, items: items),
+                "/api/redemptions/",
+                body: CreateRedemptionRequest(rewardId: rewardId),
                 bearerToken: token
             )
         }
     }
 
-    func collectOrder(id: Int) async throws -> RedemptionOrder {
+    func collectRedemption(id: Int) async throws -> Redemption {
         try await authService.performAuthorized { token in
             try await self.apiClient.post(
-                "/api/redemptions/orders/\(id)/collect",
+                "/api/redemptions/\(id)/collect",
                 body: EmptyRequestBody(),
                 bearerToken: token
             )

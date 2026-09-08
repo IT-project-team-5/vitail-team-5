@@ -17,3 +17,9 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 ios/Config/Local.xcconfig
+
+# Local cleanup scratch (safe to delete manually)
+_to_delete/
+
+# Local sqlite db used for local test runs
+backend/db.sqlite3

@@ -25,7 +25,6 @@
 		000000000000000000000010 /* RedemptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* RedemptionService.swift */; };
 		000000000000000000000011 /* RedemptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* RedemptionViewModel.swift */; };
 		000000000000000000000012 /* RedemptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* RedemptionView.swift */; };
-		000000000000000000000013 /* VenueOfferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* VenueOfferView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,7 +56,6 @@
 		100000000000000000000010 /* RedemptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionService.swift; sourceTree = "<group>"; };
 		100000000000000000000011 /* RedemptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionViewModel.swift; sourceTree = "<group>"; };
 		100000000000000000000012 /* RedemptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionView.swift; sourceTree = "<group>"; };
-		100000000000000000000013 /* VenueOfferView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueOfferView.swift; sourceTree = "<group>"; };
 		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -226,7 +224,6 @@
 				100000000000000000000010 /* RedemptionService.swift */,
 				100000000000000000000011 /* RedemptionViewModel.swift */,
 				100000000000000000000012 /* RedemptionView.swift */,
-				100000000000000000000013 /* VenueOfferView.swift */,
 			);
 			path = Redemption;
 			sourceTree = "<group>";
@@ -354,7 +351,6 @@
 				000000000000000000000010 /* RedemptionService.swift in Sources */,
 				000000000000000000000011 /* RedemptionViewModel.swift in Sources */,
 				000000000000000000000012 /* RedemptionView.swift in Sources */,
-				000000000000000000000013 /* VenueOfferView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

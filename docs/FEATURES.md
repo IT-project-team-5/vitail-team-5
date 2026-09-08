@@ -9,4 +9,4 @@ acceptance criteria; detailed behaviour remains in `README.md`.
 | App navigation shell | Ready for device test | Owner sees Account/Walk/Redeem; the points badge now reflects the real wallet balance; café sees Account/Orders; Walk remains a placeholder |
 | Walk tracking | Planned | A valid manually started walk records and awards points |
 | Venue check-in | Planned | A user-started dwell check awards points once per venue per day |
-| Redemption | In progress | Owner browses partner offers, orders and points deduct immediately (FIFO across point lots), owner marks the order collected (Redeem). Café order screen, automatic end-of-day expiry/refund, and charity donations are not built yet |
+| Redemption | In progress | Built on the shared `rewards` app (not a separate wallet/venues system): owner browses a café's rewards, redeems one and points deduct immediately (FIFO across point entries), owner marks it collected (Redeem). Café-scoped catalogues/offers, automatic expiry/refund of a pending redemption, and charity donations are not built yet |

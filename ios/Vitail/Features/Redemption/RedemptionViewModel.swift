@@ -4,21 +4,18 @@ import Foundation
 @MainActor
 final class RedemptionViewModel: ObservableObject {
     @Published private(set) var balance: Int?
-    @Published private(set) var venues: [Venue] = []
-    @Published private(set) var orders: [RedemptionOrder] = []
+    @Published private(set) var rewards: [Reward] = []
+    @Published private(set) var redemptions: [Redemption] = []
     @Published private(set) var isLoading = false
-    @Published private(set) var isLoadingVenueDetail = false
-    @Published private(set) var isPlacingOrder = false
-    @Published private(set) var selectedVenueDetail: VenueDetail?
-    @Published private(set) var lastPlacedOrder: RedemptionOrder?
+    @Published private(set) var redeemingRewardID: Int?
     @Published var errorMessage: String?
 
-    var pendingOrders: [RedemptionOrder] {
-        orders.filter { $0.status == .pending }
+    var pendingRedemptions: [Redemption] {
+        redemptions.filter { $0.status == .pending }
     }
 
-    var recentlyCollectedOrders: [RedemptionOrder] {
-        Array(orders.filter { $0.status == .collected }.prefix(5))
+    var recentlyCollectedRedemptions: [Redemption] {
+        Array(redemptions.filter { $0.status == .collected }.prefix(5))
     }
 
     private let service: RedemptionService
@@ -28,88 +25,56 @@ final class RedemptionViewModel: ObservableObject {
     }
 
     func loadInitialData() async {
-        guard venues.isEmpty else { return }
-
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            async let balanceTask = service.fetchBalance()
-            async let venuesTask = service.fetchVenues()
-            async let ordersTask = service.fetchOrders()
-            let (fetchedBalance, fetchedVenues, fetchedOrders) = try await (
-                balanceTask, venuesTask, ordersTask
-            )
-            balance = fetchedBalance.balance
-            venues = fetchedVenues
-            orders = fetchedOrders
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        guard rewards.isEmpty else { return }
+        await load(showsLoading: true)
     }
 
     func refresh() async {
+        await load(showsLoading: false)
+    }
+
+    private func load(showsLoading: Bool) async {
+        if showsLoading { isLoading = true }
         errorMessage = nil
+        defer { if showsLoading { isLoading = false } }
+
         do {
             async let balanceTask = service.fetchBalance()
-            async let ordersTask = service.fetchOrders()
-            let (fetchedBalance, fetchedOrders) = try await (balanceTask, ordersTask)
+            async let rewardsTask = service.fetchRewards()
+            async let redemptionsTask = service.fetchRedemptions()
+            let (fetchedBalance, fetchedRewards, fetchedRedemptions) = try await (
+                balanceTask, rewardsTask, redemptionsTask
+            )
             balance = fetchedBalance.balance
-            orders = fetchedOrders
+            rewards = fetchedRewards
+            redemptions = fetchedRedemptions
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func loadVenueDetail(id: Int) async {
-        isLoadingVenueDetail = true
+    func redeem(rewardID: Int) async {
         errorMessage = nil
-        defer { isLoadingVenueDetail = false }
+        redeemingRewardID = rewardID
+        defer { redeemingRewardID = nil }
 
         do {
-            selectedVenueDetail = try await service.fetchVenueDetail(id: id)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    func clearSelectedVenue() {
-        selectedVenueDetail = nil
-        lastPlacedOrder = nil
-    }
-
-    func placeOrder(venueId: Int, cart: [Int: Int]) async {
-        let items = cart.compactMap { offerId, quantity -> CreateOrderItemRequest? in
-            quantity > 0 ? CreateOrderItemRequest(offerId: offerId, quantity: quantity) : nil
-        }
-        guard !items.isEmpty else {
-            errorMessage = "Choose at least one item."
-            return
-        }
-
-        isPlacingOrder = true
-        errorMessage = nil
-        defer { isPlacingOrder = false }
-
-        do {
-            let order = try await service.createOrder(venueId: venueId, items: items)
-            lastPlacedOrder = order
-            orders.insert(order, at: 0)
+            let redemption = try await service.createRedemption(rewardId: rewardID)
+            redemptions.insert(redemption, at: 0)
             if let currentBalance = balance {
-                balance = currentBalance - order.totalPoints
+                balance = currentBalance - redemption.pointCostSnapshot
             }
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func collect(orderID: Int) async {
+    func collect(redemptionID: Int) async {
         errorMessage = nil
         do {
-            let updated = try await service.collectOrder(id: orderID)
-            if let index = orders.firstIndex(where: { $0.id == updated.id }) {
-                orders[index] = updated
+            let updated = try await service.collectRedemption(id: redemptionID)
+            if let index = redemptions.firstIndex(where: { $0.id == updated.id }) {
+                redemptions[index] = updated
             }
         } catch {
             errorMessage = error.localizedDescription

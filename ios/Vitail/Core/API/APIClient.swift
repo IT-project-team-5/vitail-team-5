@@ -102,8 +102,19 @@ struct APIClient: Sendable {
             throw APIError.invalidConfiguration
         }
 
-        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let endpoint = baseURL.appendingPathComponent(cleanPath)
+        // Django's APPEND_SLASH redirects a path missing its trailing
+        // slash to the slashed URL, and URLSession drops the Authorization
+        // header across that redirect — the request that looked like a
+        // silent 401. Build the URL by concatenation instead of
+        // appendingPathComponent/trimmingCharacters so the path's own
+        // trailing slash (or lack of one) survives untouched.
+        let trimmedBase = baseURL.absoluteString.hasSuffix("/")
+            ? String(baseURL.absoluteString.dropLast())
+            : baseURL.absoluteString
+        let cleanPath = path.hasPrefix("/") ? path : "/" + path
+        guard let endpoint = URL(string: trimmedBase + cleanPath) else {
+            throw APIError.invalidConfiguration
+        }
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
         request.httpBody = body
