@@ -26,6 +26,8 @@
 		000000000000000000000011 /* RedemptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* RedemptionViewModel.swift */; };
 		000000000000000000000012 /* RedemptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* RedemptionView.swift */; };
 		000000000000000000000013 /* VenueOfferView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* VenueOfferView.swift */; };
+		01E352213051176200059158 /* OrderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E352203051176200059158 /* OrderView.swift */; };
+		01E352233051191400059158 /* OrderDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01E352223051191400059158 /* OrderDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +41,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01E352203051176200059158 /* OrderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderView.swift; sourceTree = "<group>"; };
+		01E352223051191400059158 /* OrderDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderDetailView.swift; sourceTree = "<group>"; };
 		100000000000000000000001 /* VitailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitailApp.swift; sourceTree = "<group>"; };
 		100000000000000000000002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		100000000000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -219,9 +223,19 @@
 			path = CafeOrders;
 			sourceTree = "<group>";
 		};
+		20E000000000000000000001 /* VitailTests */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000E /* AuthModelsTests.swift */,
+			);
+			path = VitailTests;
+			sourceTree = "<group>";
+		};
 		20F000000000000000000001 /* Redemption */ = {
 			isa = PBXGroup;
 			children = (
+				01E352223051191400059158 /* OrderDetailView.swift */,
+				01E352203051176200059158 /* OrderView.swift */,
 				10000000000000000000000F /* RedemptionModels.swift */,
 				100000000000000000000010 /* RedemptionService.swift */,
 				100000000000000000000011 /* RedemptionViewModel.swift */,
@@ -229,14 +243,6 @@
 				100000000000000000000013 /* VenueOfferView.swift */,
 			);
 			path = Redemption;
-			sourceTree = "<group>";
-		};
-		20E000000000000000000001 /* VitailTests */ = {
-			isa = PBXGroup;
-			children = (
-				10000000000000000000000E /* AuthModelsTests.swift */,
-			);
-			path = VitailTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -341,6 +347,7 @@
 				000000000000000000000002 /* RootView.swift in Sources */,
 				000000000000000000000003 /* APIClient.swift in Sources */,
 				000000000000000000000004 /* AuthModels.swift in Sources */,
+				01E352213051176200059158 /* OrderView.swift in Sources */,
 				000000000000000000000005 /* AuthService.swift in Sources */,
 				000000000000000000000006 /* SessionStore.swift in Sources */,
 				000000000000000000000007 /* AppTheme.swift in Sources */,
@@ -350,6 +357,7 @@
 				00000000000000000000000B /* AuthViewModel.swift in Sources */,
 				00000000000000000000000C /* OwnerHomeView.swift in Sources */,
 				00000000000000000000000D /* CafeOrdersView.swift in Sources */,
+				01E352233051191400059158 /* OrderDetailView.swift in Sources */,
 				00000000000000000000000F /* RedemptionModels.swift in Sources */,
 				000000000000000000000010 /* RedemptionService.swift in Sources */,
 				000000000000000000000011 /* RedemptionViewModel.swift in Sources */,

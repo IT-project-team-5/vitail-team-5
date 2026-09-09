@@ -5,6 +5,7 @@ struct OwnerHomeView: View {
         case account = "Account"
         case walk = "Walk"
         case redeem = "Redeem"
+        case order = "Order"
 
         var id: Self { self }
 
@@ -16,6 +17,8 @@ struct OwnerHomeView: View {
                 return "figure.walk"
             case .redeem:
                 return "gift"
+            case .order:
+                return "bag"
             }
         }
 
@@ -27,12 +30,15 @@ struct OwnerHomeView: View {
                 return "figure.walk"
             case .redeem:
                 return "gift.fill"
+            case .order:
+                return "bag.fill"
             }
         }
     }
 
     let user: User
     @ObservedObject var session: SessionStore
+
     @State private var selection: Page = .walk
     @StateObject private var redemptionViewModel = RedemptionViewModel()
 
@@ -42,14 +48,19 @@ struct OwnerHomeView: View {
                 TabView(selection: $selection) {
                     accountPage
                         .tag(Page.account)
+
                     placeholderPage(
                         icon: "figure.walk",
                         title: "Walk",
                         message: "Walk tracking will appear here."
                     )
                     .tag(Page.walk)
+
                     RedemptionView(viewModel: redemptionViewModel)
                         .tag(Page.redeem)
+
+                    OrderView(viewModel: redemptionViewModel)
+                        .tag(Page.order)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -62,10 +73,11 @@ struct OwnerHomeView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 4) {
                         Image(systemName: "pawprint.fill")
+
                         Text("\(redemptionViewModel.balance ?? 0) pts")
                     }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(AppColors.brand)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(AppColors.brand)
                 }
             }
         }
@@ -79,16 +91,21 @@ struct OwnerHomeView: View {
             VStack(alignment: .leading, spacing: AppSpacing.small) {
                 Text(user.displayName)
                     .font(.title2.bold())
+
                 Text(user.email)
                     .foregroundStyle(AppColors.secondaryText)
             }
             .padding(AppSpacing.large)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(AppColors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+            .clipShape(
+                RoundedRectangle(cornerRadius: AppRadius.card)
+            )
 
             Button("Log Out", role: .destructive) {
-                Task { await session.logout() }
+                Task {
+                    await session.logout()
+                }
             }
 
             Spacer()
@@ -96,17 +113,26 @@ struct OwnerHomeView: View {
         .padding(AppSpacing.large)
     }
 
-    private func placeholderPage(icon: String, title: String, message: String) -> some View {
+    private func placeholderPage(
+        icon: String,
+        title: String,
+        message: String
+    ) -> some View {
         VStack(spacing: AppSpacing.medium) {
             Image(systemName: icon)
                 .font(.system(size: 44))
                 .foregroundStyle(AppColors.brand)
+
             Text(title)
                 .font(.title2.bold())
+
             Text(message)
                 .foregroundStyle(AppColors.secondaryText)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity
+        )
         .padding(AppSpacing.large)
     }
 
@@ -117,15 +143,29 @@ struct OwnerHomeView: View {
                     selection = page
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: selection == page ? page.selectedIcon : page.icon)
+                        Image(
+                            systemName:
+                                selection == page
+                                ? page.selectedIcon
+                                : page.icon
+                        )
+
                         Text(page.rawValue)
                             .font(.caption)
                     }
                     .frame(maxWidth: .infinity)
-                    .foregroundStyle(selection == page ? AppColors.brand : AppColors.secondaryText)
+                    .foregroundStyle(
+                        selection == page
+                        ? AppColors.brand
+                        : AppColors.secondaryText
+                    )
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == page ? .isSelected : [])
+                .accessibilityAddTraits(
+                    selection == page
+                    ? .isSelected
+                    : []
+                )
             }
         }
         .padding(.top, AppSpacing.small)
