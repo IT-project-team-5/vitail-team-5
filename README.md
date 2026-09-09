@@ -14,11 +14,13 @@ to **local businesses**, which general fitness apps do not do.
 
 Pilot scope, Melbourne. This document and `TECH_STACK.md` reflect the client
 requirements and platform decisions captured through 2026-08-24.
+The current implementation is described below and in `docs/FEATURES.md`; later
+business-rule sections describe the target product, not a list of shipped features.
 
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
 
-### Current build slices: authentication and owner/dog profiles
+### Current build slices: authentication, owner/dog profiles and walk tracking
 
 The first use case is deliberately small:
 
@@ -43,9 +45,44 @@ backend account remains authoritative, and a mismatched login asks the user to
 choose the correct account type. The current post-login navigation lets owners
 swipe between Account, Walk and Redeem, with the same pages available in the
 bottom navigation and fixed `0 pts` at top right. Account contains owner and
-dog profiles; Walk and Redeem remain shells.
+dog profiles. Walk shows the owner's current location on a map and
+supports manual start, pause, resume and finish with a live distance counter.
+Before starting, owners select one or more of their saved dogs. The selection
+is fixed while walking or paused. Owners without a dog profile are directed to Account.
+Dog choices, distance and walk controls share a compact card above the map.
+Swipe the dog list horizontally for more dogs; the map uses the remaining screen
+height, with vertical scrolling available on smaller screens or with large text.
+Walk History appears below the map. Finishing a walk saves its dates, walking
+time (excluding pauses), distance, dog names and GPS route to protected local
+storage, separated by account and backend. Tap a history card for route details;
+paused sections and GPS gaps longer than 60 seconds are not joined or counted
+as straight-line distance. Finished walks survive app restarts but do not sync
+to the server or other devices. Earlier unrecorded walks cannot be recovered.
+
+Background walking is **Ready for device test**, not yet verified on a real
+iPhone. Start a walk in the foreground with While Using the App permission and
+Precise Location enabled. The app then requests continued location updates when
+the screen locks, another app opens, or the owner changes tabs. iOS automatic
+location pausing is disabled during a walk. Pause, Finish and sign-out disable
+background tracking; the visible Walk map may still request foreground location.
+Location permission loss or disabling Precise Location pauses the walk.
+
+Active walks save account/backend-scoped checkpoints in protected local storage
+that can be written while the phone is locked, after its first unlock following
+a restart. Recovery restores the last saved checkpoint as **Paused**; it does
+not count time while the app was closed or invent a route through that gap.
+Force-quitting does not keep tracking. Unsaved samples after the last successful
+checkpoint may be lost. Save/read failures show a retry message and do not
+silently replace unreadable data. Finished-record retries use the same walk ID
+to avoid duplicate history entries.
+
+Sign-in and loading dog profiles still need the backend. An already-started walk
+can track and save locally away from the server, but reopening the app may need
+the backend to restore the login session. See [the iPhone walk test checklist](docs/WALK_TESTING.md)
+for lock-screen, permission, recovery and battery checks.
 Café owners have Account and Orders pages. Logout lives in Account for both
-roles; Walk, Redeem, Orders and real point data are not implemented yet.
+roles. Server-side walk history, inactivity auto-end, speed-based validation,
+Redeem, Orders and real point data are not implemented yet.
 
 ## Business Model
 

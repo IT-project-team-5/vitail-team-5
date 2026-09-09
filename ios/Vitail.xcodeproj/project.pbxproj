@@ -29,6 +29,20 @@
 		000000000000000000000014 /* DogListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* DogListView.swift */; };
 		000000000000000000000015 /* DogFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* DogFormView.swift */; };
 		000000000000000000000016 /* DogModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* DogModelsTests.swift */; };
+		000000000000000000000017 /* WalkMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* WalkMapView.swift */; };
+		000000000000000000000018 /* WalkDogSelectionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* WalkDogSelectionViewModel.swift */; };
+		000000000000000000000019 /* WalkDogSelectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000019 /* WalkDogSelectionCard.swift */; };
+		00000000000000000000001A /* WalkDogSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001A /* WalkDogSelectionTests.swift */; };
+		00000000000000000000001B /* WalkHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001B /* WalkHistoryStore.swift */; };
+		00000000000000000000001C /* WalkHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001C /* WalkHistoryView.swift */; };
+		00000000000000000000001D /* WalkHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001D /* WalkHistoryTests.swift */; };
+		00000000000000000000001E /* WalkLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001E /* WalkLocationManager.swift */; };
+		00000000000000000000001F /* WalkDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001F /* WalkDraftStore.swift */; };
+		000000000000000000000020 /* WalkSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000020 /* WalkSessionCoordinator.swift */; };
+		000000000000000000000021 /* WalkLocationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* WalkLocationManagerTests.swift */; };
+		000000000000000000000022 /* WalkDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* WalkDraftStoreTests.swift */; };
+		000000000000000000000023 /* WalkBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* WalkBackgroundTests.swift */; };
+		000000000000000000000024 /* WalkSessionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* WalkSessionCoordinatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +78,20 @@
 		100000000000000000000014 /* DogListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogListView.swift; sourceTree = "<group>"; };
 		100000000000000000000015 /* DogFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogFormView.swift; sourceTree = "<group>"; };
 		100000000000000000000016 /* DogModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogModelsTests.swift; sourceTree = "<group>"; };
+		100000000000000000000017 /* WalkMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMapView.swift; sourceTree = "<group>"; };
+		100000000000000000000018 /* WalkDogSelectionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000019 /* WalkDogSelectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionCard.swift; sourceTree = "<group>"; };
+		10000000000000000000001A /* WalkDogSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionTests.swift; sourceTree = "<group>"; };
+		10000000000000000000001B /* WalkHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryStore.swift; sourceTree = "<group>"; };
+		10000000000000000000001C /* WalkHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryView.swift; sourceTree = "<group>"; };
+		10000000000000000000001D /* WalkHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryTests.swift; sourceTree = "<group>"; };
+		10000000000000000000001E /* WalkLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocationManager.swift; sourceTree = "<group>"; };
+		10000000000000000000001F /* WalkDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDraftStore.swift; sourceTree = "<group>"; };
+		100000000000000000000020 /* WalkSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinator.swift; sourceTree = "<group>"; };
+		100000000000000000000021 /* WalkLocationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocationManagerTests.swift; sourceTree = "<group>"; };
+		100000000000000000000022 /* WalkDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDraftStoreTests.swift; sourceTree = "<group>"; };
+		100000000000000000000023 /* WalkBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkBackgroundTests.swift; sourceTree = "<group>"; };
+		100000000000000000000024 /* WalkSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinatorTests.swift; sourceTree = "<group>"; };
 		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -214,6 +242,14 @@
 			isa = PBXGroup;
 			children = (
 				10000000000000000000000C /* OwnerHomeView.swift */,
+				100000000000000000000017 /* WalkMapView.swift */,
+				100000000000000000000018 /* WalkDogSelectionViewModel.swift */,
+				100000000000000000000019 /* WalkDogSelectionCard.swift */,
+				10000000000000000000001B /* WalkHistoryStore.swift */,
+				10000000000000000000001C /* WalkHistoryView.swift */,
+				10000000000000000000001E /* WalkLocationManager.swift */,
+				10000000000000000000001F /* WalkDraftStore.swift */,
+				100000000000000000000020 /* WalkSessionCoordinator.swift */,
 			);
 			path = OwnerHome;
 			sourceTree = "<group>";
@@ -231,6 +267,12 @@
 			children = (
 				10000000000000000000000E /* AuthModelsTests.swift */,
 				100000000000000000000016 /* DogModelsTests.swift */,
+				10000000000000000000001A /* WalkDogSelectionTests.swift */,
+				10000000000000000000001D /* WalkHistoryTests.swift */,
+				100000000000000000000021 /* WalkLocationManagerTests.swift */,
+				100000000000000000000022 /* WalkDraftStoreTests.swift */,
+				100000000000000000000023 /* WalkBackgroundTests.swift */,
+				100000000000000000000024 /* WalkSessionCoordinatorTests.swift */,
 			);
 			path = VitailTests;
 			sourceTree = "<group>";
@@ -306,6 +348,11 @@
 				TargetAttributes = {
 					400000000000000000000001 = {
 						CreatedOnToolsVersion = 26.3;
+						SystemCapabilities = {
+							com.apple.BackgroundModes = {
+								enabled = 1;
+							};
+						};
 					};
 					401000000000000000000001 = {
 						CreatedOnToolsVersion = 26.3;
@@ -374,6 +421,14 @@
 				000000000000000000000013 /* DogViewModel.swift in Sources */,
 				000000000000000000000014 /* DogListView.swift in Sources */,
 				000000000000000000000015 /* DogFormView.swift in Sources */,
+				000000000000000000000017 /* WalkMapView.swift in Sources */,
+				000000000000000000000018 /* WalkDogSelectionViewModel.swift in Sources */,
+				000000000000000000000019 /* WalkDogSelectionCard.swift in Sources */,
+				00000000000000000000001B /* WalkHistoryStore.swift in Sources */,
+				00000000000000000000001C /* WalkHistoryView.swift in Sources */,
+				00000000000000000000001E /* WalkLocationManager.swift in Sources */,
+				00000000000000000000001F /* WalkDraftStore.swift in Sources */,
+				000000000000000000000020 /* WalkSessionCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,6 +438,12 @@
 			files = (
 				00000000000000000000000E /* AuthModelsTests.swift in Sources */,
 				000000000000000000000016 /* DogModelsTests.swift in Sources */,
+				00000000000000000000001A /* WalkDogSelectionTests.swift in Sources */,
+				00000000000000000000001D /* WalkHistoryTests.swift in Sources */,
+				000000000000000000000021 /* WalkLocationManagerTests.swift in Sources */,
+				000000000000000000000022 /* WalkDraftStoreTests.swift in Sources */,
+				000000000000000000000023 /* WalkBackgroundTests.swift in Sources */,
+				000000000000000000000024 /* WalkSessionCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

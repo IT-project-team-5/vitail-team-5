@@ -33,7 +33,14 @@ struct OwnerHomeView: View {
 
     let user: User
     @ObservedObject var session: SessionStore
+    @StateObject private var walkCoordinator: WalkSessionCoordinator
     @State private var selection: Page = .walk
+
+    init(user: User, session: SessionStore) {
+        self.user = user
+        self.session = session
+        _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(ownerID: user.id, session: session))
+    }
 
     var body: some View {
         NavigationStack {
@@ -41,12 +48,10 @@ struct OwnerHomeView: View {
                 TabView(selection: $selection) {
                     OwnerProfileView(user: user, session: session)
                         .tag(Page.account)
-                    placeholderPage(
-                        icon: "figure.walk",
-                        title: "Walk",
-                        message: "Walk tracking will appear here."
-                    )
-                    .tag(Page.walk)
+                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk) {
+                        selection = .account
+                    }
+                        .tag(Page.walk)
                     placeholderPage(
                         icon: "gift.fill",
                         title: "Redeem",
