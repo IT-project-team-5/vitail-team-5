@@ -26,7 +26,10 @@ actor RedemptionService {
 
     func fetchVenueDetail(id: Int) async throws -> VenueDetail {
         try await authService.performAuthorized { token in
-            try await self.apiClient.get("/api/venues/\(id)", bearerToken: token)
+            try await self.apiClient.get(
+                "/api/venues/\(id)",
+                bearerToken: token
+            )
         }
     }
 

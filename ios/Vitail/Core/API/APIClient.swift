@@ -102,8 +102,15 @@ struct APIClient: Sendable {
             throw APIError.invalidConfiguration
         }
 
-        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let endpoint = baseURL.appendingPathComponent(cleanPath)
+       let baseString = baseURL.absoluteString.hasSuffix("/")
+            ? String(baseURL.absoluteString.dropLast())
+            : baseURL.absoluteString
+
+        let requestPath = path.hasPrefix("/") ? path : "/\(path)"
+
+        guard let endpoint = URL(string: baseString + requestPath) else {
+            throw APIError.invalidConfiguration
+        }
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
         request.httpBody = body
@@ -117,7 +124,16 @@ struct APIClient: Sendable {
         }
 
         do {
+             print("API REQUEST:", request.httpMethod ?? "", request.url?.absoluteString ?? "")
+            print("HAS AUTH HEADER:", request.value(forHTTPHeaderField: "Authorization") != nil)
             let (data, response) = try await session.data(for: request)
+            if let body = String(data: data, encoding: .utf8) {
+                print("API BODY:", body)
+            }
+            if let httpResponse = response as? HTTPURLResponse {
+                print("API RESPONSE:", httpResponse.statusCode)
+                print("FINAL URL:", httpResponse.url?.absoluteString ?? "")
+            }
             guard let response = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse
             }
