@@ -1,8 +1,10 @@
 import Foundation
 
-enum APIError: LocalizedError, Equatable {
+enum APIError: LocalizedError, Equatable, Sendable {
     case invalidConfiguration
     case invalidResponse
+    case invalidCursor
+    case missingSession
     case http(status: Int, message: String?)
     case decoding
     case network(String)
@@ -15,6 +17,10 @@ enum APIError: LocalizedError, Equatable {
             return "The app's server address is not configured."
         case .invalidResponse:
             return "The server returned an invalid response."
+        case .invalidCursor:
+            return "The saved order cursor is no longer valid."
+        case .missingSession:
+            return "Your session has expired. Please sign in again."
         case let .http(status, message):
             if let message, !message.isEmpty {
                 return message
@@ -39,6 +45,11 @@ enum APIError: LocalizedError, Equatable {
             }
         }
     }
+}
+
+enum ConditionalAPIResponse<Value: Sendable>: Sendable {
+    case value(Value)
+    case notModified(headers: [String: String])
 }
 
 enum AppConfiguration {
@@ -128,6 +139,7 @@ enum DebugBackendURLError: LocalizedError {
 
 struct APIClient: Sendable {
     private let baseURLProvider: @Sendable () -> URL?
+    var baseURL: URL? { baseURLProvider() }
     let session: URLSession
 
     init(session: URLSession = .shared) {
@@ -142,10 +154,39 @@ struct APIClient: Sendable {
 
     func get<Response: Decodable & Sendable>(
         _ path: String,
+        queryItems: [URLQueryItem] = [],
         bearerToken: String? = nil,
         as responseType: Response.Type = Response.self
     ) async throws -> Response {
-        try await send(path: path, method: "GET", body: nil, bearerToken: bearerToken)
+        let payload = try await request(
+            path: path,
+            queryItems: queryItems,
+            method: "GET",
+            body: nil,
+            bearerToken: bearerToken
+        )
+        return try decode(Response.self, from: payload.data)
+    }
+
+    func getConditional<Response: Decodable & Sendable>(
+        _ path: String,
+        queryItems: [URLQueryItem] = [],
+        bearerToken: String? = nil,
+        as responseType: Response.Type = Response.self
+    ) async throws -> ConditionalAPIResponse<Response> {
+        let payload = try await request(
+            path: path,
+            queryItems: queryItems,
+            method: "GET",
+            body: nil,
+            bearerToken: bearerToken,
+            allowsNotModified: true
+        )
+
+        guard payload.statusCode != 304 else {
+            return .notModified(headers: payload.headers)
+        }
+        return .value(try decode(Response.self, from: payload.data))
     }
 
     func post<Body: Encodable & Sendable, Response: Decodable & Sendable>(
@@ -161,12 +202,14 @@ struct APIClient: Sendable {
             throw APIError.invalidResponse
         }
 
-        return try await send(
+        let payload = try await request(
             path: path,
+            queryItems: [],
             method: "POST",
             body: encodedBody,
             bearerToken: bearerToken
         )
+        return try decode(Response.self, from: payload.data)
     }
 
     func patch<Body: Encodable & Sendable, Response: Decodable & Sendable>(
@@ -175,68 +218,51 @@ struct APIClient: Sendable {
         bearerToken: String? = nil,
         as responseType: Response.Type = Response.self
     ) async throws -> Response {
-        let encodedBody: Data
-        do {
-            encodedBody = try JSONEncoder().encode(body)
-        } catch {
-            throw APIError.invalidResponse
-        }
+        let payload = try await request(
+            path: path, queryItems: [], method: "PATCH",
+            body: JSONEncoder().encode(body), bearerToken: bearerToken
+        )
+        return try decode(Response.self, from: payload.data)
+    }
 
-        return try await send(
-            path: path,
-            method: "PATCH",
-            body: encodedBody,
+    func delete(_ path: String, bearerToken: String? = nil) async throws {
+        _ = try await request(
+            path: path, queryItems: [], method: "DELETE", body: nil,
             bearerToken: bearerToken
         )
     }
 
-    func delete(
-        _ path: String,
-        bearerToken: String? = nil
-    ) async throws {
-        guard let baseURL = baseURLProvider() else {
-            throw APIError.invalidConfiguration
-        }
-
-        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let endpoint = baseURL.appendingPathComponent(cleanPath)
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "DELETE"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let bearerToken {
-            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let response = response as? HTTPURLResponse else {
-                throw APIError.invalidResponse
-            }
-            guard (200..<300).contains(response.statusCode) else {
-                throw APIError.http(
-                    status: response.statusCode,
-                    message: Self.serverMessage(from: data)
-                )
-            }
-        } catch let error as APIError {
-            throw error
-        } catch {
-            throw APIError.network(error.localizedDescription)
-        }
+    private struct Payload: Sendable {
+        let data: Data
+        let statusCode: Int
+        let headers: [String: String]
     }
 
-    private func send<Response: Decodable & Sendable>(
+    private func request(
         path: String,
+        queryItems: [URLQueryItem],
         method: String,
         body: Data?,
-        bearerToken: String?
-    ) async throws -> Response {
-        guard let baseURL = baseURLProvider() else {
+        bearerToken: String?,
+        allowsNotModified: Bool = false
+    ) async throws -> Payload {
+        guard let baseURL else {
             throw APIError.invalidConfiguration
         }
 
-        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let endpoint = baseURL.appendingPathComponent(cleanPath)
+        // Preserve a requested trailing slash so POST never relies on redirects.
+        let cleanPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        let endpointWithoutQuery = baseURL.appendingPathComponent(cleanPath)
+        guard var components = URLComponents(
+            url: endpointWithoutQuery,
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw APIError.invalidConfiguration
+        }
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        guard let endpoint = components.url else {
+            throw APIError.invalidConfiguration
+        }
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
         request.httpBody = body
@@ -255,22 +281,48 @@ struct APIClient: Sendable {
                 throw APIError.invalidResponse
             }
 
-            guard (200..<300).contains(response.statusCode) else {
+            let isAllowedNotModified = allowsNotModified && response.statusCode == 304
+            guard (200..<300).contains(response.statusCode) || isAllowedNotModified else {
+                if response.statusCode == 400,
+                   Self.serverCode(from: data) == "INVALID_CURSOR" {
+                    throw APIError.invalidCursor
+                }
                 throw APIError.http(
                     status: response.statusCode,
                     message: Self.serverMessage(from: data)
                 )
             }
 
-            do {
-                return try JSONDecoder().decode(Response.self, from: data)
-            } catch {
-                throw APIError.decoding
+            let headers = response.allHeaderFields.reduce(
+                into: [String: String]()
+            ) { result, header in
+                guard let name = header.key as? String else { return }
+                result[name] = String(describing: header.value)
             }
+            return Payload(
+                data: data,
+                statusCode: response.statusCode,
+                headers: headers
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch let error as APIError {
             throw error
         } catch {
             throw APIError.network(error.localizedDescription)
+        }
+    }
+
+    private func decode<Response: Decodable>(
+        _ type: Response.Type,
+        from data: Data
+    ) throws -> Response {
+        do {
+            return try JSONDecoder().decode(Response.self, from: data)
+        } catch {
+            throw APIError.decoding
         }
     }
 
@@ -298,5 +350,15 @@ struct APIClient: Sendable {
         }
 
         return nil
+    }
+
+    private static func serverCode(from data: Data) -> String? {
+        guard
+            let json = try? JSONSerialization.jsonObject(with: data),
+            let object = json as? [String: Any]
+        else {
+            return nil
+        }
+        return object["code"] as? String
     }
 }

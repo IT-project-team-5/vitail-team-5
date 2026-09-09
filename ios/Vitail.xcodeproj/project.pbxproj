@@ -29,6 +29,31 @@
 		000000000000000000000014 /* DogListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* DogListView.swift */; };
 		000000000000000000000015 /* DogFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* DogFormView.swift */; };
 		000000000000000000000016 /* DogModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* DogModelsTests.swift */; };
+		000000000000000000000017 /* AuthenticatedAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* AuthenticatedAPIClient.swift */; };
+		000000000000000000000018 /* CredentialAuthority.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* CredentialAuthority.swift */; };
+		000000000000000000000019 /* AppDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000019 /* AppDependencies.swift */; };
+		00000000000000000000001A /* CafeOrderModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001A /* CafeOrderModels.swift */; };
+		00000000000000000000001B /* CafeOrdersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001B /* CafeOrdersService.swift */; };
+		00000000000000000000001C /* CafeOrdersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001C /* CafeOrdersViewModel.swift */; };
+		00000000000000000000001D /* RedemptionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001D /* RedemptionModels.swift */; };
+		00000000000000000000001E /* RedemptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001E /* RedemptionService.swift */; };
+		00000000000000000000001F /* RedemptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000001F /* RedemptionViewModel.swift */; };
+		000000000000000000000020 /* RedemptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000020 /* RedemptionView.swift */; };
+		000000000000000000000021 /* CafeOrdersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* CafeOrdersTests.swift */; };
+		000000000000000000000022 /* CredentialAuthorityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* CredentialAuthorityTests.swift */; };
+		000000000000000000000023 /* RedemptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* RedemptionTests.swift */; };
+		000000000000000000000024 /* APIIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* APIIntegrationTests.swift */; };
+		000000000000000000000025 /* WalkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000025 /* WalkModels.swift */; };
+		000000000000000000000026 /* WalkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000026 /* WalkService.swift */; };
+		000000000000000000000027 /* WalkRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000027 /* WalkRecorder.swift */; };
+		000000000000000000000028 /* WalkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000028 /* WalkViewModel.swift */; };
+		000000000000000000000029 /* WalkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000029 /* WalkView.swift */; };
+		00000000000000000000002A /* WalkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002A /* WalkTests.swift */; };
+		00000000000000000000002B /* CafeProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002B /* CafeProfileModels.swift */; };
+		00000000000000000000002C /* CafeProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002C /* CafeProfileService.swift */; };
+		00000000000000000000002D /* CafeProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002D /* CafeProfileViewModel.swift */; };
+		00000000000000000000002E /* CafeProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002E /* CafeProfileView.swift */; };
+		00000000000000000000002F /* CafeProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002F /* CafeProfileTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +97,31 @@
 		120000000000000000000004 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		120000000000000000000005 /* Local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Local.xcconfig.example; sourceTree = "<group>"; };
 		120000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000017 /* AuthenticatedAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedAPIClient.swift; sourceTree = "<group>"; };
+		100000000000000000000018 /* CredentialAuthority.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthority.swift; sourceTree = "<group>"; };
+		100000000000000000000019 /* AppDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDependencies.swift; sourceTree = "<group>"; };
+		10000000000000000000001A /* CafeOrderModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrderModels.swift; sourceTree = "<group>"; };
+		10000000000000000000001B /* CafeOrdersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersService.swift; sourceTree = "<group>"; };
+		10000000000000000000001C /* CafeOrdersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersViewModel.swift; sourceTree = "<group>"; };
+		10000000000000000000001D /* RedemptionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionModels.swift; sourceTree = "<group>"; };
+		10000000000000000000001E /* RedemptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionService.swift; sourceTree = "<group>"; };
+		10000000000000000000001F /* RedemptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000020 /* RedemptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionView.swift; sourceTree = "<group>"; };
+		100000000000000000000021 /* CafeOrdersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeOrdersTests.swift; sourceTree = "<group>"; };
+		100000000000000000000022 /* CredentialAuthorityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthorityTests.swift; sourceTree = "<group>"; };
+		100000000000000000000023 /* RedemptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedemptionTests.swift; sourceTree = "<group>"; };
+		100000000000000000000024 /* APIIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIIntegrationTests.swift; sourceTree = "<group>"; };
+		100000000000000000000025 /* WalkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkModels.swift; sourceTree = "<group>"; };
+		100000000000000000000026 /* WalkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkService.swift; sourceTree = "<group>"; };
+		100000000000000000000027 /* WalkRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkRecorder.swift; sourceTree = "<group>"; };
+		100000000000000000000028 /* WalkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000029 /* WalkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkView.swift; sourceTree = "<group>"; };
+		10000000000000000000002A /* WalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTests.swift; sourceTree = "<group>"; };
+		10000000000000000000002B /* CafeProfileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileModels.swift; sourceTree = "<group>"; };
+		10000000000000000000002C /* CafeProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileService.swift; sourceTree = "<group>"; };
+		10000000000000000000002D /* CafeProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileViewModel.swift; sourceTree = "<group>"; };
+		10000000000000000000002E /* CafeProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileView.swift; sourceTree = "<group>"; };
+		10000000000000000000002F /* CafeProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -137,6 +187,7 @@
 		204000000000000000000001 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				100000000000000000000019 /* AppDependencies.swift */,
 				100000000000000000000001 /* VitailApp.swift */,
 				100000000000000000000002 /* RootView.swift */,
 			);
@@ -157,6 +208,7 @@
 		206000000000000000000001 /* API */ = {
 			isa = PBXGroup;
 			children = (
+				100000000000000000000017 /* AuthenticatedAPIClient.swift */,
 				100000000000000000000003 /* APIClient.swift */,
 			);
 			path = API;
@@ -165,6 +217,7 @@
 		207000000000000000000001 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				100000000000000000000018 /* CredentialAuthority.swift */,
 				100000000000000000000004 /* AuthModels.swift */,
 				100000000000000000000005 /* AuthService.swift */,
 				100000000000000000000006 /* SessionStore.swift */,
@@ -195,8 +248,11 @@
 				20B000000000000000000001 /* Auth */,
 				20C000000000000000000001 /* OwnerHome */,
 				20D000000000000000000001 /* CafeOrders */,
+				213000000000000000000001 /* CafeProfile */,
 				20F000000000000000000001 /* OwnerProfile */,
 				210000000000000000000001 /* Dog */,
+				212000000000000000000001 /* Walk */,
+				211000000000000000000001 /* Redemption */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -221,6 +277,9 @@
 		20D000000000000000000001 /* CafeOrders */ = {
 			isa = PBXGroup;
 			children = (
+				10000000000000000000001C /* CafeOrdersViewModel.swift */,
+				10000000000000000000001B /* CafeOrdersService.swift */,
+				10000000000000000000001A /* CafeOrderModels.swift */,
 				10000000000000000000000D /* CafeOrdersView.swift */,
 			);
 			path = CafeOrders;
@@ -229,6 +288,12 @@
 		20E000000000000000000001 /* VitailTests */ = {
 			isa = PBXGroup;
 			children = (
+				10000000000000000000002F /* CafeProfileTests.swift */,
+				10000000000000000000002A /* WalkTests.swift */,
+				100000000000000000000024 /* APIIntegrationTests.swift */,
+				100000000000000000000023 /* RedemptionTests.swift */,
+				100000000000000000000022 /* CredentialAuthorityTests.swift */,
+				100000000000000000000021 /* CafeOrdersTests.swift */,
 				10000000000000000000000E /* AuthModelsTests.swift */,
 				100000000000000000000016 /* DogModelsTests.swift */,
 			);
@@ -254,6 +319,40 @@
 				100000000000000000000015 /* DogFormView.swift */,
 			);
 			path = Dog;
+			sourceTree = "<group>";
+		};
+		211000000000000000000001 /* Redemption */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000020 /* RedemptionView.swift */,
+				10000000000000000000001F /* RedemptionViewModel.swift */,
+				10000000000000000000001E /* RedemptionService.swift */,
+				10000000000000000000001D /* RedemptionModels.swift */,
+			);
+			path = Redemption;
+			sourceTree = "<group>";
+		};
+		212000000000000000000001 /* Walk */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000029 /* WalkView.swift */,
+				100000000000000000000028 /* WalkViewModel.swift */,
+				100000000000000000000027 /* WalkRecorder.swift */,
+				100000000000000000000026 /* WalkService.swift */,
+				100000000000000000000025 /* WalkModels.swift */,
+			);
+			path = Walk;
+			sourceTree = "<group>";
+		};
+		213000000000000000000001 /* CafeProfile */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000002E /* CafeProfileView.swift */,
+				10000000000000000000002D /* CafeProfileViewModel.swift */,
+				10000000000000000000002C /* CafeProfileService.swift */,
+				10000000000000000000002B /* CafeProfileModels.swift */,
+			);
+			path = CafeProfile;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -354,6 +453,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00000000000000000000002E /* CafeProfileView.swift in Sources */,
+				00000000000000000000002D /* CafeProfileViewModel.swift in Sources */,
+				00000000000000000000002C /* CafeProfileService.swift in Sources */,
+				00000000000000000000002B /* CafeProfileModels.swift in Sources */,
+				000000000000000000000029 /* WalkView.swift in Sources */,
+				000000000000000000000028 /* WalkViewModel.swift in Sources */,
+				000000000000000000000027 /* WalkRecorder.swift in Sources */,
+				000000000000000000000026 /* WalkService.swift in Sources */,
+				000000000000000000000025 /* WalkModels.swift in Sources */,
+				000000000000000000000020 /* RedemptionView.swift in Sources */,
+				00000000000000000000001F /* RedemptionViewModel.swift in Sources */,
+				00000000000000000000001E /* RedemptionService.swift in Sources */,
+				00000000000000000000001D /* RedemptionModels.swift in Sources */,
+				00000000000000000000001C /* CafeOrdersViewModel.swift in Sources */,
+				00000000000000000000001B /* CafeOrdersService.swift in Sources */,
+				00000000000000000000001A /* CafeOrderModels.swift in Sources */,
+				000000000000000000000019 /* AppDependencies.swift in Sources */,
+				000000000000000000000018 /* CredentialAuthority.swift in Sources */,
+				000000000000000000000017 /* AuthenticatedAPIClient.swift in Sources */,
 				000000000000000000000001 /* VitailApp.swift in Sources */,
 				000000000000000000000002 /* RootView.swift in Sources */,
 				000000000000000000000003 /* APIClient.swift in Sources */,
@@ -381,6 +499,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00000000000000000000002F /* CafeProfileTests.swift in Sources */,
+				00000000000000000000002A /* WalkTests.swift in Sources */,
+				000000000000000000000024 /* APIIntegrationTests.swift in Sources */,
+				000000000000000000000023 /* RedemptionTests.swift in Sources */,
+				000000000000000000000022 /* CredentialAuthorityTests.swift in Sources */,
+				000000000000000000000021 /* CafeOrdersTests.swift in Sources */,
 				00000000000000000000000E /* AuthModelsTests.swift in Sources */,
 				000000000000000000000016 /* DogModelsTests.swift in Sources */,
 			);

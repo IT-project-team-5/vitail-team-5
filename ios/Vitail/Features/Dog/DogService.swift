@@ -10,33 +10,33 @@ protocol DogServicing: Sendable {
 }
 
 actor DogService: DogServicing {
-    private let authService: AuthService
+    private let apiClient: AuthenticatedAPIClient
 
-    init(authService: AuthService = AuthService()) {
-        self.authService = authService
+    init(apiClient: AuthenticatedAPIClient = AuthenticatedAPIClient()) {
+        self.apiClient = apiClient
     }
 
     func getDogs() async throws -> [Dog] {
-        try await authService.authenticatedGet("/api/dogs")
+        try await apiClient.get("/api/dogs")
     }
 
     func getBreeds() async throws -> [Breed] {
-        try await authService.authenticatedGet("/api/dogs/breeds")
+        try await apiClient.get("/api/dogs/breeds")
     }
 
     func createDog(_ request: DogWriteRequest) async throws -> Dog {
-        try await authService.authenticatedPost("/api/dogs", body: request)
+        try await apiClient.post("/api/dogs", body: request)
     }
 
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog {
-        try await authService.authenticatedPatch("/api/dogs/\(id)", body: request)
+        try await apiClient.patch("/api/dogs/\(id)", body: request)
     }
 
     func deleteDog(id: Int) async throws {
-        try await authService.authenticatedDelete("/api/dogs/\(id)")
+        try await apiClient.delete("/api/dogs/\(id)")
     }
 
     func getGoal(dogID: Int) async throws -> DogGoal {
-        try await authService.authenticatedGet("/api/dogs/\(dogID)/goal")
+        try await apiClient.get("/api/dogs/\(dogID)/goal")
     }
 }

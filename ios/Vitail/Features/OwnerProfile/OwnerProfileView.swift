@@ -3,10 +3,16 @@ import SwiftUI
 struct OwnerProfileView: View {
     let user: User
     @ObservedObject var session: SessionStore
-    @StateObject private var dogViewModel = DogViewModel()
+    @StateObject private var dogViewModel: DogViewModel
     @State private var isEditingProfile = false
     @State private var isAddingDog = false
     @State private var selectedDog: Dog?
+
+    init(user: User, session: SessionStore, dogService: any DogServicing = DogService()) {
+        self.user = user
+        self.session = session
+        _dogViewModel = StateObject(wrappedValue: DogViewModel(service: dogService))
+    }
 
     var body: some View {
         ScrollView {
