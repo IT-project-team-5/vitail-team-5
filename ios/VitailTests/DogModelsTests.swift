@@ -91,4 +91,47 @@ final class DogModelsTests: XCTestCase {
         XCTAssertNil(DogAgeInput.totalMonths(years: 0, months: 12))
         XCTAssertNil(DogAgeInput.totalMonths(years: Int.max, months: 0))
     }
+
+    @MainActor
+    func testTenDogLimitIsPreservedAfterServiceIntegration() async {
+        let service = DogLimitService()
+        let model = DogViewModel(service: service)
+        await model.load()
+        XCTAssertEqual(model.dogs.count, 10)
+        XCTAssertFalse(model.canAddDog)
+        let didSave = await model.save(
+            dog: nil,
+            request: DogWriteRequest(
+                name: "Eleventh", breedID: 1, ageMonths: 0,
+                size: .small, isBrachycephalic: false
+            )
+        )
+        XCTAssertFalse(didSave)
+        let creates = await service.creates
+        XCTAssertEqual(creates, 0)
+    }
+}
+
+private actor DogLimitService: DogServicing {
+    private(set) var creates = 0
+    private let breed = Breed(
+        id: 1, name: "Mixed", energyLevel: .moderate,
+        defaultSize: .small, isBrachycephalic: false
+    )
+    func getDogs() async throws -> [Dog] {
+        (1...10).map {
+            Dog(
+                id: $0, name: "Dog \($0)", breed: breed, ageMonths: 0,
+                size: .small, isBrachycephalic: false, createdAt: "2026-09-09T00:00:00Z"
+            )
+        }
+    }
+    func getBreeds() async throws -> [Breed] { [breed] }
+    func createDog(_ request: DogWriteRequest) async throws -> Dog {
+        creates += 1
+        throw APIError.invalidResponse
+    }
+    func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
+    func deleteDog(id: Int) async throws {}
+    func getGoal(dogID: Int) async throws -> DogGoal { throw APIError.invalidResponse }
 }

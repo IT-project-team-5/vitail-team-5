@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-struct KeychainStore: Sendable {
+struct KeychainStore: CredentialStoring {
     private let service: String
     private let account = "auth.tokens"
 

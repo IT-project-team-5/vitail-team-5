@@ -44,7 +44,7 @@ class PointEntry(models.Model):
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="point_entries",
     )
     amount = models.IntegerField()
@@ -145,7 +145,7 @@ class Redemption(models.Model):
 
     owner_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="redemptions",
     )
     reward = models.ForeignKey(
@@ -160,6 +160,16 @@ class Redemption(models.Model):
         editable=False,
     )
     reward_name_snapshot = models.CharField(max_length=100)
+    owner_name_snapshot = models.CharField(max_length=100)
+    cafe_name_snapshot = models.CharField(max_length=100)
+    cafe_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="cafe_redemptions",
+        help_text="Café responsible when ordered; later catalogue changes do not move orders.",
+    )
+    request_id = models.UUIDField(null=True, blank=True)
+    feed_cursor = models.PositiveBigIntegerField(default=0)
     point_cost_snapshot = models.PositiveIntegerField()
     status = models.CharField(
         max_length=10,
@@ -173,6 +183,10 @@ class Redemption(models.Model):
     class Meta:
         ordering = ("-created_at", "-id")
         constraints = [
+            models.UniqueConstraint(
+                fields=("owner_user", "request_id"),
+                name="redemption_owner_request_unique",
+            ),
             models.CheckConstraint(
                 condition=models.Q(point_cost_snapshot__gt=0),
                 name="redemption_point_cost_positive",
@@ -201,9 +215,14 @@ class Redemption(models.Model):
                 {"point_cost_snapshot": "Point cost must be positive."}
             )
 
-    @property
-    def cafe_user(self):
-        return self.reward.cafe_user
-
     def __str__(self):
         return f"{self.reference_number}: {self.reward_name_snapshot}"
+
+
+class CafeOrderFeedState(models.Model):
+    """Commit-ordered cursor; canonical orders retain their latest change."""
+
+    cafe_user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, primary_key=True
+    )
+    cursor = models.PositiveBigIntegerField(default=0)

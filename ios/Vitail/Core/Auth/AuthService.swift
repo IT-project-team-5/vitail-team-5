@@ -1,146 +1,106 @@
 import Foundation
 
-actor AuthService {
-    private let apiClient: APIClient
-    private let keychain: KeychainStore
+protocol AuthServing: Sendable {
+    var credentialEvents: AsyncStream<CredentialEvent> { get }
 
-    init(apiClient: APIClient = APIClient(), keychain: KeychainStore = KeychainStore()) {
+    func login(email: String, password: String) async throws -> AuthResponse
+    func register(email: String, password: String, displayName: String) async throws -> AuthResponse
+    func persist(_ tokens: AuthTokens) async throws
+    func restoreUser() async throws -> User?
+    func clearSession() async throws
+    func updateProfile(displayName: String) async throws -> User
+}
+
+actor AuthService: AuthServing {
+    nonisolated let credentialEvents: AsyncStream<CredentialEvent>
+
+    private let apiClient: APIClient
+    private let authenticatedAPIClient: AuthenticatedAPIClient
+    private let credentials: CredentialAuthority
+
+    init() {
+        let apiClient = APIClient()
+        let credentials = CredentialAuthority.shared
         self.apiClient = apiClient
-        self.keychain = keychain
+        self.credentials = credentials
+        self.authenticatedAPIClient = AuthenticatedAPIClient(
+            apiClient: apiClient,
+            credentials: credentials
+        )
+        self.credentialEvents = credentials.events
+    }
+
+    init(apiClient: APIClient, keychain: KeychainStore = KeychainStore()) {
+        let credentials = CredentialAuthority(apiClient: apiClient, store: keychain)
+        self.apiClient = apiClient
+        self.credentials = credentials
+        self.authenticatedAPIClient = AuthenticatedAPIClient(
+            apiClient: apiClient,
+            credentials: credentials
+        )
+        self.credentialEvents = credentials.events
+    }
+
+    init(
+        apiClient: APIClient,
+        authenticatedAPIClient: AuthenticatedAPIClient,
+        credentials: CredentialAuthority
+    ) {
+        self.apiClient = apiClient
+        self.authenticatedAPIClient = authenticatedAPIClient
+        self.credentials = credentials
+        self.credentialEvents = credentials.events
     }
 
     func login(email: String, password: String) async throws -> AuthResponse {
-        try await apiClient.post(
+        let fixedClient = APIClient(baseURL: apiClient.baseURL, session: apiClient.session)
+        var response = try await fixedClient.post(
             "/api/auth/login",
             body: LoginRequest(email: email, password: password),
             as: AuthResponse.self
         )
+        response.backendURL = fixedClient.baseURL?.absoluteString
+        return response
     }
 
     func register(email: String, password: String, displayName: String) async throws -> AuthResponse {
-        try await apiClient.post(
+        let fixedClient = APIClient(baseURL: apiClient.baseURL, session: apiClient.session)
+        var response = try await fixedClient.post(
             "/api/auth/register",
             body: RegisterRequest(email: email, password: password, displayName: displayName),
             as: AuthResponse.self
         )
+        response.backendURL = fixedClient.baseURL?.absoluteString
+        return response
     }
 
-    func persist(_ tokens: AuthTokens) throws {
-        try keychain.save(tokens)
+    func persist(_ tokens: AuthTokens) async throws {
+        try await credentials.install(tokens)
     }
 
     func restoreUser() async throws -> User? {
-        guard let storedTokens = try keychain.load() else {
+        guard try await credentials.hasCredentials() else {
             return nil
         }
 
-        do {
-            return try await currentUser(accessToken: storedTokens.access)
-        } catch let APIError.http(status, _) where status == 401 {
-            let refreshedTokens = try await refresh(storedTokens)
-            try keychain.save(refreshedTokens)
-            return try await currentUser(accessToken: refreshedTokens.access)
-        }
+        return try await currentUser()
     }
 
-    func clearSession() throws {
-        try keychain.delete()
+    func clearSession() async throws {
+        try await credentials.logout()
     }
 
     func updateProfile(displayName: String) async throws -> User {
-        try await authenticatedPatch(
-            "/api/auth/me",
-            body: ProfileUpdateRequest(displayName: displayName),
-            as: User.self
-        )
-    }
-
-    func authenticatedGet<Response: Decodable & Sendable>(
-        _ path: String,
-        as responseType: Response.Type = Response.self
-    ) async throws -> Response {
-        let tokens = try requireTokens()
-        do {
-            return try await apiClient.get(path, bearerToken: tokens.access)
-        } catch let APIError.http(status, _) where status == 401 {
-            let refreshedTokens = try await refresh(tokens)
-            try keychain.save(refreshedTokens)
-            return try await apiClient.get(path, bearerToken: refreshedTokens.access)
-        }
-    }
-
-    func authenticatedPost<Body: Encodable & Sendable, Response: Decodable & Sendable>(
-        _ path: String,
-        body: Body,
-        as responseType: Response.Type = Response.self
-    ) async throws -> Response {
-        let tokens = try requireTokens()
-        do {
-            return try await apiClient.post(path, body: body, bearerToken: tokens.access)
-        } catch let APIError.http(status, _) where status == 401 {
-            let refreshedTokens = try await refresh(tokens)
-            try keychain.save(refreshedTokens)
-            return try await apiClient.post(
-                path,
-                body: body,
-                bearerToken: refreshedTokens.access
-            )
-        }
-    }
-
-    func authenticatedPatch<Body: Encodable & Sendable, Response: Decodable & Sendable>(
-        _ path: String,
-        body: Body,
-        as responseType: Response.Type = Response.self
-    ) async throws -> Response {
-        let tokens = try requireTokens()
-        do {
-            return try await apiClient.patch(path, body: body, bearerToken: tokens.access)
-        } catch let APIError.http(status, _) where status == 401 {
-            let refreshedTokens = try await refresh(tokens)
-            try keychain.save(refreshedTokens)
-            return try await apiClient.patch(
-                path,
-                body: body,
-                bearerToken: refreshedTokens.access
-            )
-        }
-    }
-
-    func authenticatedDelete(_ path: String) async throws {
-        let tokens = try requireTokens()
-        do {
-            try await apiClient.delete(path, bearerToken: tokens.access)
-        } catch let APIError.http(status, _) where status == 401 {
-            let refreshedTokens = try await refresh(tokens)
-            try keychain.save(refreshedTokens)
-            try await apiClient.delete(path, bearerToken: refreshedTokens.access)
-        }
-    }
-
-    private func currentUser(accessToken: String) async throws -> User {
-        let response: CurrentUserResponse = try await apiClient.get(
-            "/api/auth/me",
-            bearerToken: accessToken
+        let response: CurrentUserResponse = try await authenticatedAPIClient.patch(
+            "/api/auth/me", body: ProfileUpdateRequest(displayName: displayName)
         )
         return response.user
     }
 
-    private func refresh(_ tokens: AuthTokens) async throws -> AuthTokens {
-        let response: RefreshResponse = try await apiClient.post(
-            "/api/auth/refresh",
-            body: RefreshRequest(refresh: tokens.refresh)
+    private func currentUser() async throws -> User {
+        let response: CurrentUserResponse = try await authenticatedAPIClient.get(
+            "/api/auth/me"
         )
-        return AuthTokens(
-            access: response.access,
-            refresh: response.refresh ?? tokens.refresh
-        )
-    }
-
-    private func requireTokens() throws -> AuthTokens {
-        guard let tokens = try keychain.load() else {
-            throw APIError.http(status: 401, message: "Your session has expired. Please sign in again.")
-        }
-        return tokens
+        return response.user
     }
 }

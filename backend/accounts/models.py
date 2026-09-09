@@ -25,3 +25,15 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class CafeProfile(models.Model):
+    """Small café-owned contact/display profile, not a second reward catalogue."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="cafe_profile")
+    address = models.CharField(max_length=255, blank=True)
+    description = models.TextField(max_length=2000, blank=True)
+    opening_hours = models.CharField(max_length=500, blank=True)
+
+    def __str__(self):
+        return self.user.display_name

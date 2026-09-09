@@ -1,0 +1,581 @@
+openapi: 3.0.3
+info:
+  title: Vitail connected MVP API
+  version: '2026-09-09'
+  description: >-
+    Implemented routes only. JWT authentication is required except register,
+    login and refresh. Owner/café roles come from the authenticated account.
+    Auth and dog paths use no trailing slash; wallet, redemption, café and walk
+    paths also accept a trailing slash. Arrays are currently unpaginated.
+    Django Admin is a separate session/CSRF-protected interface, not this API.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development; replace with the shared HTTPS backend for devices.
+security:
+  - bearerAuth: []
+paths:
+  /api/auth/register:
+    post:
+      summary: Register an OWNER account (client roles are ignored)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/LoginRequest'
+                - type: object
+                  required: [display_name]
+                  properties:
+                    display_name: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '201':
+          description: Owner and tokens
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSession'}
+        '400': {$ref: '#/components/responses/Error'}
+  /api/auth/login:
+    post:
+      summary: Sign in with email/password for either role
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200':
+          description: User and tokens
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSession'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+  /api/auth/refresh:
+    post:
+      summary: Obtain a new access token with a refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh]
+              properties:
+                refresh: {type: string}
+      responses:
+        '200':
+          description: Access token (refresh-token rotation is not enabled)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access]
+                properties:
+                  access: {type: string}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+  /api/auth/me:
+    get:
+      summary: Read the authenticated profile
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Error'}
+    patch:
+      summary: Update display name only; email and role are not editable here
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+  /api/dogs:
+    get:
+      summary: List the OWNER's dogs
+      responses:
+        '200':
+          description: Owned dogs, oldest first
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Dog'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Add an owned dog (maximum 10 per account)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/DogInput'
+                - required: [name, breed_id, age_months, size]
+      responses:
+        '201':
+          description: Created dog
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Dog'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/dogs/breeds:
+    get:
+      summary: List breed reference data (OWNER only)
+      responses:
+        '200':
+          description: Breeds ordered by name
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Breed'}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/dogs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+    patch:
+      summary: Update a dog owned by the authenticated OWNER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DogInput'}
+      responses:
+        '200':
+          description: Updated dog
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Dog'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      summary: Delete an owned dog
+      responses:
+        '204': {description: Deleted; no response body}
+        default: {$ref: '#/components/responses/Error'}
+  /api/dogs/{id}/goal:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+    get:
+      summary: Read stored goal factors; numeric recommendations are not implemented
+      responses:
+        '200':
+          description: Rules-pending result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dog_id, status, recommended_duration_minutes, factors, unresolved_requirements]
+                properties:
+                  dog_id: {type: integer}
+                  status: {type: string, enum: [RULES_PENDING]}
+                  recommended_duration_minutes: {type: integer, nullable: true, description: Always null until numeric rules are agreed}
+                  factors:
+                    type: object
+                    properties:
+                      breed_energy_level: {type: string, enum: [LOW, MODERATE, HIGH]}
+                      age_months: {type: integer, minimum: 0}
+                      size: {$ref: '#/components/schemas/DogSize'}
+                      is_brachycephalic: {type: boolean}
+                  unresolved_requirements: {type: array, items: {type: string}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/walks:
+    get:
+      summary: List owned walk summaries, newest end time first (OWNER only)
+      responses:
+        '200':
+          description: Walk history; raw GPS samples are not persisted or returned
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Walk'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Validate one manual walk and credit distance points once (OWNER only)
+      description: >-
+        Submit within 12 hours of starting; duration is at most 12 hours and
+        future timestamps have at most 30 seconds of clock skew. All dogs must
+        belong to the owner and submitted walks cannot overlap. Samples must be
+        strictly time-ordered and inside the start/end interval. Require two
+        readings accurate to 30 m. Simulated samples are rejected; poor accuracy,
+        gaps over 60 seconds and segments above 3 m/s earn no distance.
+        Five minutes of inactivity ends credit. Distance awards use the current
+        daily cumulative floor policy (8 points/km, maximum 40 walking points),
+        pending confirmation of decision O7. Day is the Melbourne/default server
+        local end date. No goal/check-in/streak points are added. Repeating the
+        same UUID and payload returns the original result without a second award.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_id, started_at, ended_at, dog_ids, samples]
+              properties:
+                request_id: {type: string, format: uuid}
+                started_at: {type: string, format: date-time}
+                ended_at: {type: string, format: date-time}
+                dog_ids: {type: array, minItems: 1, maxItems: 10, uniqueItems: true, items: {type: integer, minimum: 1}}
+                samples: {type: array, minItems: 2, maxItems: 5000, items: {$ref: '#/components/schemas/WalkSample'}}
+      responses:
+        '201':
+          description: Created walk, or original walk for an identical retry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Walk'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409':
+          description: IDEMPOTENCY_CONFLICT; UUID was reused with a different walk payload
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /api/wallet:
+    get:
+      summary: Read the OWNER's unexpired point balance
+      description: Applies due order refunds and point expiry before returning the balance.
+      responses:
+        '200':
+          description: Authoritative balance
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [balance]
+                properties:
+                  balance: {type: integer, minimum: 0}
+        default: {$ref: '#/components/responses/Error'}
+  /api/wallet/ledger:
+    get:
+      summary: Read the OWNER's immutable point history
+      responses:
+        '200':
+          description: Credits and debits ordered by creation time and ID
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/PointEntry'}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/redemptions/rewards:
+    get:
+      summary: Browse available rewards from active CAFE accounts (OWNER only)
+      responses:
+        '200':
+          description: Reward catalogue
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Reward'}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/redemptions:
+    get:
+      summary: Read the OWNER's pending and terminal redemption history
+      description: Applies due order refunds; history is newest first.
+      responses:
+        '200':
+          description: Owned redemptions
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Redemption'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Order one reward, quantity 1, with an immediate atomic point deduction
+      description: >-
+        OWNER only. Price, owner and café are determined by the server.
+        Send a request_id UUID and reuse it when retrying the same confirmation.
+        The same owner/UUID/reward returns the original order even if that offer
+        is later disabled. A different reward with the same UUID is a conflict.
+        Omitting request_id is supported for older clients but is not retry-safe.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reward_id]
+              properties:
+                reward_id: {type: integer, minimum: 1}
+                request_id: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Created redemption, or original redemption for an identical retry
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Redemption'}
+        '400':
+          description: Invalid request, INSUFFICIENT_POINTS or REWARD_UNAVAILABLE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: IDEMPOTENCY_CONFLICT
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/redemptions/{id}/collect:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+    post:
+      summary: Collect an owned pending order; no location gate
+      description: >-
+        OWNER only. Already-collected orders return their existing result.
+        An expired pending order is refunded and committed before returning 409.
+        Other owners' IDs return 404; café accounts cannot collect orders.
+      responses:
+        '200':
+          description: Collected redemption
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Redemption'}
+        '404': {description: No such redemption owned by this user}
+        '409':
+          description: REDEMPTION_NOT_COLLECTIBLE (expired or cancelled)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/cafe/orders:
+    get:
+      summary: Read-only pending order feed for the signed-in CAFE
+      description: >-
+        Uses the same canonical redemptions owners created, scoped to their
+        order-time café. No since parameter returns a reset snapshot. A cursor
+        returns changed upserts/removals; unchanged returns 304 with no body.
+        Due orders expire/refund before polling. Empty catalogues return an
+        empty feed. No café write endpoints exist.
+      parameters:
+        - name: since
+          in: query
+          description: One non-negative integer cursor from this café/backend, not a timestamp
+          schema: {type: integer, format: int64, minimum: 0}
+      responses:
+        '200':
+          description: Snapshot or delta
+          headers:
+            X-Cafe-Orders-Cursor: {schema: {type: string}, description: Cursor also present in the body}
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cursor, upserts, removed_ids, reset]
+                properties:
+                  cursor: {type: integer, format: int64, minimum: 0}
+                  upserts: {type: array, items: {$ref: '#/components/schemas/CafeOrder'}}
+                  removed_ids: {type: array, items: {type: integer}}
+                  reset: {type: boolean}
+        '304':
+          description: Unchanged; no response body
+          headers:
+            X-Cafe-Orders-Cursor: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+        '400':
+          description: INVALID_CURSOR (malformed, duplicate or ahead of the server)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/cafe/profile:
+    get:
+      summary: Read the signed-in CAFE's venue profile
+      description: Existing café accounts receive empty optional details on first access.
+      responses:
+        '200':
+          description: Own café details; name is the account display name
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CafeProfile'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      summary: Update own café name, address, description and opening hours
+      description: >-
+        CAFE only. Partial updates are accepted. Email, role, user IDs,
+        offers and point prices cannot be changed here. Name updates the
+        shared account display name; existing order snapshots do not change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                address: {type: string, maxLength: 255}
+                description: {type: string, maxLength: 2000}
+                opening_hours: {type: string, maxLength: 500}
+      responses:
+        '200':
+          description: Updated own café profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CafeProfile'}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: {type: integer, minimum: 1}
+  responses:
+    Error:
+      description: >-
+        Validation/business error, unauthenticated (401), wrong role (403), or
+        resource not found (404). DRF uses detail/field errors; business failures
+        use code/message. Always inspect the HTTP status.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email, maxLength: 254}
+        password: {type: string, format: password, writeOnly: true}
+    User:
+      type: object
+      required: [id, email, display_name, role]
+      properties:
+        id: {type: integer}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        role: {type: string, enum: [OWNER, CAFE, ADMIN]}
+    AuthSession:
+      type: object
+      required: [access, refresh, user]
+      properties:
+        access: {type: string}
+        refresh: {type: string}
+        user: {$ref: '#/components/schemas/User'}
+    DogSize: {type: string, enum: [SMALL, MEDIUM, LARGE]}
+    Breed:
+      type: object
+      required: [id, name, energy_level, default_size, is_brachycephalic]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        energy_level: {type: string, enum: [LOW, MODERATE, HIGH]}
+        default_size: {$ref: '#/components/schemas/DogSize'}
+        is_brachycephalic: {type: boolean}
+    DogInput:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        photo: {type: string, nullable: true, description: Absolute URL or blank/null; no upload endpoint}
+        breed_id: {type: integer, minimum: 1}
+        age_months: {type: integer, minimum: 0}
+        size: {$ref: '#/components/schemas/DogSize'}
+        is_brachycephalic: {type: boolean, description: Defaults from breed when omitted on creation}
+    Dog:
+      type: object
+      required: [id, name, photo, breed, age_months, size, is_brachycephalic, created_at]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        photo: {type: string, nullable: true}
+        breed: {$ref: '#/components/schemas/Breed'}
+        age_months: {type: integer, minimum: 0}
+        size: {$ref: '#/components/schemas/DogSize'}
+        is_brachycephalic: {type: boolean}
+        created_at: {type: string, format: date-time}
+    WalkSample:
+      type: object
+      required: [latitude, longitude, recorded_at, accuracy_m]
+      properties:
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        recorded_at: {type: string, format: date-time}
+        accuracy_m: {type: number, minimum: 0}
+        is_simulated: {type: boolean, default: false}
+    Walk:
+      type: object
+      required: [id, request_id, started_at, ended_at, distance_m, points_awarded, point_date, dog_ids]
+      properties:
+        id: {type: integer}
+        request_id: {type: string, format: uuid}
+        started_at: {type: string, format: date-time}
+        ended_at: {type: string, format: date-time}
+        distance_m: {type: number, minimum: 0}
+        points_awarded: {type: integer, minimum: 0, maximum: 40}
+        point_date: {type: string, format: date}
+        dog_ids: {type: array, items: {type: integer}}
+    PointEntry:
+      type: object
+      required: [id, amount, type, expires_at, created_at]
+      properties:
+        id: {type: integer}
+        amount: {type: integer, description: Positive credit or negative debit; never zero}
+        type: {type: string, enum: [EARN, SPEND, REFUND, EXPIRE, ADMIN]}
+        expires_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+    Reward:
+      type: object
+      required: [id, name, description, point_cost, cafe_name]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        description: {type: string}
+        point_cost: {type: integer, minimum: 1}
+        cafe_name: {type: string}
+    Redemption:
+      type: object
+      required: [id, reference_number, reward, reward_name_snapshot, point_cost_snapshot, status, created_at, collected_at, expires_at, cafe_name_snapshot]
+      properties:
+        id: {type: integer}
+        reference_number: {type: string}
+        reward: {type: integer, description: Catalogue reward ID; historic names/prices use snapshots}
+        reward_name_snapshot: {type: string}
+        point_cost_snapshot: {type: integer, minimum: 1}
+        cafe_name_snapshot: {type: string}
+        status: {type: string, enum: [PENDING, COLLECTED, EXPIRED, CANCELLED]}
+        created_at: {type: string, format: date-time}
+        collected_at: {type: string, format: date-time, nullable: true}
+        expires_at: {type: string, format: date-time, description: Next midnight in the configured server timezone}
+    CafeProfile:
+      type: object
+      required: [name, email, address, description, opening_hours]
+      properties:
+        name: {type: string, maxLength: 100}
+        email: {type: string, format: email, readOnly: true}
+        address: {type: string, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        opening_hours: {type: string, maxLength: 500}
+    CafeOrder:
+      type: object
+      required: [id, reference_number, owner_name, items, ordered_at]
+      properties:
+        id: {type: integer}
+        reference_number: {type: string}
+        owner_name: {type: string, description: Order-time customer name snapshot}
+        ordered_at: {type: string, format: date-time}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: object
+            required: [name, quantity]
+            properties:
+              name: {type: string}
+              quantity: {type: integer, enum: [1]}
+    Error:
+      type: object
+      additionalProperties: true
+      properties:
+        detail: {type: string}
+        code: {type: string}
+        message: {type: string}

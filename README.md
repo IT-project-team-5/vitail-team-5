@@ -12,20 +12,20 @@ to **local businesses**, which general fitness apps do not do.
 
 ## Status
 
-Pilot scope, Melbourne. This document and `TECH_STACK.md` reflect the client
-requirements and platform decisions captured through 2026-08-24.
+Pilot scope, Melbourne. Product requirements and platform decisions are
+retained below; the connected build status is updated through 2026-09-09.
 
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
 
-### Current build slices: authentication and owner/dog profiles
+### Current build: connected owner and café MVP
 
-The first use case is deliberately small:
+The app stays deliberately small:
 
 ```text
 User selects "I'm a dog owner" or "I'm a cafe owner"
-Dog owner self-registers or signs in → OWNER tab shell
-Café owner signs in with an admin-created account → CAFE tab shell
+Dog owner registers/signs in → Account / Walk / Redeem
+Café owner signs in with an admin-created account → Account / Orders
 ```
 
 Both roles use the same login API and iOS app. The API returns JWT access and
@@ -38,14 +38,27 @@ persistent dog profiles using breed reference data supplied by the backend.
 Personalised-goal inputs are stored, but no duration is displayed until the
 open numeric welfare and heat-adjustment rules are resolved.
 
-The role choice makes the login page clear, but it does not grant a role. The
-backend account remains authoritative, and a mismatched login asks the user to
-choose the correct account type. The current post-login navigation lets owners
-swipe between Account, Walk and Redeem, with the same pages available in the
-bottom navigation and fixed `0 pts` at top right. Account contains owner and
-dog profiles; Walk and Redeem remain shells.
-Café owners have Account and Orders pages. Logout lives in Account for both
-roles; Walk, Redeem, Orders and real point data are not implemented yet.
+The role choice does not grant a role: the backend account is authoritative.
+Owners can edit their name and dogs, see their real wallet balance, browse
+admin-created rewards, confirm one reward per order, and collect it from their
+own order history. Café staff see those **same orders**, scoped to their own
+café, with a read-only feed that refreshes while open. Logout stays in Account.
+Café Account also lets staff edit the café name, address, description and opening
+hours. Login email is read-only; offers and point prices remain Admin-managed.
+
+Points deduct once at order creation. Retrying the same confirmation does not
+create another order. Uncollected orders expire at the next Melbourne midnight
+and refund automatically; admins can also cancel/refund pending orders. Admin
+point grants are positive-only, and existing ledger/order records are read-only.
+
+The current catalogue uses one `Reward` linked directly to a café account and
+one item (quantity 1) per `Redemption`. There is no cart or separate venue/order
+database. Names, price and café ownership are snapshotted at order time.
+
+Walk-distance earning is connected in this integration; the feature checklist
+and limits are in `docs/FEATURES.md`. Personalised-goal awards, check-ins, streaks,
+charity donations, social sharing and the wider product rules below remain
+**planned**, not claims that those features already work.
 
 ## Business Model
 
@@ -67,8 +80,8 @@ Owners and café staff use the **same iOS app**. The account role decides
 which interface loads.
 
 ```text
-OWNER → Account / Walk / Redeem shell
-CAFE  → Account / Orders shell
+OWNER → Account / Walk / Redeem
+CAFE  → Account / Orders
 ADMIN → Django Admin
 ```
 
@@ -106,7 +119,11 @@ not block it.
 
 An account may hold up to **10 dogs**.
 
-## Earning Points
+## Earning Points — product rules
+
+These are the full pilot rules. Only implemented sources listed in
+`docs/FEATURES.md` award points in the current build; an admin may grant test
+points to exercise redemption without a walk.
 
 | Source | Points | Limit |
 |---|---|---|
@@ -174,12 +191,13 @@ Owner selects which dogs are coming
 
 ## Redeeming Points
 
-Two redemption paths.
+The partner-offer path is implemented as one reward per order. Charity donations
+remain planned.
 
 **Partner offer**
 
 ```text
-Owner browses partner and selects items
+Owner browses rewards and selects one item
 → confirms order
 → points are deducted immediately
 → order receives a reference number
@@ -199,9 +217,10 @@ Uncollected orders expire at end of day and points are refunded automatically.
 Owners can donate points to a selected charity. This path needs no merchant, no
 location verification and no collection step.
 
-Every redemption carries a reference number and appears in the owner's profile
+Every redemption carries a reference number and appears in the owner's Redeem
 history, so owners can see what they spent points on and Vitail can resolve
-disputes with merchants.
+disputes with merchants. Refunds are new credits valid for twelve calendar months;
+the original debit and terminal order remain in the audit history.
 
 Merchants set their own point prices and thresholds when signing a partnership.
 
@@ -222,17 +241,17 @@ Photo check-ins are a desirable optional addition, not a pilot requirement.
 
 ## Project Structure
 
-The repository now contains the first vertical slice. Future feature folders
-are added only when their work begins.
+Feature folders are added only when their work begins.
 
 ```text
 vitail-team-5/
-├── ios/                 SwiftUI app and auth tests
-├── backend/             Django API, accounts/dogs apps and migrations
+├── ios/                 SwiftUI app and focused feature tests
+├── backend/             Django accounts, dogs, rewards and walk APIs
 ├── docs/
 │   ├── DECISIONS.md
-│   └── FEATURES.md      (lightweight delivery status)
-├── docker-compose.yml   local API and MySQL
+│   ├── FEATURES.md      (lightweight delivery status)
+│   └── openapi.yaml     (implemented API contract)
+├── docker-compose.yml   local API, MySQL and expiry worker
 ├── Makefile             short local commands
 ├── README.md
 └── TECH_STACK.md
@@ -266,10 +285,44 @@ Keep the Mac and iPhone on the same network, select the iPhone in Xcode, then
 Run. A free Personal Team is enough; its development install expires after
 seven days and can be installed again from Xcode.
 
-Create café logins at `http://127.0.0.1:8000/admin/` with role `CAFE`. Useful
-commands are `make test`, `make check`, and `make down`. To override the local
+Create café logins at `http://127.0.0.1:8000/admin/` with role `CAFE`. Each tester
+chooses their own passwords; there are no shared demo credentials. Useful
+commands are `make test`, `make check`, `make expire`, and `make down`. `make test`
+uses an isolated SQLite test database and does not reset the shared MySQL data.
+Use MySQL separately for row-lock/concurrency checks. To override the local
 Compose defaults, copy `backend/.env.example` to a root `.env` and edit it;
 neither `.env` nor `Local.xcconfig` is committed.
+
+### Quick connected-flow test
+
+1. Run `make up`, then `make superuser` in another terminal. Leave Compose running.
+2. Open `http://127.0.0.1:8000/admin/`. Create a user with role **CAFE**, then
+   create an available **Reward** for that café (for example, Coffee for 40 points).
+3. Run `make ios`, choose a simulator or connected iPhone in Xcode, and press Run.
+   Choose **I'm a dog owner** and register a test owner.
+4. In Admin → **Point entries** → Add, grant that owner 100 points with a future
+   expiry. This is an optional test shortcut, not a second wallet.
+5. In the owner app, refresh Redeem, confirm the Coffee order and check the
+   balance is 60 with a reference number in history.
+6. In a second simulator/iPhone, sign in as the café. Orders should show the same
+   reference. Only the owner can tap Redeem/collect; it then disappears from the
+   café feed. Café Account can save the venue name/address/description/hours.
+   Signing out and switching roles on one device also works.
+7. To test a refund immediately, create another order, then select it in Admin
+   → Redemptions → **Cancel pending orders and refund points**. Refresh the owner
+   wallet/history and café feed; repeating the action must not add points again.
+
+For real earning, add/select a dog in Walk, allow precise location and record an
+outdoor walk. End/upload it while online; server-validated distance awards
+8 points/km, up to 40 walking points per Melbourne day, to the same wallet.
+Goal and check-in bonuses are not awarded yet. Use a real iPhone for GPS tests;
+simulated-location samples are intentionally rejected.
+
+Compose runs `expire_rewards --watch --interval 60` after the API starts, so
+end-of-day refunds and twelve-month point expiry run without an open app.
+`make expire` runs one sweep manually; it does **not** force future orders to
+expire. Wallet/history/feed/collection requests also enforce order expiry.
+Pulling code shares schema migrations, **not other developers' database rows**.
 
 ### Temporary Backend URL setting
 
@@ -282,6 +335,10 @@ Testers can enter the same HTTPS tunnel URL, such as an ngrok address, to use
 one backend without sharing a Wi-Fi network. The backend and tunnel must stay
 running; if the tunnel address changes, testers need to save the new address.
 Use test accounts and data when exposing the local development server.
+
+Saved login tokens are bound to their backend address. Switching the address
+requires signing in again; old credentials without an address binding also
+require a one-time new login after this update.
 
 The override is excluded from Staging and Release. To remove it later, search
 for `TEMPORARY DEBUG BACKEND URL OVERRIDE` in `APIClient.swift` and `AuthView.swift`

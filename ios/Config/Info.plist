@@ -29,6 +29,17 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vitail connects to the development server on your local network.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Vitail uses your precise location after you tap Start Walk to record distance and calculate walking points.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>WalkTracking</key>
+		<string>Precise location is needed to validate your walking distance and award points fairly.</string>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
