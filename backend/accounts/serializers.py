@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, connection, transaction
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -55,7 +56,27 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data, role=User.Role.OWNER)
+        try:
+            with transaction.atomic():
+                return User.objects.create_user(**validated_data, role=User.Role.OWNER)
+        except IntegrityError as exc:
+            # Catch outside atomic so the failed insert is rolled back first.
+            duplicate_email = (
+                connection.vendor == "mysql"
+                and len(exc.args) == 2
+                and exc.args[0] == 1062
+                and exc.args[1].endswith(
+                    ("for key 'email'", "for key 'accounts_user.email'")
+                )
+            ) or (
+                connection.vendor == "sqlite"
+                and exc.args == ("UNIQUE constraint failed: accounts_user.email",)
+            )
+            if not duplicate_email:
+                raise
+            raise serializers.ValidationError(
+                {"email": ["An account with this email already exists."]}
+            ) from exc
 
 
 class LoginSerializer(serializers.Serializer):
