@@ -64,6 +64,45 @@ class AuthApiTests(APITestCase):
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
 
+    def test_registration_preserves_password_whitespace_for_login(self):
+        passwords = (
+            "  River!Orchid9-Train",
+            "River!Orchid9-Train  ",
+            "  River!Orchid9-Train  ",
+        )
+        for index, password in enumerate(passwords):
+            with self.subTest(password=password):
+                email = f"whitespace{index}@example.com"
+                register_response = self.client.post(
+                    self.register_url,
+                    {
+                        "email": email,
+                        "password": password,
+                        "display_name": "Dog Owner",
+                    },
+                    format="json",
+                )
+
+                self.assertEqual(
+                    register_response.status_code, status.HTTP_201_CREATED
+                )
+                login_response = self.client.post(
+                    self.login_url,
+                    {"email": email, "password": password},
+                    format="json",
+                )
+
+                self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+                trimmed_login_response = self.client.post(
+                    self.login_url,
+                    {"email": email, "password": password.strip()},
+                    format="json",
+                )
+
+                self.assertEqual(
+                    trimmed_login_response.status_code, status.HTTP_401_UNAUTHORIZED
+                )
+
     def test_admin_created_cafe_can_log_in(self):
         User.objects.create_user(
             email="cafe@example.com",

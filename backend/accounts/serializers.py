@@ -30,7 +30,9 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
-    password = serializers.CharField(write_only=True, min_length=8, max_length=128)
+    password = serializers.CharField(
+        write_only=True, min_length=8, max_length=128, trim_whitespace=False
+    )
     display_name = serializers.CharField(max_length=100, allow_blank=False)
 
     def validate_email(self, value):
