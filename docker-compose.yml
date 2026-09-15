@@ -7,7 +7,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-vitail-local}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-vitail-root-local}
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT_EXTERNAL:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -18,7 +18,7 @@ services:
 
   api:
     build: ./backend
-    environment:
+    environment: &api-environment
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-unsafe-local-development-key-change-me}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
       # Local-only default lets an iPhone reach the Mac by its LAN address.
@@ -33,13 +33,30 @@ services:
       JWT_ACCESS_MINUTES: ${JWT_ACCESS_MINUTES:-15}
       JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
     depends_on:
       db:
         condition: service_healthy
     command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    healthcheck:
+      # The server binds only after startup migrations have completed.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  expiry:
+    build: ./backend
+    environment: *api-environment
+    volumes:
+      - ./backend:/app
+    depends_on:
+      api:
+        condition: service_healthy
+    command: python manage.py expire_rewards --watch --interval 60
+    restart: on-failure
 
 volumes:
   mysql_data:

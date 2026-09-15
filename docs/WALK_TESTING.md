@@ -7,13 +7,12 @@ debugger also does not prove continued GPS tracking on a locked iPhone.
 
 ## Known MVP limitation
 
-The initial field test exposed implausible GPS position jumps that can inflate
-the displayed and saved distance. The tracker currently accepts fixes based on
-reported accuracy and timestamps, without rejecting sudden jumps. This is a known
-measurement limitation accepted for this MVP checkpoint on 2026-09-09; spike
-handling and regression tests are deferred to the next iteration. Distance must
-not yet be treated as a verified basis for point awards. Real route exports and
-personal device/server settings are kept outside the repository.
+The 2026-09-09 field test exposed implausible GPS jumps. The integrated version
+now breaks distance segments at speeds over 3 m/s and lets the backend validate
+measured samples before awarding points. This is a basic sanity check, not full
+GPS smoothing or anti-cheat. Local distance is still an estimate. The integrated
+build needs another physical-device test; the old export does not verify it.
+Real route exports and personal device/server settings stay outside the repository.
 
 ## Automated checks
 
@@ -22,6 +21,10 @@ Test (Command-U). The 2026-09-09 simulator run completed 116 tests: 115 passed,
 zero failed, and one file-protection attribute check was skipped because the
 simulator did not expose it. Native snapshots also cover normal and large-text
 recovery controls. These checks do not replace the real-iPhone tests below.
+
+The 2026-09-15 integrated simulator run completed 158 tests: 157 passed, zero
+failed, and one device-only file-protection check was skipped. Added checks cover
+upload receipts, legacy archives, pause segments, speed jumps and inactivity.
 
 ## What this version supports
 
@@ -34,8 +37,10 @@ recovery controls. These checks do not replace the real-iPhone tests below.
   Changing owner tabs does not end the walk.
 - Pause and Finish turn off background recording. A visible Walk page can still
   show a foreground location preview. Permission loss, restricted access, or
-  disabling Precise Location pauses the walk; there is no general inactivity
-  auto-pause or five-minute auto-end in this version.
+  disabling Precise Location pauses the walk. Five minutes without accepted
+  movement, or a five-minute manual pause, ends the walk on the next timer,
+  location batch or foreground/Resume check. Suspended iOS timers cannot promise
+  an exact background stop time.
 - All points in delivered location batches are processed in time order. Invalid
   or duplicate samples are ignored. Pause/Resume, an interruption, and gaps over
   60 seconds split the route; no straight-line distance joins those gaps.
@@ -47,7 +52,9 @@ recovery controls. These checks do not replace the real-iPhone tests below.
   starts a new route segment; time while the app was closed is not added.
 - Finishing saves a stable record ID, so a retry after interruption does not
   create a second history entry. History and checkpoints are separate for each
-  account and backend. They do not sync to the server or other devices.
+  account and backend. Raw routes and checkpoints remain local. Eligible new
+  finished walks upload for validation; summaries and awarded points come from
+  the server. Old records without measured accuracy/source metadata stay local.
 
 ## Before taking the phone outside
 
@@ -141,12 +148,14 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 ### 6. Account isolation and sign-out
 
 1. Start a short test walk, then sign out from Account. Background collection
-   should stop; the unfinished walk remains saved for that account, paused.
+   should stop; explicit logout finishes, saves and attempts to upload it before
+   credentials clear. A failed upload must not delete the local record.
 2. Sign in as a different test owner on the same backend. The first owner's
    draft, participants and history must not appear.
-3. Sign back in as the original owner. Check recovery is paused, then Resume or
-   Finish it. Do not change a shared server or delete another person's data to
-   perform this test.
+3. Sign back in as the original owner. Check the finished record is present and
+   pending uploads can retry. Separately test authentication expiry: it leaves
+   an unfinished checkpoint Paused for that owner, not automatically resumed.
+   Do not change a shared server or delete another person's data for this test.
 
 ### 7. Storage and interruptions
 
@@ -162,14 +171,31 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
   if that mode is part of the intended usage. Record differences; reliable
   continuous updates still depend on iOS scheduling, permission and GPS access.
 
+### 8. Connected points and retry
+
+1. Finish a real walk while online. Check its history card shows the server's
+   accepted distance and awarded points, and the wallet refreshes. Awards follow
+   cumulative daily rounding at 8 points/km, capped at 40 points per day.
+2. Pause for less than 60 seconds and move while paused, then Resume and Finish.
+   Neither local nor server distance should bridge that movement.
+3. Finish another walk with the backend unreachable, then reopen and tap Retry
+   when connected. Its saved route must survive and the award must occur once.
+   Submit within 12 hours of starting; later rejected routes remain local-only.
+4. Stay stationary or manually paused for five minutes, then return to Walk.
+   Confirm the session ends and no later movement earns points in that session.
+5. Confirm legacy history remains readable without retrospective awards. A
+   simulator-generated walk must not earn points. Do not remove its source flag.
+6. Use earned points for a test order and confirm the existing owner collection
+   and café order views still agree.
+
 ## Limits and result log
 
 High-accuracy continuous GPS consumes battery. Finish or Pause when not walking;
 the app does not run a perpetual background location service or silently restart
 a walk after force-quit. Standard iOS location indication is intentional.
 
-These tests cover tracking and local history, not server sync, real point awards,
-anti-driving checks, automatic inactivity ending, or personalised welfare rules.
+This checklist covers tracking, local history and the integrated distance-award
+flow. It does not validate advanced anti-cheat or personalised welfare rules.
 
 | Date / build | iPhone / iOS | Test | Result | Observed issue / evidence |
 |---|---|---|---|---|

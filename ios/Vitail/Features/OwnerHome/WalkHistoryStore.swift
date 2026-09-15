@@ -7,6 +7,9 @@ struct WalkRoutePoint: Codable, Equatable, Sendable {
     let latitude: Double
     let longitude: Double
     let timestamp: Date
+    // Optional so existing version-1 archives remain readable, without inventing accuracy.
+    var accuracyM: Double? = nil
+    var isSimulated: Bool? = nil
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -32,6 +35,8 @@ struct WalkRecord: Codable, Equatable, Identifiable, Sendable {
     let distanceMetres: Double
     let dogs: [WalkDogSnapshot]
     let routeSegments: [[WalkRoutePoint]]
+    var serverSummary: WalkSummary? = nil
+    var uploadFailure: String? = nil
 
     var distanceKilometres: Double { distanceMetres / 1_000 }
 
@@ -130,6 +135,15 @@ final class WalkHistoryStore: ObservableObject {
 
     func containsSavedRecord(id: UUID) -> Bool {
         savedRecords.contains { $0.id == id }
+    }
+
+    func updateUpload(id: UUID, summary: WalkSummary? = nil, failure: String? = nil) {
+        guard var record = records.first(where: { $0.id == id }) else { return }
+        if let summary { record.serverSummary = summary }
+        record.uploadFailure = failure
+        pendingRecords[id] = record
+        updateRecords()
+        if hasLoaded { savePendingRecords() }
     }
 
     func retry() {

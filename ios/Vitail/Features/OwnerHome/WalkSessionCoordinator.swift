@@ -10,6 +10,7 @@ final class WalkSessionCoordinator: ObservableObject {
     let tracker: WalkSessionTracker
     let dogSelection: WalkDogSelectionViewModel
     let history: WalkHistoryStore
+    let sync: WalkSyncStore
 
     @Published private(set) var storageErrorMessage: String?
     @Published private(set) var canStartNewWalk = false
@@ -22,6 +23,7 @@ final class WalkSessionCoordinator: ObservableObject {
     private var isWalkPageVisible = false
     private var isEnabled = true
     private var subscriptions: Set<AnyCancellable> = []
+    private var inactivityTimer: Timer?
 
     init(
         ownerID: Int,
@@ -31,6 +33,7 @@ final class WalkSessionCoordinator: ObservableObject {
         historyPersistence: (any WalkHistoryPersisting)? = nil,
         draftPersistence: (any WalkDraftPersisting)? = nil,
         dogService: (any DogServicing)? = nil,
+        walkService: (any WalkServing)? = nil,
         now: @escaping () -> Date = Date.init,
         isForeground: Bool? = nil,
         observeLifecycle: Bool = true
@@ -40,7 +43,9 @@ final class WalkSessionCoordinator: ObservableObject {
         self.locationManager = locationManager ?? WalkLocationManager()
         self.draftPersistence = draftPersistence ?? WalkDraftFileStore(ownerID: ownerID, serverURL: serverURL)
         history = WalkHistoryStore(persistence: historyPersistence ?? WalkHistoryFileStore(ownerID: ownerID, serverURL: serverURL))
+        sync = WalkSyncStore(history: history, service: walkService)
         tracker = WalkSessionTracker(now: now)
+        tracker.enforcesRewardLimits = walkService != nil
         dogSelection = WalkDogSelectionViewModel(session: tracker, service: dogService ?? DogService())
         loadDraft()
 
@@ -59,6 +64,9 @@ final class WalkSessionCoordinator: ObservableObject {
             guard let self else { return }
             refreshLocationMode()
             saveCheckpoint()
+            if tracker.enforcesRewardLimits && tracker.status == .walking && tracker.pointCount >= 5000 {
+                tracker.finish()
+            }
         }
         tracker.onFinish = { [weak self] record in self?.finish(record) }
 
@@ -70,6 +78,11 @@ final class WalkSessionCoordinator: ObservableObject {
         }.store(in: &subscriptions)
 
         if observeLifecycle {
+            if walkService != nil {
+                inactivityTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+                    Task { @MainActor in self?.tracker.checkInactivity() }
+                }
+            }
             NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
                 .sink { [weak self] _ in self?.setForeground(false) }
                 .store(in: &subscriptions)
@@ -82,6 +95,14 @@ final class WalkSessionCoordinator: ObservableObject {
         }
     }
 
+    deinit { inactivityTimer?.invalidate() }
+
+    func prepareForLogout() async {
+        // Explicit logout ends the session, but never discards an unsent local record.
+        if tracker.canFinish { tracker.finish() }
+        await sync.refreshAndUpload()
+    }
+
     func setWalkPageVisible(_ visible: Bool) {
         isWalkPageVisible = visible
         refreshLocationMode()
@@ -91,6 +112,7 @@ final class WalkSessionCoordinator: ObservableObject {
         isForeground = foreground
         guard isEnabled else { return }
         if foreground {
+            tracker.checkInactivity()
             locationManager.refreshAuthorization()
             retryStorage()
         } else {
@@ -99,10 +121,13 @@ final class WalkSessionCoordinator: ObservableObject {
         refreshLocationMode()
     }
 
-    /// Logout ends live collection, but leaves a paused checkpoint for this owner.
+    /// Losing the owner session stops collection; unfinished work stays paused.
     func shutdown() {
         guard isEnabled else { return }
         isEnabled = false
+        sync.stop()
+        inactivityTimer?.invalidate()
+        inactivityTimer = nil
         tracker.pauseForInterruption(message: "Walk paused when you signed out. Tap Resume when ready.")
         saveCheckpoint()
         locationManager.setMode(.off)
@@ -201,6 +226,9 @@ final class WalkSessionCoordinator: ObservableObject {
             pendingFinish = nil
             canStartNewWalk = true
             storageErrorMessage = nil
+            if isEnabled {
+                Task { [weak self] in await self?.sync.refreshAndUpload() }
+            }
         } catch {
             storageErrorMessage = "Your walk is saved in history. Tap Retry to clear its checkpoint before starting another walk."
         }

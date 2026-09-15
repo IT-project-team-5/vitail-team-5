@@ -8,6 +8,20 @@ relational database, clear API contracts, and vertical use-case ownership.
 
 Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 
+### Current implementation versus roadmap
+
+This file retains the wider pilot design. The connected September 2026 MVP has
+`accounts`, `dogs`, `walks` and **one `rewards` app** for catalogue, wallet and
+orders. `docs/FEATURES.md` lists what is testable now and `docs/openapi.yaml`
+describes the real API. Target tables and routes for venues, check-ins, goals,
+charity and verification are future work, not instructions to create parallel
+tables beside working features.
+
+The 2026-09-15 Walk integration uses protected JSON checkpoints/history and
+foreground retry of saved walks, not the original SwiftData buffering proposal.
+`docs/WALK_INTEGRATION.md` describes current behavior; the implementation
+exception to the original offline scope is recorded in `docs/DECISIONS.md`.
+
 ---
 
 ## 1. Final Stack
@@ -18,11 +32,11 @@ Product rules live in `README.md`. Open questions live in `docs/DECISIONS.md`.
 | iOS language | Swift |
 | iOS UI | SwiftUI |
 | iOS architecture | MVVM-style separation |
-| Local persistence | SwiftData |
+| Local persistence | Protected JSON for current Walk history/checkpoints; SwiftData remains a wider-pilot proposal |
 | API client | URLSession + Codable |
 | Concurrency | Swift async/await |
 | Dependency management | Swift Package Manager |
-| Unit and integration tests | Swift Testing |
+| Unit and integration tests | XCTest (iOS), Django tests (backend) |
 | UI tests | XCTest / XCUITest |
 | Walk tracking | Core Location with background location mode |
 | Check-in location | User-initiated Core Location session |
@@ -50,8 +64,8 @@ Owners and café staff use the same native iOS app. The backend role decides whi
 interface loads.
 
 ```text
-Dog owner    → iOS app, Account / Walk / Redeem shell
-Café staff   → iOS app, Account / Orders shell
+Dog owner    → iOS app, Account / Walk / Redeem
+Café staff   → iOS app, Account / Orders
 Vitail admin → Django Admin
 ```
 
@@ -78,8 +92,8 @@ The product depends heavily on iOS-native capability:
 - camera access for optional photo check-ins.
 
 SwiftUI keeps the client native while avoiding a second UI framework. The pilot
-targets iOS 17 or later so SwiftData can provide the short-lived local route
-buffer without adding a third-party database.
+targets iOS 17 or later. Current Walk persistence uses protected JSON files
+without adding a third-party database.
 
 ### Django REST Framework
 
@@ -109,7 +123,11 @@ solved at pilot.
 
 ---
 
-## 3. High-Level Architecture
+## 3. High-Level Architecture — pilot target
+
+Today, the wallet/catalogue/order boxes below share `backend/rewards`. This keeps
+the owner and café views connected to the same data; do not implement another
+redemption source just to match a future folder name.
 
 ```text
                     iOS APP (owner / café staff)
@@ -184,6 +202,19 @@ vitail-team-5/
 
 ## 5. Backend Domain Split
 
+Current, implemented domains:
+
+```text
+accounts   email/JWT authentication, roles, owner/café profiles
+dogs       owner-isolated dog profiles and breed reference data
+walks      validated GPS upload, walk summary/dogs and distance awards
+rewards    PointEntry wallet/ledger, Reward catalogue, Redemption orders,
+           read-only café feed, expiry/refunds and safe Admin operations
+```
+
+The following is a longer-term ownership map, not a migration plan for the
+current MVP:
+
 ```text
 accounts      email authentication, roles, owner profile
 dogs          dog profile, breed reference data, personalised goal
@@ -194,11 +225,44 @@ redemptions   orders, collection, charity donations, history
 rewards       vet checkup and council registration verification
 ```
 
-Separate Django apps reduce migration conflicts and make ownership clear.
+Separate features when needed; reuse the canonical point/order services across
+all earn and spend paths.
 
 ---
 
 ## 6. Core Data Model
+
+### Current physical wallet and order model
+
+| Model | Purpose |
+|---|---|
+| `PointEntry` | Positive `EARN`/`ADMIN`/`REFUND` credits hold remaining points and expiry; negative `SPEND`/`EXPIRE` rows record debits |
+| `Reward` | Available item, description, positive point cost and a `CAFE` account |
+| `Redemption` | One reward/quantity 1, owner and café, immutable names/price snapshots, reference, status, expiry and optional retry UUID |
+| `CafeOrderFeedState` | One committed cursor per café; each canonical order stores its most recent change cursor |
+
+`accounts.CafeProfile` adds an optional address, description and opening-hours
+record per café account. Café name remains `User.display_name`, so catalogue
+names stay consistent. `accounts.0002_cafeprofile` is additive; existing users
+get an empty profile on first access without recreating their account.
+
+The balance is the unexpired positive entries' remaining points. Spending uses
+soonest-expiring credits first with stable creation-time/ID tie breaking. Every
+balance change has its ledger row in the same transaction. Forward migration
+`rewards.0002_connected_redemptions` preserves existing balances, orders and
+references, backfills café/customer snapshots, and protects account deletion.
+There is no separate `venues.VenueOffer` or `redemptions.RedemptionOrder` table.
+
+`walks.Walk` stores the validated summary, selected dogs and upload fingerprint;
+raw uploaded GPS samples are used for validation but not persisted by this slice.
+The unresolved GPS retention decision still blocks future server-side route
+storage. Protected local history is retained by the integrated Walk feature;
+production retention policy still needs review.
+
+### Wider pilot target model (not all implemented)
+
+The field sketches below are the future product design. Django models and
+migrations, not these sketches, are the authority for current physical tables.
 
 ### Account
 
@@ -501,17 +565,27 @@ when a feature needs it.
 
 ### On offline behaviour
 
-A multi-walk offline queue and long-lived background sync are **out of scope**.
-GPS recording itself does not need the network, so:
+General offline authentication and a long-lived background upload worker are
+out of scope. The integrated Walk preserves local history and pending uploads:
 
-- route samples are buffered in SwiftData **during** the walk;
-- the walk uploads when the owner ends it;
-- upload failure retries with backoff while the app is open;
-- there is no queue of several completed offline walks.
+- route samples are checkpointed in protected JSON during the walk;
+- Finish saves a durable record before attempting an upload;
+- foreground entry, Finish and manual Retry reconcile server receipts and
+  submit eligible pending records with their original request IDs;
+- records survive relaunch, but submissions must be within 12 hours of starting;
+- no automatic network backoff worker or server-side raw-route archive is added.
 
 ---
 
 ## 8. Walk Tracking
+
+The current distance-earning slice accepts a manually recorded route upload,
+validates it on the server and credits the canonical wallet. It is intentionally
+smaller than the complete walk/goal roadmap below: no weather/goal bonuses,
+streaks or server-side raw-route history. The integrated client retains protected
+local routes, paused recovery checkpoints and pending finished uploads. The
+server stores summaries and selected dogs. Retry occurs in the foreground;
+real-device GPS/background behaviour still needs a physical test.
 
 ```text
 Owner selects which dogs are coming
@@ -521,7 +595,7 @@ Owner selects which dogs are coming
 → app waits for an accurate GPS lock
 → Core Location tracking starts with background delivery enabled
 → route renders on the map
-→ samples are buffered in SwiftData
+→ samples are checkpointed in protected local JSON
 → Owner selects End
 ```
 
@@ -661,8 +735,13 @@ Earning rules are listed in `README.md`. Implementation requirements:
   earlier event is never retroactively revoked by a later one;
 - the day boundary is the owner's **local date**.
 
-Every award writes both a `PointLot` and a `PointLedger` entry, inside one
-transaction.
+In the current schema, every award creates one positive `PointEntry` containing
+both the ledger amount and remaining lot balance, inside a transaction. Walk
+uploads lock the owner before calculating the daily walking cap and awarding
+points, and a stable request UUID prevents duplicate earnings. The current pilot
+uses `DJANGO_TIME_ZONE` (default `Australia/Melbourne`) for the day boundary;
+there is no per-owner timezone setting yet. The 20-point goal, 12-point check-in
+and other future sources are not silently added by this integration.
 
 ### Streaks
 
@@ -675,6 +754,10 @@ A scheduled job expires lots past `expires_at`, zeroes their remaining amount
 and writes a negative ledger entry. Expiry must be idempotent — running it twice
 must not double-deduct.
 
+Implemented as `python manage.py expire_rewards`: one sweep by default, or
+`--watch --interval 60` in Compose. It also refunds expired pending orders.
+Credit expiry is twelve calendar months, including new refund credits.
+
 ---
 
 ## 12. Redemption
@@ -682,7 +765,7 @@ must not double-deduct.
 ### Partner offer
 
 ```text
-Owner selects venue and items
+Owner selects one reward (quantity 1)
 → backend reads current prices and computes the total
 → backend checks available balance
 → order created as PENDING
@@ -702,8 +785,8 @@ that must be implemented:
 - an admin can cancel and refund an order manually, for example when a venue has
   run out of stock.
 
-At MVP the Redeem button is always tappable and collection has no location
-gate. An owner can therefore mark an order collected away from the venue. This
+At MVP a pending order's Redeem button has no location gate. An owner can
+therefore mark an order collected away from the venue. This
 is a known and accepted gap. Build the collection endpoint so a location policy
 can be added later without reshaping the order state machine.
 
@@ -723,7 +806,7 @@ the list on the next poll.
 
 Implementation requirements:
 
-- the feed is scoped to the venue attached to the signed-in `CAFE` account, and
+- the feed is scoped to the café account snapshotted on the order, and
   must never return another café's orders;
 - it accepts a `since` cursor and returns only what changed;
 - respond `304 Not Modified` when nothing changed, so idle polling is nearly
@@ -732,6 +815,13 @@ Implementation requirements:
 - the screen is a **display surface only**. There is no endpoint a café can call
   to mutate an order — collection is driven by the owner's app, never by the
   café.
+
+The response is `{cursor, upserts, removed_ids, reset}`; each upsert contains
+`id`, `reference_number`, `owner_name`, `items: [{name, quantity: 1}]` and
+`ordered_at`. An empty café catalogue returns an empty feed, not a missing-venue
+error. `X-Cafe-Orders-Cursor` and `Cache-Control: no-store` accompany feed
+responses. Since orders cannot be deleted or edited through Admin, their last
+change cursor supports deltas without a second event log or retention policy.
 
 ### Order state machine
 
@@ -748,16 +838,26 @@ Deduction and collection each run in a single database transaction:
 
 ```text
 BEGIN
-lock the order row
+lock the owner, then the reward/order/point rows
 check the current status
 check expiry
 apply the state change
 write ledger entries
+advance the café cursor within the same transaction
 COMMIT
 ```
 
 If any step fails, `ROLLBACK`. A repeated request must return the existing
-state, never apply the change twice.
+state, never apply the change twice. Order creation accepts a client `request_id`
+UUID; keep it across retries of the same confirmation. Reusing it for another
+reward is a conflict. Collection of an expired order commits its refund before
+returning HTTP 409, so an error response cannot roll back required expiry.
+
+Admin can add only positive grants to owner accounts; existing point entries and
+orders cannot be edited or deleted. The **Cancel pending orders and refund
+points** action handles pending orders transactionally and is safe to repeat.
+Collected orders are not cancelled/refunded by that action. Accounts with
+role-specific records cannot be changed to another role in Admin.
 
 ### Charity donation
 
@@ -768,18 +868,7 @@ venue, no location verification and no collection step.
 
 ## 13. API Structure
 
-```text
-/api/auth/
-/api/dogs/
-/api/walks/
-/api/venues/
-/api/checkins/
-/api/wallet/
-/api/redemptions/
-/api/rewards/
-```
-
-Indicative endpoints:
+Implemented endpoints (see `docs/openapi.yaml` for schemas):
 
 ```text
 POST   /api/auth/register
@@ -796,32 +885,26 @@ DELETE /api/dogs/{id}
 GET    /api/dogs/{id}/goal
 
 POST   /api/walks
-GET    /api/walks/{id}
-
-GET    /api/venues
-GET    /api/venues/{id}
-GET    /api/venues/{id}/offers
-
-POST   /api/checkins
-POST   /api/checkins/{id}/heartbeat
+GET    /api/walks
 
 GET    /api/wallet
 GET    /api/wallet/ledger
 
-POST   /api/redemptions/orders
-POST   /api/redemptions/orders/{id}/collect
-GET    /api/redemptions/orders
-POST   /api/redemptions/donations
+GET    /api/redemptions/rewards
+POST   /api/redemptions
+POST   /api/redemptions/{id}/collect
+GET    /api/redemptions
 
 GET    /api/cafe/orders              café order feed, CAFE role, polled
-
-POST   /api/rewards/vet-checkup
-POST   /api/rewards/council-registration
+GET    /api/cafe/profile             own venue details, CAFE role
+PATCH  /api/cafe/profile             own name/address/description/opening_hours
 ```
 
 Exact routes are ultimately defined by OpenAPI, not copied between developers.
 Sign in with Apple, password reset and account deletion endpoints are added in
-their later use cases.
+their later use cases. Venue/check-in, vet/council evidence and charity endpoints
+are also planned, not implemented. Auth/dog paths use the displayed no-trailing-
+slash URLs; wallet/redemption/café/walk routes accept either style.
 
 ---
 
@@ -873,10 +956,16 @@ stores the session and routes to its shell.
 Both tokens are stored in iOS Keychain, never in SwiftData or UserDefaults. On
 logout, the app removes them. Backend permissions remain authoritative; hiding
 a screen is not access control.
+Tokens are bound to the selected backend; changing the Debug URL or upgrading
+old unbound credentials requires a fresh login. All features use the same
+authenticated request/refresh path.
 
 Sign in with Apple is deferred until the project has its own Apple Developer
 Program account. Password reset and in-app account deletion are separate later
 use cases. Google login is not included.
+
+The broader permission roadmap below includes planned features. Current
+permissions cover profiles, dogs, walks, wallet, catalogue and orders only.
 
 ```text
 OWNER
@@ -888,7 +977,8 @@ OWNER
 
 CAFE
 - view orders for own venue only
-- nothing else: cannot edit offers, cannot collect an order
+- edit own venue name/address/description/opening hours
+- cannot edit login email, role, offers or prices; cannot collect an order
 
 ADMIN
 - Django Admin
@@ -980,8 +1070,10 @@ edit the Django model
 Every schema-changing pull request contains the model change, the migration,
 tests and a documentation update.
 
-Early development may reset and reseed the development database. Once pilot data
-exists, use forward migrations and back up before risky changes.
+Use forward migrations for existing data; never reset a teammate's database to
+resolve a merge. Tests use isolated databases and include an existing-data
+upgrade regression. A Git pull transfers code/schema migrations, not database
+rows. Any intentional reset requires an explicit choice and known target.
 
 ---
 
@@ -992,6 +1084,7 @@ Docker Compose services:
 ```text
 api
 db
+expiry    periodic point expiry and end-of-day order refunds
 ```
 
 Compose environment overrides:
@@ -1008,6 +1101,12 @@ MYSQL_ROOT_PASSWORD
 JWT_ACCESS_MINUTES
 JWT_REFRESH_DAYS
 ```
+
+`make up` starts the three services; the API migrates before binding its port,
+and the expiry worker waits for API health. `make test` / `make check` use SQLite
+without changing local MySQL data. MySQL-specific row-lock tests are skipped on
+SQLite and should be run against a separate disposable MySQL test database.
+`make expire` runs one immediate, idempotent expiry sweep.
 
 iOS local configuration:
 
@@ -1073,7 +1172,7 @@ check-in awards and daily uniqueness
 
 ```text
 Core Location walk tracking and background lifecycle
-route UI and SwiftData buffering
+route UI and protected local persistence
 walk upload and validation
 points engine, caps, rounding
 point lots, ledger, FIFO spend, expiry job
@@ -1131,23 +1230,29 @@ Review is lightweight: confirm the build, the use-case flow, key errors and
 security basics. Do not require coverage targets, speculative abstractions or a
 large review process for the MVP.
 
-First authentication-slice acceptance flow:
+Current connected-MVP acceptance flow:
 
 ```text
 User explicitly chooses dog owner or café owner on the login page
-Owner registers with email/password → receives OWNER role → owner tab shell
-Café account is created in Django Admin → logs in → café tab shell
-Owner shell: swipe or tap between Account / Walk / Redeem; fixed `0 pts`
+Owner registers with email/password → receives OWNER role
+Café account and an available Reward are created in Django Admin
+Owner: swipe or tap between Account / Walk / Redeem; real wallet balance
 Café shell: tap between Account / Orders
+Owner earns walking points (or receives an explicit positive Admin test grant)
+Owner confirms one reward → one debit/reference/order
+Café sees that same pending order on its next poll
+Owner collects → café order disappears, no second debit
+Another order expires or is cancelled by Admin → one refund
 Logout is available from Account for both roles
 App relaunch refreshes the session from Keychain
 Logout removes the local session
 ```
 
-Walk, Redeem and Orders are navigation placeholders in this slice. They do not
-claim that tracking, redemption, order polling or real point balances exist.
+Dog/profile CRUD, backend-URL selection, token refresh and role isolation must
+continue working across these features. Physical-device GPS behaviour and the
+full end-to-end UI remain part of tester acceptance, not replaced by unit tests.
 
-Main acceptance flow:
+Wider pilot acceptance flow (includes still-planned goals/check-ins):
 
 ```text
 Owner registers with email and password
@@ -1192,7 +1297,7 @@ point expiry at 12 months
 Android
 merchant self-registration and self-service offer editing
 location-gated order collection (planned after MVP)
-multi-walk offline queues and long-lived background sync
+general offline authentication and long-lived background upload workers
 remote push notifications
 App Attest and advanced device integrity
 in-app payments

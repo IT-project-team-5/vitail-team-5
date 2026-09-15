@@ -54,6 +54,38 @@ behaviour for them, raise them instead.
 | R39 | Location gate on order collection | No location gate in the MVP. An owner can mark an order collected without being at the venue; location-gated collection remains a possible later-phase control. This confirms and clarifies R34 |
 | R40 | First authentication slice | Email/password only: owners self-register, while café accounts are created in Django Admin. Both use the same iOS login and route by `OWNER` or `CAFE`. JWT access/refresh tokens are stored in Keychain. Sign in with Apple waits for a project-owned Apple Developer Program account; password reset and account deletion are later use cases. This supersedes R36's delivery order, not its long-term intent |
 | R41 | MVP development approach | Use feature-first folders, a small central design system and the minimum `View → ViewModel → Service` layers. Review is lightweight: build, happy path, key failures, permissions and secrets; no coverage target or speculative architecture |
+| R42 | Café venue details | Café accounts may edit their own venue name, address, description and opening hours in Account. Login email, role, offers and point prices are not editable there. This updates R13's admin-only onboarding boundary for venue details, as requested on 2026-09-09 |
+
+### Connected MVP implementation notes (2026-09-09)
+
+The current scope connects manual GPS walking, the existing point ledger,
+single-reward orders, owner collection and the café feed. Walking earns at
+8 points/km up to 40 walking points per Melbourne day; other award sources
+remain planned. A walk belongs to the local date on which it ends.
+
+The server validates submitted GPS, keeps only a walk summary and a request
+fingerprint, and discards raw coordinates after validation. Historical route
+storage remains deferred while O9 is open. The app keeps the active/unsaved
+walk in memory only; force-quitting loses it.
+
+The daily cumulative rounding implementation remains subject to O7 confirmation;
+no minimum walk duration or personalised-goal bonus is invented here.
+
+### Walk integration implementation update (2026-09-15)
+
+At the walk-feature owner's request, integration preserves the existing compact
+tracking UI, protected JSON checkpoints and local route history. This supersedes
+the memory-only implementation described in the dated note above. Eligible new
+finished records can wait locally and retry in the foreground, using one stable
+request ID; the server's 12-hour submission limit still applies. The server keeps
+summaries, not raw routes. Legacy records without measured metadata do not earn.
+
+This records an implementation exception to R11 and the planned SwiftData choice
+in R35, not new client approval of a full offline product. General offline login
+and a background upload worker are not implemented. O9 remains open for future
+server-side route storage and production retention policy; local retention and
+this exception should be reviewed with the team before release. See
+`WALK_INTEGRATION.md` for the current behavior and test boundaries.
 
 ### On R29
 

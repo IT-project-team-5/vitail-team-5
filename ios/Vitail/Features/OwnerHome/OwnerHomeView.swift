@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OwnerHomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
     private enum Page: String, CaseIterable, Identifiable {
         case account = "Account"
         case walk = "Walk"
@@ -33,30 +34,41 @@ struct OwnerHomeView: View {
 
     let user: User
     @ObservedObject var session: SessionStore
+    let dogService: any DogServicing
+    let walkService: any WalkServing
+    @StateObject private var redemptionViewModel: RedemptionViewModel
     @StateObject private var walkCoordinator: WalkSessionCoordinator
     @State private var selection: Page = .walk
 
-    init(user: User, session: SessionStore) {
+    init(
+        user: User, session: SessionStore,
+        dogService: any DogServicing = DogService(),
+        redemptionService: any RedemptionServing = RedemptionService(),
+        walkService: any WalkServing = WalkService()
+    ) {
         self.user = user
         self.session = session
-        _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(ownerID: user.id, session: session))
+        self.dogService = dogService
+        self.walkService = walkService
+        _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
+            ownerID: user.id, session: session, dogService: dogService, walkService: walkService
+        ))
+        _redemptionViewModel = StateObject(
+            wrappedValue: RedemptionViewModel(service: redemptionService)
+        )
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $selection) {
-                    OwnerProfileView(user: user, session: session)
+                    OwnerProfileView(user: user, session: session, dogService: dogService)
                         .tag(Page.account)
                     WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk) {
                         selection = .account
                     }
-                        .tag(Page.walk)
-                    placeholderPage(
-                        icon: "gift.fill",
-                        title: "Redeem",
-                        message: "Rewards will appear here."
-                    )
+                    .tag(Page.walk)
+                    RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -70,27 +82,20 @@ struct OwnerHomeView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 4) {
                         Image(systemName: "pawprint.fill")
-                        Text("0 pts")
+                        Text(redemptionViewModel.balance.map { "\($0) pts" } ?? "— pts")
                     }
                         .fontWeight(.semibold)
                         .foregroundStyle(AppColors.brand)
                 }
             }
+            .task(id: "\(selection.rawValue)-\(scenePhase == .active)") {
+                guard scenePhase == .active else { return }
+                walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel] in await redemptionViewModel?.refresh() }
+                session.beforeLogout = { [weak walkCoordinator] in await walkCoordinator?.prepareForLogout() }
+                await walkCoordinator.sync.refreshAndUpload()
+                await redemptionViewModel.refresh()
+            }
         }
-    }
-
-    private func placeholderPage(icon: String, title: String, message: String) -> some View {
-        VStack(spacing: AppSpacing.medium) {
-            Image(systemName: icon)
-                .font(.system(size: 44))
-                .foregroundStyle(AppColors.brand)
-            Text(title)
-                .font(.title2.bold())
-            Text(message)
-                .foregroundStyle(AppColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(AppSpacing.large)
     }
 
     private var bottomNavigation: some View {

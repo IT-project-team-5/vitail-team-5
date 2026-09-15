@@ -26,15 +26,17 @@ struct User: Codable, Equatable, Identifiable, Sendable {
 struct AuthTokens: Codable, Equatable, Sendable {
     let access: String
     let refresh: String
+    var backendURL: String? = nil
 }
 
 struct AuthResponse: Codable, Equatable, Sendable {
     let access: String
     let refresh: String
     let user: User
+    var backendURL: String? = nil
 
     var tokens: AuthTokens {
-        AuthTokens(access: access, refresh: refresh)
+        AuthTokens(access: access, refresh: refresh, backendURL: backendURL)
     }
 }
 

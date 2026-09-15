@@ -16,7 +16,7 @@ struct WalkHistorySection: View {
                     .foregroundStyle(AppColors.secondaryText)
             }
 
-            Text("Saved on this device only.")
+            Text("Routes stay on this device. Uploaded walk summaries and points are stored on the server.")
                 .font(.caption)
                 .foregroundStyle(AppColors.secondaryText)
 
@@ -89,6 +89,9 @@ struct WalkHistoryCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             WalkHistoryStats(walk: walk)
+            Text(walk.syncDescription)
+                .font(.caption)
+                .foregroundStyle(AppColors.secondaryText)
 
             if walk.routeSegments.contains(where: { !$0.isEmpty }) {
                 WalkRouteThumbnail(segments: walk.routeSegments)

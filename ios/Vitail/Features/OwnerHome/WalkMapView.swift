@@ -35,6 +35,17 @@ final class WalkSessionTracker: ObservableObject {
     private var activeIntervalStartedAt: Date?
     private var activeDuration: TimeInterval = 0
     private let now: () -> Date
+    var enforcesRewardLimits = false
+    private var lastMovementAt: Date?
+    private var pausedAt: Date?
+    var pointCount: Int { routeSegments.reduce(0) { $0 + $1.count } }
+
+    func checkInactivity() {
+        guard enforcesRewardLimits, isInProgress,
+              let last = pausedAt ?? lastMovementAt, now().timeIntervalSince(last) >= 300 else { return }
+        finish()
+        trackingNotice = "Walk ended after 5 minutes without activity. Recorded points are validated by the server."
+    }
 
     init(now: @escaping () -> Date = Date.init, onFinish: @escaping (WalkRecord) -> Void = { _ in }) {
         self.now = now
@@ -79,6 +90,8 @@ final class WalkSessionTracker: ObservableObject {
         guard canStart, let location, Self.canUse(location), !dogs.isEmpty else { return }
 
         let startTime = now()
+        lastMovementAt = startTime
+        pausedAt = nil
         var seenDogIDs: Set<Int> = []
         participatingDogs = dogs.filter { seenDogIDs.insert($0.id).inserted }
         distanceMetres = 0
@@ -104,6 +117,7 @@ final class WalkSessionTracker: ObservableObject {
 
     func pause() {
         guard status == .walking else { return }
+        pausedAt = now()
         finishActiveInterval(at: now())
         lastTrackedLocation = nil
         startsNewSegment = true
@@ -112,7 +126,9 @@ final class WalkSessionTracker: ObservableObject {
     }
 
     func resume(from location: CLLocation?) {
+        checkInactivity()
         guard status == .paused else { return }
+        pausedAt = nil
         lastTrackedLocation = nil
         startsNewSegment = true
         let resumeTime = now()
@@ -160,6 +176,7 @@ final class WalkSessionTracker: ObservableObject {
             if recordLocation(location) { changed = true }
         }
         if changed { onChange?() }
+        checkInactivity()
     }
 
     func interruptRoute(message: String) {
@@ -172,6 +189,7 @@ final class WalkSessionTracker: ObservableObject {
 
     func pauseForInterruption(message: String) {
         guard status == .walking else { return }
+        pausedAt = now()
         finishActiveInterval(at: now())
         lastTrackedLocation = nil
         startsNewSegment = true
@@ -206,12 +224,20 @@ final class WalkSessionTracker: ObservableObject {
         lastTrackedLocation = nil
         startsNewSegment = true
         trackingNotice = "Previous walk recovered. Tap Resume when ready. Time while the app was closed is not counted."
+        lastMovementAt = nil
+        pausedAt = nil
         status = .paused
         onChange?()
         return true
     }
 
     private func recordLocation(_ location: CLLocation) -> Bool {
+        if enforcesRewardLimits && pointCount >= 5000 { return false }
+        if enforcesRewardLimits && !Self.canUse(location) {
+            lastTrackedLocation = nil
+            startsNewSegment = true
+            return false
+        }
         guard status == .walking, Self.canUse(location), isNewRouteTimestamp(location.timestamp) else { return false }
 
         if let previous = lastTrackedLocation,
@@ -221,6 +247,7 @@ final class WalkSessionTracker: ObservableObject {
         }
 
         guard let previousLocation = lastTrackedLocation else {
+            if lastMovementAt == nil { lastMovementAt = location.timestamp }
             lastTrackedLocation = location
             appendRoutePoint(location)
             trackingNotice = nil
@@ -231,6 +258,15 @@ final class WalkSessionTracker: ObservableObject {
 
         let segmentDistance = location.distance(from: previousLocation)
         guard segmentDistance.isFinite, segmentDistance >= 0 else { return false }
+
+        if enforcesRewardLimits && segmentDistance / location.timestamp.timeIntervalSince(previousLocation.timestamp) > 3 {
+            // Keep both measured points for server validation, but never draw/credit a jump.
+            startsNewSegment = true
+            lastTrackedLocation = location
+            appendRoutePoint(location)
+            return true
+        }
+        if segmentDistance >= 1 { lastMovementAt = location.timestamp }
 
         distanceMetres += segmentDistance
         lastTrackedLocation = location
@@ -247,7 +283,9 @@ final class WalkSessionTracker: ObservableObject {
     private func appendRoutePoint(_ location: CLLocation) {
         let point = WalkRoutePoint(
             latitude: location.coordinate.latitude, longitude: location.coordinate.longitude,
-            timestamp: location.timestamp
+            timestamp: location.timestamp,
+            accuracyM: location.horizontalAccuracy,
+            isSimulated: location.sourceInformation?.isSimulatedBySoftware ?? false
         )
         if startsNewSegment || routeSegments.isEmpty {
             routeSegments.append([point])
@@ -322,6 +360,7 @@ struct WalkMapView: View {
                     mapCard
                         .frame(height: Self.mapHeight(availableHeight: geometry.size.height, cardHeight: walkCardHeight))
 
+                    WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
                     WalkHistorySection(store: walkHistory)
                 }
                 .padding(AppSpacing.medium)
