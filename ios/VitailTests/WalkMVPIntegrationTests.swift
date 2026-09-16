@@ -78,6 +78,127 @@ final class WalkMVPIntegrationTests: XCTestCase {
         XCTAssertNil(history.records.first?.serverSummary)
     }
 
+    func testConcurrentFinishRefreshWaitsAndUploadsTheNewDurableRecord() async {
+        let history = WalkHistoryStore(persistence: MVPMemoryHistory())
+        let first = record()
+        history.append(first)
+        let gate = MVPRequestGate()
+        let server = MVPWalkServer(submitGate: gate)
+        let sync = WalkSyncStore(history: history, service: server)
+        let originalRefresh = Task { await sync.refreshAndUpload() }
+        await gate.waitUntilEntered()
+
+        // The current pass has already captured its list of finished walks.
+        let justFinished = record()
+        history.append(justFinished)
+        let joinStarted = expectation(description: "Finish/logout joins the running upload")
+        var finishReturned = false
+        let finishRefresh = Task {
+            joinStarted.fulfill()
+            await sync.refreshAndUpload()
+            finishReturned = true
+        }
+        await fulfillment(of: [joinStarted], timeout: 1)
+        XCTAssertFalse(finishReturned, "Logout must wait before clearing credentials.")
+
+        await gate.release()
+        await originalRefresh.value
+        await finishRefresh.value
+        let count = await server.postCount
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(Set(history.records.compactMap { $0.serverSummary?.requestID }), [first.id, justFinished.id])
+        XCTAssertFalse(sync.isSyncing)
+    }
+
+    func testChangingTabsCannotCancelAnAlreadyRunningDurableUpload() async {
+        let history = WalkHistoryStore(persistence: MVPMemoryHistory())
+        history.append(record())
+        let gate = MVPRequestGate()
+        let server = MVPWalkServer(getGate: gate)
+        let sync = WalkSyncStore(history: history, service: server)
+        let viewTask = Task { await sync.refreshAndUpload() }
+        await gate.waitUntilEntered()
+        viewTask.cancel()
+        await gate.release()
+        await viewTask.value
+
+        let count = await server.postCount
+        XCTAssertEqual(count, 1)
+        XCTAssertNotNil(history.records.first?.serverSummary)
+    }
+
+    func testStoppingDuringReceiptFetchPreventsSubmissionsAndWalletCallbacks() async {
+        let history = WalkHistoryStore(persistence: MVPMemoryHistory())
+        history.append(record())
+        let gate = MVPRequestGate()
+        let server = MVPWalkServer(getGate: gate)
+        let sync = WalkSyncStore(history: history, service: server)
+        var walletUpdates = 0
+        sync.onWalletChanged = { walletUpdates += 1 }
+        let refresh = Task { await sync.refreshAndUpload() }
+        await gate.waitUntilEntered()
+        sync.stop()
+        await gate.release()
+        await refresh.value
+
+        let count = await server.postCount
+        XCTAssertEqual(count, 0)
+        XCTAssertEqual(walletUpdates, 0)
+        XCTAssertTrue(sync.summaries.isEmpty)
+    }
+
+    func testStoppingDuringSubmissionIgnoresLateReceiptAndPreventsNextSubmission() async {
+        let history = WalkHistoryStore(persistence: MVPMemoryHistory())
+        history.append(record())
+        history.append(record())
+        let gate = MVPRequestGate()
+        let server = MVPWalkServer(submitGate: gate)
+        let sync = WalkSyncStore(history: history, service: server)
+        var walletUpdates = 0
+        sync.onWalletChanged = { walletUpdates += 1 }
+        let refresh = Task { await sync.refreshAndUpload() }
+        await gate.waitUntilEntered()
+        sync.stop()
+        await gate.release()
+        await refresh.value
+
+        let count = await server.postCount
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(walletUpdates, 0)
+        XCTAssertTrue(history.records.allSatisfy { $0.serverSummary == nil })
+        XCTAssertTrue(sync.summaries.isEmpty)
+    }
+
+    func testTerminalRejectionWithoutServerMessageIsDurableAndNotRetried() async {
+        let persistence = MVPMemoryHistory()
+        let history = WalkHistoryStore(persistence: persistence)
+        history.append(record())
+        let server = MVPWalkServer()
+        await server.setSubmissionFailure(.http(status: 400, message: nil))
+        let sync = WalkSyncStore(history: history, service: server)
+        await sync.refreshAndUpload()
+        XCTAssertEqual(persistence.records.first?.uploadFailure, "The request failed (HTTP 400).")
+
+        let restored = WalkSyncStore(history: WalkHistoryStore(persistence: persistence), service: server)
+        await restored.refreshAndUpload()
+        let count = await server.postCount
+        XCTAssertEqual(count, 1)
+    }
+
+    func testHistorySaveFailureNeverSubmitsAnUndurableRoute() async {
+        let persistence = MVPMemoryHistory()
+        persistence.failSave = true
+        let history = WalkHistoryStore(persistence: persistence)
+        history.append(record())
+        let server = MVPWalkServer()
+        let sync = WalkSyncStore(history: history, service: server)
+        await sync.refreshAndUpload()
+        let count = await server.postCount
+        XCTAssertEqual(count, 0)
+        XCTAssertNotNil(history.errorMessage)
+        XCTAssertTrue(persistence.records.isEmpty)
+    }
+
     func testSimulatorFlagSurvivesRequestConversion() throws {
         let walk = record(simulated: true)
         XCTAssertTrue(try XCTUnwrap(walk.uploadRequest).samples.allSatisfy(\.isSimulated))
@@ -153,8 +274,12 @@ final class WalkMVPIntegrationTests: XCTestCase {
 @MainActor
 private final class MVPMemoryHistory: WalkHistoryPersisting {
     var records: [WalkRecord] = []
+    var failSave = false
     func load() throws -> [WalkRecord] { records }
-    func save(_ records: [WalkRecord]) throws { self.records = records }
+    func save(_ records: [WalkRecord]) throws {
+        if failSave { throw CocoaError(.fileWriteNoPermission) }
+        self.records = records
+    }
 }
 
 private actor MVPWalkServer: WalkServing {
@@ -162,19 +287,60 @@ private actor MVPWalkServer: WalkServing {
     var receipts: [WalkSummary] = []
     var offline = false
     var timeoutAfterCommit = false
+    private var submissionFailure: APIError?
+    private let getGate: MVPRequestGate?
+    private let submitGate: MVPRequestGate?
+
+    init(getGate: MVPRequestGate? = nil, submitGate: MVPRequestGate? = nil) {
+        self.getGate = getGate
+        self.submitGate = submitGate
+    }
+
     func setOffline(_ value: Bool) { offline = value }
     func setTimeoutAfterCommit(_ value: Bool) { timeoutAfterCommit = value }
+    func setSubmissionFailure(_ error: APIError) { submissionFailure = error }
     func getWalks() async throws -> [WalkSummary] {
+        await getGate?.enter()
         if offline { throw URLError(.notConnectedToInternet) }
         return receipts
     }
     func submit(_ request: WalkRequest) async throws -> WalkSummary {
         postCount += 1
+        if postCount == 1 { await submitGate?.enter() }
+        if let submissionFailure { throw submissionFailure }
         let receipt = WalkSummary(id: 1, requestID: request.requestID, startedAt: request.startedAt,
                                   endedAt: request.endedAt, distanceM: 40, pointsAwarded: 1,
                                   pointDate: "2026-09-09", dogIDs: request.dogIDs)
         receipts.append(receipt)
         if timeoutAfterCommit { throw URLError(.timedOut) }
         return receipt
+    }
+}
+
+private actor MVPRequestGate {
+    private var entered = false
+    private var released = false
+    private var observers: [CheckedContinuation<Void, Never>] = []
+    private var blockedRequests: [CheckedContinuation<Void, Never>] = []
+
+    func enter() async {
+        entered = true
+        for observer in observers { observer.resume() }
+        observers.removeAll()
+        if !released {
+            await withCheckedContinuation { blockedRequests.append($0) }
+        }
+    }
+
+    func waitUntilEntered() async {
+        if !entered {
+            await withCheckedContinuation { observers.append($0) }
+        }
+    }
+
+    func release() {
+        released = true
+        for request in blockedRequests { request.resume() }
+        blockedRequests.removeAll()
     }
 }

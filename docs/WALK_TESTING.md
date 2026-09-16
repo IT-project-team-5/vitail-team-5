@@ -26,6 +26,14 @@ The 2026-09-15 integrated simulator run completed 158 tests: 157 passed, zero
 failed, and one device-only file-protection check was skipped. Added checks cover
 upload receipts, legacy archives, pause segments, speed jumps and inactivity.
 
+The 2026-09-16 integration with current main completed 169 simulator tests:
+168 passed, zero failed, and the same device-only check was skipped. Added
+regressions cover delayed GPS inactivity, recovered inactivity windows, stale
+weak fixes, concurrent Finish/upload and logout waiting, tab cancellation,
+stopped-account responses, durable terminal errors and failed local saves.
+All 100 backend tests passed on disposable MySQL 9.3; SQLite passed 95 and
+skipped five MySQL-only checks. The unsigned Release device build also passed.
+
 ## What this version supports
 
 - Select one or more dogs, then manually Start Walk while the app is in the
@@ -49,7 +57,9 @@ upload receipts, legacy archives, pause segments, speed jumps and inactivity.
   not yet a validated points-earning or welfare-goal time measurement.
 - Local checkpoints preserve the walk ID, dogs, route, distance and accumulated
   time. Reopening restores the last successful checkpoint as **Paused**. Resume
-  starts a new route segment; time while the app was closed is not added.
+  starts a new route segment if the five-minute inactivity window has not
+  expired; otherwise the next inactivity check finishes the saved walk. Time
+  while the app was closed is not added.
 - Finishing saves a stable record ID, so a retry after interruption does not
   create a second history entry. History and checkpoints are separate for each
   account and backend. Raw routes and checkpoints remain local. Eligible new
@@ -140,8 +150,10 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 4. Confirm the last successfully saved dogs, distance and route return as Paused
    with a recovery notice. The closed-app interval must not add time or distance.
    The unsaved tail after the last checkpoint may be missing; it is not recoverable.
-5. Resume, walk another section, and Finish. Confirm the new section is not
-   connected across the closed-app interval.
+5. Resume within the five-minute inactivity window, walk another section, and
+   Finish. Confirm the new section is not connected across the closed-app
+   interval. Separately reopen after that window and confirm the recovered walk
+   finishes instead of restarting its inactivity timer.
 6. Close and reopen again. Check the finished walk appears exactly once and its
    route and total remain stable. A storage Retry action must not duplicate it.
 

@@ -44,18 +44,47 @@ final class WalkSyncStore: ObservableObject {
     private let history: WalkHistoryStore
     private let service: (any WalkServing)?
     private var isEnabled = true
+    private var syncTask: Task<Void, Never>?
+    private var needsRefresh = false
 
     init(history: WalkHistoryStore, service: (any WalkServing)?) {
         self.history = history
         self.service = service
     }
 
-    func stop() { isEnabled = false }
+    func stop() {
+        isEnabled = false
+        syncTask?.cancel()
+    }
 
     func refreshAndUpload() async {
-        guard isEnabled, !isSyncing, let service else { return }
+        guard isEnabled, let service else { return }
+        needsRefresh = true
+        if let syncTask {
+            // Finish/logout must wait for the current pass and request another
+            // pass: its snapshot may predate the newly finished durable record.
+            await syncTask.value
+            return
+        }
         isSyncing = true
-        defer { isSyncing = false }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                isSyncing = false
+                syncTask = nil
+            }
+            // Own the operation independently of a tab's cancellable .task.
+            // Only shutting down this account cancels its synchronization.
+            while needsRefresh, isEnabled, !Task.isCancelled {
+                needsRefresh = false
+                await reconcileAndUpload(using: service)
+            }
+        }
+        syncTask = task
+        await task.value
+    }
+
+    private func reconcileAndUpload(using service: any WalkServing) async {
         history.retry()
         do {
             // Reconcile first: a timed-out POST may already have credited the wallet.
@@ -82,9 +111,9 @@ final class WalkSyncStore: ObservableObject {
                     summaries.insert(receipt, at: 0)
                 } catch {
                     guard isEnabled, !Task.isCancelled else { return }
-                    if case let APIError.http(code, message) = error,
+                    if case let APIError.http(code, _) = error,
                        code == 400 || code == 409 {
-                        history.updateUpload(id: record.id, failure: message)
+                        history.updateUpload(id: record.id, failure: error.localizedDescription)
                         continue
                     }
                     errorMessage = "Upload not confirmed. Your route is saved. Tap Retry when online."
