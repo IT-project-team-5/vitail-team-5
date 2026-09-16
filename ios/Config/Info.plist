@@ -30,7 +30,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vitail connects to the development server on your local network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Vitail uses your precise location after you tap Start Walk to record distance and calculate walking points.</string>
+	<string>Vitail shows your position and records walks you start, including while locked or in the background. Routes stay on this device; location samples are sent to your server to validate walking points. Pause or finish to stop background recording.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>WalkTracking</key>

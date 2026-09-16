@@ -59,8 +59,13 @@ def validated_distance(*, started_at, ended_at, samples):
         raise ValidationError({"ended_at": "Walk times cannot be in the future."})
 
     previous_time = None
+    previous_segment = 0
     accurate = []
     for sample in samples:
+        segment = sample.get("segment_id", 0)
+        if (previous_time is None and segment != 0) or segment not in (previous_segment, previous_segment + 1):
+            raise ValidationError({"samples": "Segments must start at zero and increase consecutively."})
+        previous_segment = segment
         recorded_at = sample["recorded_at"]
         if sample["is_simulated"]:
             raise ValidationError({"code": "SIMULATED_LOCATION", "message": "Simulated locations cannot earn walking points."})
@@ -84,6 +89,11 @@ def validated_distance(*, started_at, ended_at, samples):
         if (sample["recorded_at"] - last_movement_at).total_seconds() >= INACTIVITY_SECONDS:
             break
         if previous is None:
+            previous = sample
+            continue
+        if sample.get("segment_id", 0) != previous.get("segment_id", 0):
+            # Pause, recovery and GPS interruptions never earn bridging distance.
+            # Do not reset last_movement_at: the five-minute inactivity rule still applies.
             previous = sample
             continue
         seconds = (sample["recorded_at"] - previous["recorded_at"]).total_seconds()
@@ -112,7 +122,8 @@ def request_fingerprint(*, started_at, ended_at, dog_ids, samples):
         "ended_at": ended_at.isoformat(),
         "dog_ids": sorted(dog_ids),
         "samples": [
-            {**sample, "recorded_at": sample["recorded_at"].isoformat()}
+            {**{key: value for key, value in sample.items() if key != "segment_id" or value != 0},
+             "recorded_at": sample["recorded_at"].isoformat()}
             for sample in samples
         ],
     }

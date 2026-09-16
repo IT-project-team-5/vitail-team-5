@@ -55,6 +55,16 @@ The current catalogue uses one `Reward` linked directly to a café account and
 one item (quantity 1) per `Redemption`. There is no cart or separate venue/order
 database. Names, price and café ownership are snapshotted at order time.
 
+The Walk integration now preserves the compact multi-dog controls, manual pause
+and resume, lock-screen recording, protected recovery drafts and local route
+history. Finished records save on-device first, then upload measured GPS and
+segment boundaries to the canonical walking-points API. Server receipts, not
+the live distance estimate, confirm points. Foreground Retry reconciles a
+previously timed-out upload before posting again. Old local records without
+accuracy/source metadata remain viewable but are not retroactively credited.
+The server still stores summaries only, not raw routes. See
+`docs/WALK_INTEGRATION.md` for limits and compatibility.
+
 Walk-distance earning is connected in this integration; the feature checklist
 and limits are in `docs/FEATURES.md`. Personalised-goal awards, check-ins, streaks,
 charity donations, social sharing and the wider product rules below remain
@@ -375,7 +385,7 @@ Explicitly **not** built for pilot:
 Android
 merchant self-registration and self-service offer editing
 location-gated order collection (planned after MVP)
-multi-walk offline queues and long-lived background sync
+general offline authentication and long-lived background upload workers
 remote push notifications
 App Attest and advanced device integrity
 in-app payments or buying points

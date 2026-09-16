@@ -37,6 +37,7 @@ struct OwnerHomeView: View {
     let dogService: any DogServicing
     let walkService: any WalkServing
     @StateObject private var redemptionViewModel: RedemptionViewModel
+    @StateObject private var walkCoordinator: WalkSessionCoordinator
     @State private var selection: Page = .walk
 
     init(
@@ -49,6 +50,9 @@ struct OwnerHomeView: View {
         self.session = session
         self.dogService = dogService
         self.walkService = walkService
+        _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
+            ownerID: user.id, session: session, dogService: dogService, walkService: walkService
+        ))
         _redemptionViewModel = StateObject(
             wrappedValue: RedemptionViewModel(service: redemptionService)
         )
@@ -60,10 +64,9 @@ struct OwnerHomeView: View {
                 TabView(selection: $selection) {
                     OwnerProfileView(user: user, session: session, dogService: dogService)
                         .tag(Page.account)
-                    WalkView(
-                        session: session, service: walkService, dogService: dogService,
-                        onWalletChanged: { await redemptionViewModel.refresh() }
-                    )
+                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk) {
+                        selection = .account
+                    }
                     .tag(Page.walk)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
@@ -87,6 +90,9 @@ struct OwnerHomeView: View {
             }
             .task(id: "\(selection.rawValue)-\(scenePhase == .active)") {
                 guard scenePhase == .active else { return }
+                walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel] in await redemptionViewModel?.refresh() }
+                session.beforeLogout = { [weak walkCoordinator] in await walkCoordinator?.prepareForLogout() }
+                await walkCoordinator.sync.refreshAndUpload()
                 await redemptionViewModel.refresh()
             }
         }

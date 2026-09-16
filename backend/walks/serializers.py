@@ -11,6 +11,7 @@ class WalkSampleSerializer(serializers.Serializer):
     recorded_at = serializers.DateTimeField()
     accuracy_m = serializers.FloatField(min_value=0)
     is_simulated = serializers.BooleanField(default=False)
+    segment_id = serializers.IntegerField(min_value=0, max_value=4999, default=0)
 
     def validate(self, attrs):
         for key in ("latitude", "longitude", "accuracy_m"):

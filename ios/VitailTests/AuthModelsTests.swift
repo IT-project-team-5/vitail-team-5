@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import XCTest
 @testable import Vitail
@@ -199,6 +200,105 @@ final class AuthModelsTests: XCTestCase {
         XCTAssertTrue(resetResponse.ok)
     }
     #endif
+}
+
+@MainActor
+final class WalkSessionTrackerTests: XCTestCase {
+    func testDistanceOnlyCountsWhileWalking() {
+        var now = Date(timeIntervalSince1970: 0)
+        let tracker = WalkSessionTracker(now: { now })
+        let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
+        let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
+        let third = location(latitude: -37.8116, longitude: 144.9631, seconds: 20)
+        let fourth = location(latitude: -37.8106, longitude: 144.9631, seconds: 30)
+
+        tracker.start(from: first, dogs: [dog()])
+        now = second.timestamp
+        tracker.record(second)
+        let distanceBeforePause = tracker.distanceMetres
+
+        tracker.pause()
+        tracker.record(third)
+        XCTAssertEqual(tracker.distanceMetres, distanceBeforePause, accuracy: 0.01)
+
+        now = third.timestamp
+        tracker.resume(from: third)
+        now = fourth.timestamp
+        tracker.record(fourth)
+
+        let expectedDistance = second.distance(from: first) + fourth.distance(from: third)
+        XCTAssertEqual(tracker.distanceMetres, expectedDistance, accuracy: 0.01)
+    }
+
+    func testPoorAccuracyLocationsAreIgnored() {
+        let tracker = WalkSessionTracker(now: { Date(timeIntervalSince1970: 0) })
+        let accurate = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
+        let inaccurate = location(
+            latitude: -37.8036,
+            longitude: 144.9631,
+            accuracy: 50,
+            seconds: 10
+        )
+
+        tracker.start(from: accurate, dogs: [dog()])
+        tracker.record(inaccurate)
+
+        XCTAssertEqual(tracker.distanceMetres, 0)
+    }
+
+    func testStartingANewWalkResetsDistance() {
+        var now = Date(timeIntervalSince1970: 0)
+        let tracker = WalkSessionTracker(now: { now })
+        let first = location(latitude: -37.8136, longitude: 144.9631, seconds: 0)
+        let second = location(latitude: -37.8126, longitude: 144.9631, seconds: 10)
+
+        tracker.start(from: first, dogs: [dog()])
+        now = second.timestamp
+        tracker.record(second)
+        XCTAssertGreaterThan(tracker.distanceMetres, 0)
+
+        tracker.finish()
+        tracker.start(from: second, dogs: [dog()])
+
+        XCTAssertEqual(tracker.distanceMetres, 0)
+        XCTAssertEqual(tracker.status, .walking)
+    }
+
+    private func dog() -> Dog {
+        Dog(
+            id: 1,
+            name: "Milo",
+            photo: nil,
+            breed: Breed(
+                id: 1,
+                name: "Mixed Breed",
+                energyLevel: .moderate,
+                defaultSize: .medium,
+                isBrachycephalic: false
+            ),
+            ageMonths: 24,
+            size: .medium,
+            isBrachycephalic: false,
+            createdAt: "2026-09-08T00:00:00Z"
+        )
+    }
+
+    private func location(
+        latitude: CLLocationDegrees,
+        longitude: CLLocationDegrees,
+        accuracy: CLLocationAccuracy = 5,
+        seconds: TimeInterval
+    ) -> CLLocation {
+        CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+            altitude: 0,
+            horizontalAccuracy: accuracy,
+            verticalAccuracy: accuracy,
+            course: 0,
+            speed: 1,
+            timestamp: Date(timeIntervalSince1970: seconds)
+        )
+    }
 }
 
 #if DEBUG

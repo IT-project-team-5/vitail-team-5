@@ -17,6 +17,11 @@ describes the real API. Target tables and routes for venues, check-ins, goals,
 charity and verification are future work, not instructions to create parallel
 tables beside working features.
 
+The 2026-09-15 Walk integration uses protected JSON checkpoints/history and
+foreground retry of saved walks, not the original SwiftData buffering proposal.
+`docs/WALK_INTEGRATION.md` describes current behavior; the implementation
+exception to the original offline scope is recorded in `docs/DECISIONS.md`.
+
 ---
 
 ## 1. Final Stack
@@ -27,11 +32,11 @@ tables beside working features.
 | iOS language | Swift |
 | iOS UI | SwiftUI |
 | iOS architecture | MVVM-style separation |
-| Local persistence | SwiftData |
+| Local persistence | Protected JSON for current Walk history/checkpoints; SwiftData remains a wider-pilot proposal |
 | API client | URLSession + Codable |
 | Concurrency | Swift async/await |
 | Dependency management | Swift Package Manager |
-| Unit and integration tests | Swift Testing |
+| Unit and integration tests | XCTest (iOS), Django tests (backend) |
 | UI tests | XCTest / XCUITest |
 | Walk tracking | Core Location with background location mode |
 | Check-in location | User-initiated Core Location session |
@@ -87,8 +92,8 @@ The product depends heavily on iOS-native capability:
 - camera access for optional photo check-ins.
 
 SwiftUI keeps the client native while avoiding a second UI framework. The pilot
-targets iOS 17 or later so SwiftData can provide the short-lived local route
-buffer without adding a third-party database.
+targets iOS 17 or later. Current Walk persistence uses protected JSON files
+without adding a third-party database.
 
 ### Django REST Framework
 
@@ -250,7 +255,9 @@ There is no separate `venues.VenueOffer` or `redemptions.RedemptionOrder` table.
 
 `walks.Walk` stores the validated summary, selected dogs and upload fingerprint;
 raw uploaded GPS samples are used for validation but not persisted by this slice.
-The unresolved GPS retention decision still blocks a future stored-route feature.
+The unresolved GPS retention decision still blocks future server-side route
+storage. Protected local history is retained by the integrated Walk feature;
+production retention policy still needs review.
 
 ### Wider pilot target model (not all implemented)
 
@@ -558,13 +565,15 @@ when a feature needs it.
 
 ### On offline behaviour
 
-A multi-walk offline queue and long-lived background sync are **out of scope**.
-GPS recording itself does not need the network, so:
+General offline authentication and a long-lived background upload worker are
+out of scope. The integrated Walk preserves local history and pending uploads:
 
-- route samples are buffered in SwiftData **during** the walk;
-- the walk uploads when the owner ends it;
-- upload failure retries with backoff while the app is open;
-- there is no queue of several completed offline walks.
+- route samples are checkpointed in protected JSON during the walk;
+- Finish saves a durable record before attempting an upload;
+- foreground entry, Finish and manual Retry reconcile server receipts and
+  submit eligible pending records with their original request IDs;
+- records survive relaunch, but submissions must be within 12 hours of starting;
+- no automatic network backoff worker or server-side raw-route archive is added.
 
 ---
 
@@ -573,9 +582,10 @@ GPS recording itself does not need the network, so:
 The current distance-earning slice accepts a manually recorded route upload,
 validates it on the server and credits the canonical wallet. It is intentionally
 smaller than the complete walk/goal roadmap below: no weather/goal bonuses,
-streaks, persistent route history or multi-walk offline queue. Upload summaries
-and selected dogs are persisted; failed uploads must be retried while the app
-is open. Real-device GPS/background behaviour still needs a physical test.
+streaks or server-side raw-route history. The integrated client retains protected
+local routes, paused recovery checkpoints and pending finished uploads. The
+server stores summaries and selected dogs. Retry occurs in the foreground;
+real-device GPS/background behaviour still needs a physical test.
 
 ```text
 Owner selects which dogs are coming
@@ -585,7 +595,7 @@ Owner selects which dogs are coming
 → app waits for an accurate GPS lock
 → Core Location tracking starts with background delivery enabled
 → route renders on the map
-→ samples are buffered in SwiftData
+→ samples are checkpointed in protected local JSON
 → Owner selects End
 ```
 
@@ -1162,7 +1172,7 @@ check-in awards and daily uniqueness
 
 ```text
 Core Location walk tracking and background lifecycle
-route UI and SwiftData buffering
+route UI and protected local persistence
 walk upload and validation
 points engine, caps, rounding
 point lots, ledger, FIFO spend, expiry job
@@ -1287,7 +1297,7 @@ point expiry at 12 months
 Android
 merchant self-registration and self-service offer editing
 location-gated order collection (planned after MVP)
-multi-walk offline queues and long-lived background sync
+general offline authentication and long-lived background upload workers
 remote push notifications
 App Attest and advanced device integrity
 in-app payments
