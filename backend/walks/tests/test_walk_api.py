@@ -160,6 +160,54 @@ class WalkApiTests(APITestCase):
         self.assertEqual(Walk.objects.count(), 1)
         self.assert_wallet(8)
 
+    def test_pause_segment_does_not_earn_bridging_distance(self):
+        payload = self.payload(distance_m=200)
+        middle = len(payload["samples"]) // 2
+        for i, sample in enumerate(payload["samples"]):
+            sample["segment_id"] = 0 if i < middle else 1
+        response = self.submit(payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertAlmostEqual(response.data["distance_m"], 180, delta=0.02)
+        replay = self.submit(payload)
+        self.assertEqual(response.data["id"], replay.data["id"])
+
+    def test_segment_boundaries_are_validated_and_part_of_idempotency(self):
+        original = self.payload(distance_m=200)
+        self.assertEqual(self.submit(original).status_code, status.HTTP_201_CREATED)
+        changed = copy.deepcopy(original)
+        for sample in changed["samples"][5:]:
+            sample["segment_id"] = 1
+        self.assertEqual(self.submit(changed).status_code, status.HTTP_409_CONFLICT)
+        for bad in ([1] * 11, [0, 2] + [2] * 9, [0, 1, 0] + [0] * 8):
+            payload = self.payload(distance_m=200, start_seconds=-7200)
+            for sample, segment in zip(payload["samples"], bad):
+                sample["segment_id"] = segment
+            self.assertEqual(self.submit(payload).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_new_segment_does_not_reset_five_minute_inactivity(self):
+        payload = self.payload(distance_m=200)
+        for sample in payload["samples"][5:]:
+            sample["segment_id"] = 1
+            timestamp = datetime.fromisoformat(sample["recorded_at"])
+            sample["recorded_at"] = (timestamp + timedelta(seconds=300)).isoformat()
+        payload["ended_at"] = payload["samples"][-1]["recorded_at"]
+        response = self.submit(payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertAlmostEqual(response.data["distance_m"], 80, delta=0.02)
+        self.assertEqual(response.data["points_awarded"], 0)
+
+    def test_explicit_zero_segment_matches_legacy_fingerprint(self):
+        from walks.services import request_fingerprint
+        from walks.serializers import CreateWalkSerializer
+        serializer = CreateWalkSerializer(data=self.payload())
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        data.pop("request_id")
+        with_segments = request_fingerprint(**data)
+        for sample in data["samples"]:
+            sample.pop("segment_id", None)
+        self.assertEqual(with_segments, request_fingerprint(**data))
+
     def test_only_owner_can_submit_own_dogs_and_read_own_history(self):
         bad_dog = self.payload()
         bad_dog["dog_ids"] = [self.other_dog.pk]

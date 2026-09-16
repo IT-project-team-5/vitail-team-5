@@ -501,6 +501,12 @@ components:
         recorded_at: {type: string, format: date-time}
         accuracy_m: {type: number, minimum: 0}
         is_simulated: {type: boolean, default: false}
+        segment_id:
+          type: integer
+          minimum: 0
+          maximum: 4999
+          default: 0
+          description: Consecutive route segment index starting at zero. Pauses, GPS interruptions and recovered sessions start new segments; distance is never credited across a boundary. The five-minute inactivity rule still applies across boundaries. Omitted for legacy clients (one segment).
     Walk:
       type: object
       required: [id, request_id, started_at, ended_at, distance_m, points_awarded, point_date, dog_ids]

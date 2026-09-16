@@ -7,12 +7,14 @@ struct WalkSample: Codable, Equatable, Sendable {
     let recordedAt: String
     let accuracyM: Double
     let isSimulated: Bool
+    var segmentID: Int = 0
 
     enum CodingKeys: String, CodingKey {
         case latitude, longitude
         case recordedAt = "recorded_at"
         case accuracyM = "accuracy_m"
         case isSimulated = "is_simulated"
+        case segmentID = "segment_id"
     }
 
     var coordinate: CLLocationCoordinate2D {
@@ -36,7 +38,7 @@ struct WalkRequest: Encodable, Equatable, Sendable {
     }
 }
 
-struct WalkSummary: Decodable, Equatable, Identifiable, Sendable {
+struct WalkSummary: Codable, Equatable, Identifiable, Sendable {
     let id: Int
     let requestID: UUID
     let startedAt: String

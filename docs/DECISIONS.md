@@ -71,6 +71,22 @@ walk in memory only; force-quitting loses it.
 The daily cumulative rounding implementation remains subject to O7 confirmation;
 no minimum walk duration or personalised-goal bonus is invented here.
 
+### Walk integration implementation update (2026-09-15)
+
+At the walk-feature owner's request, integration preserves the existing compact
+tracking UI, protected JSON checkpoints and local route history. This supersedes
+the memory-only implementation described in the dated note above. Eligible new
+finished records can wait locally and retry in the foreground, using one stable
+request ID; the server's 12-hour submission limit still applies. The server keeps
+summaries, not raw routes. Legacy records without measured metadata do not earn.
+
+This records an implementation exception to R11 and the planned SwiftData choice
+in R35, not new client approval of a full offline product. General offline login
+and a background upload worker are not implemented. O9 remains open for future
+server-side route storage and production retention policy; local retention and
+this exception should be reviewed with the team before release. See
+`WALK_INTEGRATION.md` for the current behavior and test boundaries.
+
 ### On R29
 
 The delivery team raised that the published earn rates imply a large annual
