@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from .serializers import (
     LoginSerializer,
     RegisterSerializer,
+    UserProfileUpdateSerializer,
     UserSerializer,
     token_response,
 )
@@ -32,4 +33,14 @@ class LoginView(APIView):
 
 class MeView(APIView):
     def get(self, request):
+        return Response(UserSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = UserProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(UserSerializer(request.user).data)

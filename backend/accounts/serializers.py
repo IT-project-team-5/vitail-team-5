@@ -14,6 +14,20 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(max_length=100, allow_blank=False)
+
+    class Meta:
+        model = User
+        fields = ("display_name",)
+
+    def validate_display_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Display name cannot be blank.")
+        return value
+
+
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)
     password = serializers.CharField(write_only=True, min_length=8, max_length=128)

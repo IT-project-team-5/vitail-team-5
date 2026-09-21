@@ -3,6 +3,11 @@ import SwiftUI
 struct AuthView: View {
     @ObservedObject var session: SessionStore
     @StateObject private var viewModel = AuthViewModel()
+    #if DEBUG
+    @State private var debugBackendURL = AppConfiguration.debugAPIBaseURLText
+    @State private var debugBackendMessage: String?
+    @State private var debugBackendHasError = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -72,6 +77,10 @@ struct AuthView: View {
                     Text(accountHelpText)
                         .font(.footnote)
                         .foregroundStyle(AppColors.secondaryText)
+
+                    #if DEBUG
+                    debugBackendURLSection
+                    #endif
                 }
                 .padding(AppSpacing.large)
             }
@@ -125,4 +134,64 @@ struct AuthView: View {
         }
         .padding(.top, AppSpacing.extraLarge)
     }
+
+    #if DEBUG
+    // TEMPORARY DEBUG BACKEND URL OVERRIDE. Remove with the matching block in
+    // AppConfiguration when a shared staging server is ready.
+    private var debugBackendURLSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
+            Text("Backend URL (Debug Only)")
+                .font(.caption.bold())
+
+            TextField("https://example.ngrok-free.app", text: $debugBackendURL)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal, AppSpacing.medium)
+                .frame(height: 44)
+                .background(AppColors.background)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
+                .accessibilityIdentifier("debugBackendURL")
+
+            HStack {
+                Button("Save") {
+                    saveDebugBackendURL()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppColors.brand)
+
+                Button("Reset") {
+                    AppConfiguration.resetDebugAPIBaseURL()
+                    debugBackendURL = AppConfiguration.debugAPIBaseURLText
+                    debugBackendMessage = "Reset to the build setting."
+                    debugBackendHasError = false
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if let debugBackendMessage {
+                Text(debugBackendMessage)
+                    .font(.caption)
+                    .foregroundStyle(
+                        debugBackendHasError ? AppColors.error : AppColors.secondaryText
+                    )
+            }
+        }
+        .padding(AppSpacing.medium)
+        .background(AppColors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+    }
+
+    private func saveDebugBackendURL() {
+        do {
+            let url = try AppConfiguration.saveDebugAPIBaseURL(debugBackendURL)
+            debugBackendURL = url.absoluteString
+            debugBackendMessage = "Saved. New requests use this URL."
+            debugBackendHasError = false
+        } catch {
+            debugBackendMessage = error.localizedDescription
+            debugBackendHasError = true
+        }
+    }
+    #endif
 }

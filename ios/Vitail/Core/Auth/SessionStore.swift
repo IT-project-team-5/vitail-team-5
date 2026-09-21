@@ -55,6 +55,12 @@ final class SessionStore: ObservableObject {
         state = .signedOut
     }
 
+    func updateDisplayName(_ displayName: String) async throws {
+        let updatedUser = try await authService.updateProfile(displayName: displayName)
+        try validateMobileRole(updatedUser)
+        state = .signedIn(updatedUser)
+    }
+
     private func accept(_ response: AuthResponse, expectedRole: UserRole) async throws {
         try validateMobileRole(response.user)
         guard response.user.role == expectedRole else {

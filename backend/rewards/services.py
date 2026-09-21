@@ -24,6 +24,7 @@ class RedemptionNotCollectibleError(Exception):
 
 
 def get_balance(user) -> int:
+    expire_stale_redemptions(user)
     total = PointEntry.objects.filter(
         user=user,
         amount__gt=0,
@@ -31,6 +32,33 @@ def get_balance(user) -> int:
         expires_at__gt=timezone.now(),
     ).aggregate(total=Sum("remaining_points"))["total"]
     return total or 0
+
+
+@transaction.atomic
+def expire_stale_redemptions(user):
+    """Move this user's PENDING redemptions past their expiry to EXPIRED
+    and refund the points spent on each — exactly once per redemption.
+
+    Idempotent by construction: once a redemption's status leaves PENDING
+    it is never selected again, so calling this repeatedly (every wallet
+    read does) can never refund the same redemption twice. There is no
+    background job for this yet, so it runs lazily wherever a user reads
+    their wallet or redemption history.
+    """
+    stale = Redemption.objects.select_for_update().filter(
+        owner_user=user,
+        status=Redemption.Status.PENDING,
+        expires_at__lte=timezone.now(),
+    )
+    for redemption in stale:
+        redemption.status = Redemption.Status.EXPIRED
+        redemption.save(update_fields=["status"])
+        credit_points(
+            user=user,
+            amount=redemption.point_cost_snapshot,
+            type=PointEntry.Type.REFUND,
+            source_reference=f"redemption-refund:{redemption.reference_number}",
+        )
 
 
 @transaction.atomic
@@ -125,12 +153,24 @@ def create_redemption(*, owner, reward_id):
     return redemption
 
 
-@transaction.atomic
 def collect_redemption(*, owner, redemption_id):
     """Mark a redemption COLLECTED. Returns None if no such redemption
     exists for this owner. Returns it unchanged if already COLLECTED — a
     repeated Collect tap must not error or re-apply the change.
+
+    The expiry sweep runs in its own transaction, committed before we even
+    look at the requested redemption. If it turns out to be the very one
+    that just expired, `_collect_pending_redemption` raises
+    RedemptionNotCollectibleError — and that raise must not be inside the
+    same atomic block as the sweep, or rolling back the "can't collect"
+    request would also undo the sweep's status flip and refund.
     """
+    expire_stale_redemptions(owner)
+    return _collect_pending_redemption(owner=owner, redemption_id=redemption_id)
+
+
+@transaction.atomic
+def _collect_pending_redemption(*, owner, redemption_id):
     redemption = (
         Redemption.objects.select_for_update()
         .filter(id=redemption_id, owner_user=owner)

@@ -64,6 +64,14 @@ struct RefreshResponse: Decodable, Sendable {
     let refresh: String?
 }
 
+struct ProfileUpdateRequest: Encodable, Sendable {
+    let displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
+    }
+}
+
 struct CurrentUserResponse: Decodable, Sendable {
     let user: User
 

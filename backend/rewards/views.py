@@ -18,6 +18,7 @@ from .services import (
     RewardUnavailableError,
     collect_redemption,
     create_redemption,
+    expire_stale_redemptions,
     get_balance,
 )
 
@@ -37,6 +38,7 @@ class WalletLedgerView(APIView):
     permission_classes = [IsOwnerRole]
 
     def get(self, request):
+        expire_stale_redemptions(request.user)
         entries = PointEntry.objects.filter(user=request.user)
         return Response(PointEntrySerializer(entries, many=True).data)
 
@@ -56,6 +58,7 @@ class RedemptionListCreateView(APIView):
 
     def get(self, request):
         """GET /api/redemptions — the signed-in owner's own history."""
+        expire_stale_redemptions(request.user)
         redemptions = request.user.redemptions.all()
         return Response(RedemptionSerializer(redemptions, many=True).data)
 

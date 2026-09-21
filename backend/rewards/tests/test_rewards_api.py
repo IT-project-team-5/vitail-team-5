@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -195,3 +197,100 @@ class RedemptionApiTests(RewardsApiTestCase):
         response = self.create_redemption()
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_collecting_an_expired_redemption_is_rejected_and_refunds_the_points(self):
+        self.grant(self.owner, 100)
+        redemption_id = self.create_redemption().data["id"]
+        Redemption.objects.filter(id=redemption_id).update(
+            expires_at=timezone.now() - timedelta(minutes=1)
+        )
+
+        response = self.client.post(f"{self.redemptions_url}{redemption_id}/collect")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        redemption = Redemption.objects.get(id=redemption_id)
+        self.assertEqual(redemption.status, Redemption.Status.EXPIRED)
+        self.assertIsNone(redemption.collected_at)
+        self.assertEqual(self.client.get(self.wallet_url).data["balance"], 100)
+
+    def test_an_expired_redemption_is_refunded_exactly_once(self):
+        self.grant(self.owner, 100)
+        redemption_id = self.create_redemption().data["id"]
+        Redemption.objects.filter(id=redemption_id).update(
+            expires_at=timezone.now() - timedelta(minutes=1)
+        )
+
+        # Two separate reads that each trigger the lazy-expiry sweep.
+        first_balance = self.client.get(self.wallet_url).data["balance"]
+        second_balance = self.client.get(self.wallet_url).data["balance"]
+
+        self.assertEqual(first_balance, 100)
+        self.assertEqual(second_balance, 100)
+        refund_entries = PointEntry.objects.filter(type=PointEntry.Type.REFUND, user=self.owner)
+        self.assertEqual(refund_entries.count(), 1)
+
+    def test_history_reflects_expiry_without_a_collect_attempt(self):
+        self.grant(self.owner, 100)
+        redemption_id = self.create_redemption().data["id"]
+        Redemption.objects.filter(id=redemption_id).update(
+            expires_at=timezone.now() - timedelta(minutes=1)
+        )
+
+        response = self.client.get(self.redemptions_url)
+
+        self.assertEqual(response.data[0]["status"], Redemption.Status.EXPIRED)
+
+
+class PointEntryAdminTests(TestCase):
+    """Covers the PR review requirement that admin-created point entries
+    can only be positive grants — a negative entry created by hand would
+    validate against PointEntry.clean() but would not actually decrement
+    any credit entry's remaining_points, silently desyncing the balance.
+    """
+
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            email="admin@example.com", password="StrongPass123!", display_name="Admin"
+        )
+        self.owner = User.objects.create_user(
+            email="owner@example.com", password="StrongPass123!", display_name="Dog Owner"
+        )
+        self.client.force_login(self.admin_user)
+
+    def add_url(self):
+        return reverse("admin:rewards_pointentry_add")
+
+    def test_admin_cannot_create_a_negative_point_entry(self):
+        response = self.client.post(
+            self.add_url(),
+            {
+                "user": self.owner.id,
+                "amount": -20,
+                "remaining_points": 0,
+                "type": PointEntry.Type.SPEND,
+                "expires_at_0": "",
+                "expires_at_1": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)  # form re-rendered with errors
+        self.assertEqual(PointEntry.objects.count(), 0)
+
+    def test_admin_can_create_a_positive_grant(self):
+        expires = timezone.now() + timedelta(days=300)
+        response = self.client.post(
+            self.add_url(),
+            {
+                "user": self.owner.id,
+                "amount": 50,
+                "remaining_points": 0,
+                "type": PointEntry.Type.ADMIN,
+                "expires_at_0": expires.strftime("%Y-%m-%d"),
+                "expires_at_1": expires.strftime("%H:%M:%S"),
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)  # redirected on success
+        entry = PointEntry.objects.get(user=self.owner)
+        self.assertEqual(entry.amount, 50)
+        self.assertEqual(entry.remaining_points, 50)
