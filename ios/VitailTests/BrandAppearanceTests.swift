@@ -83,6 +83,37 @@ final class BrandAppearanceTests: XCTestCase {
         }
         try await snapshot(AuthView(session: session).environment(\.dynamicTypeSize, .accessibility2),
                            name: "Brand-Login-Large-Text", dark: false)
+
+        for dark in [false, true] {
+            let buttons = VStack(spacing: 20) {
+                PrimaryButton(title: "Redeem reward") {}
+                PrimaryButton(title: "Redeeming…", isLoading: true, isDisabled: true) {}
+                PrimaryButton(title: "Unavailable", isDisabled: true) {}
+            }
+            .padding(20)
+            try await snapshot(buttons, name: dark ? "Brand-Buttons-Dark" : "Brand-Buttons-Light", dark: dark)
+        }
+    }
+
+    func testCafeProductLayoutSnapshots() async throws {
+        // Exercise the real page's initial load with a local menu, including a
+        // temporarily unavailable item. Opening the page must not alter a menu.
+        for dark in [false, true] {
+            for largeText in [false, true] {
+                let service = BrandCafeProductsFixture()
+                let mode = dark ? "Dark" : "Light"
+                let textSize = largeText ? "-Large-Text" : ""
+                try await snapshot(
+                    CafeProductsView(service: service)
+                        .environment(\.dynamicTypeSize, largeText ? .accessibility2 : .large),
+                    name: "Brand-Cafe-Products-\(mode)\(textSize)", dark: dark
+                )
+                let fetchCount = await service.fetchCount
+                let mutationCount = await service.mutationCount
+                XCTAssertEqual(fetchCount, 1, "The snapshot must exercise the menu's initial load.")
+                XCTAssertEqual(mutationCount, 0, "Opening the menu must not create or update products.")
+            }
+        }
     }
 
     private func contrast(_ first: Color, _ second: Color, style: UIUserInterfaceStyle) -> Double {
@@ -126,5 +157,32 @@ final class BrandAppearanceTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+private actor BrandCafeProductsFixture: CafeProductsServing {
+    private(set) var fetchCount = 0
+    private(set) var mutationCount = 0
+
+    func fetchProducts() async throws -> [CafeProduct] {
+        fetchCount += 1
+        return [
+            CafeProduct(id: 1, name: "Flat White", description: "A smooth double espresso with steamed milk. Oat milk available.",
+                        pointCost: 250, isAvailable: true),
+            CafeProduct(id: 2, name: "Blueberry & Lemon Muffin", description: "Baked fresh each morning with blueberries and lemon zest.",
+                        pointCost: 350, isAvailable: false),
+            CafeProduct(id: 3, name: "Puppuccino", description: "A small cup of unsweetened whipped cream for your walking companion.",
+                        pointCost: 100, isAvailable: true)
+        ]
+    }
+
+    func createProduct(_ request: CafeProductRequest) async throws -> CafeProduct {
+        mutationCount += 1
+        throw APIError.network("The appearance fixture does not support menu changes.")
+    }
+
+    func updateProduct(id: Int, request: CafeProductRequest) async throws -> CafeProduct {
+        mutationCount += 1
+        throw APIError.network("The appearance fixture does not support menu changes.")
     }
 }

@@ -28,15 +28,19 @@ their native appearance.
 
 `BrandAppearanceTests` checks primary icon packaging, brand-image loading and
 4.5:1 contrast for enabled standard text/button combinations in both appearances.
-It also attaches light/dark login and Walk component snapshots plus large-text
-login. Walk snapshot data is a test fixture, not a GPS recording or awarded walk.
+It also attaches light/dark login, Walk component and button-state snapshots,
+plus large-text login and light/dark café product snapshots at standard and
+accessibility text sizes. Snapshot data comes from local fixtures; no GPS
+recordings, awarded walks or menu changes are created.
 This is not a claim of a full accessibility audit.
 
 Shared form prompts use the secondary text color. Account choices and primary
 buttons can grow vertically for larger system text instead of truncating labels.
-Verification on 15 September 2026: the iOS Simulator test suite passed with
-160 tests passed, 1 skipped and no failures. Light/dark and large-text captures
-were visually reviewed; this does not replace real-device appearance testing.
+Verification on 23 September 2026, including café product management: the iOS
+Simulator test suite passed with 181 tests passed, 1 device-only test skipped
+and no failures. The iPhone Release build passed with signing disabled.
+Light/dark and large-text captures were visually reviewed; this does not replace
+real-device appearance or signing checks.
 
 The flat AppIcon uses Xcode's single-size asset support. The system generates
 required sizes; no custom layered Icon Composer, dark-icon or tinted-icon artwork

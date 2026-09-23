@@ -105,7 +105,7 @@ struct CafeProductsView: View {
                         systemImage: product.isAvailable ? "checkmark.circle.fill" : "pause.circle"
                     )
                     .font(.caption)
-                    .foregroundStyle(product.isAvailable ? AppColors.brand : AppColors.secondaryText)
+                    .foregroundStyle(product.isAvailable ? AppColors.success : AppColors.secondaryText)
                 }
             }
             .padding(AppSpacing.medium)
@@ -114,7 +114,7 @@ struct CafeProductsView: View {
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
             .overlay {
                 RoundedRectangle(cornerRadius: AppRadius.card)
-                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+                    .stroke(AppColors.border, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -136,6 +136,7 @@ private struct CafeProductEditor: View {
                         .keyboardType(.numberPad)
                 }
                 .disabled(model.isSaving)
+                .listRowBackground(AppColors.surface)
 
                 Section {
                     Toggle("Available to redeem", isOn: $model.isAvailable)
@@ -143,9 +144,11 @@ private struct CafeProductEditor: View {
                 } footer: {
                     Text("Unavailable products stay in your menu but are hidden from the owner's redemption catalogue.")
                 }
+                .listRowBackground(AppColors.surface)
 
                 if let message = model.validationMessage {
                     Section { Text(message).font(.footnote).foregroundStyle(AppColors.error) }
+                        .listRowBackground(AppColors.surface)
                 }
                 if let message = model.saveErrorMessage {
                     Section {
@@ -154,6 +157,7 @@ private struct CafeProductEditor: View {
                             .font(.footnote)
                             .foregroundStyle(AppColors.secondaryText)
                     }
+                    .listRowBackground(AppColors.surface)
                 }
             }
             .scrollContentBackground(.hidden)

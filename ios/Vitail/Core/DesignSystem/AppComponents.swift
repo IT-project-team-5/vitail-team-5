@@ -11,7 +11,7 @@ struct PrimaryButton: View {
             HStack(spacing: AppSpacing.small) {
                 if isLoading {
                     ProgressView()
-                        .tint(AppColors.brandForeground)
+                        .tint(isDisabled ? AppColors.secondaryText : AppColors.brandForeground)
                 }
                 Text(title)
                     .fontWeight(.semibold)
