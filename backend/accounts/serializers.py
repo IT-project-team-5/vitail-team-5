@@ -6,12 +6,18 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
+from .photos import photo_url
 
 
 class UserSerializer(serializers.ModelSerializer):
+    photo = serializers.SerializerMethodField()
+
+    def get_photo(self, user):
+        return photo_url(user.photo, self.context.get("request"))
+
     class Meta:
         model = User
-        fields = ("id", "email", "display_name", "role")
+        fields = ("id", "email", "display_name", "role", "photo")
         read_only_fields = fields
 
 
@@ -96,10 +102,10 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
-def token_response(user: User) -> dict:
+def token_response(user: User, request=None) -> dict:
     refresh = RefreshToken.for_user(user)
     return {
         "access": str(refresh.access_token),
         "refresh": str(refresh),
-        "user": UserSerializer(user).data,
+        "user": UserSerializer(user, context={"request": request}).data,
     }

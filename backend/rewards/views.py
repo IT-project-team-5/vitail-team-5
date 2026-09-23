@@ -45,8 +45,8 @@ class RewardListView(APIView):
     def get(self, request):
         rewards = Reward.objects.filter(
             is_available=True, cafe_user__is_active=True, cafe_user__role="CAFE"
-        ).select_related("cafe_user")
-        return Response(RewardSerializer(rewards, many=True).data)
+        ).select_related("cafe_user__cafe_profile")
+        return Response(RewardSerializer(rewards, many=True, context={"request": request}).data)
 
 
 class CafeProductListCreateView(APIView):
@@ -86,7 +86,10 @@ class RedemptionListCreateView(APIView):
 
     def get(self, request):
         expire_redemptions(owner=request.user)
-        return Response(RedemptionSerializer(request.user.redemptions.all(), many=True).data)
+        return Response(RedemptionSerializer(
+            request.user.redemptions.select_related("cafe_user__cafe_profile"),
+            many=True, context={"request": request},
+        ).data)
 
     def post(self, request):
         serializer = CreateRedemptionSerializer(data=request.data)
@@ -100,7 +103,7 @@ class RedemptionListCreateView(APIView):
             return Response({"code": "REWARD_UNAVAILABLE", "message": str(exc)}, status=400)
         except IdempotencyConflictError as exc:
             return Response({"code": "IDEMPOTENCY_CONFLICT", "message": str(exc)}, status=409)
-        return Response(RedemptionSerializer(redemption).data, status=status.HTTP_201_CREATED)
+        return Response(RedemptionSerializer(redemption, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class RedemptionCollectView(APIView):
@@ -113,7 +116,7 @@ class RedemptionCollectView(APIView):
             return Response({"code": "REDEMPTION_NOT_COLLECTIBLE", "message": str(exc)}, status=409)
         if redemption is None:
             return Response(status=404)
-        return Response(RedemptionSerializer(redemption).data)
+        return Response(RedemptionSerializer(redemption, context={"request": request}).data)
 
 
 CURSOR_HEADER = "X-Cafe-Orders-Cursor"

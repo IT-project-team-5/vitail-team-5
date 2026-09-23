@@ -471,12 +471,84 @@ paths:
                 address: {type: string, maxLength: 255}
                 description: {type: string, maxLength: 2000}
                 opening_hours: {type: string, maxLength: 500}
+                google_maps_url: {type: string, maxLength: 2048, description: Google Maps http(s) link; blank uses the café name and address search}
       responses:
         '200':
           description: Updated own café profile
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CafeProfile'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/auth/me/photo:
+    post:
+      summary: Upload the authenticated user avatar
+      description: >-
+        Upload raw base64 JPEG, PNG or WebP, at most 4 MiB decoded and 16 megapixels.
+        The server applies orientation, resizes to at most 1024 pixels per side,
+        removes metadata and stores a generated JPEG filename. Replaces the prior
+        uploaded avatar. Responses include an absolute photo URL; no arbitrary
+        filesystem names or URLs are accepted for upload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PhotoUpload'}
+      responses:
+        '200':
+          description: Saved avatar
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: {$ref: '#/components/schemas/User'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/dogs/{id}/photo:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+    post:
+      summary: Upload an owned dog avatar (OWNER only)
+      description: >-
+        Upload raw base64 JPEG, PNG or WebP, at most 4 MiB decoded and 16 megapixels.
+        The server applies orientation, resizes to at most 1024 pixels per side,
+        removes metadata and stores a generated JPEG filename. Replaces the prior
+        uploaded avatar. Responses include an absolute photo URL; no arbitrary
+        filesystem names or URLs are accepted for upload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PhotoUpload'}
+      responses:
+        '200':
+          description: Saved avatar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dog'
+        default: {$ref: '#/components/responses/Error'}
+  /api/cafe/profile/photo:
+    post:
+      summary: Upload own venue avatar (CAFE only)
+      description: >-
+        Upload raw base64 JPEG, PNG or WebP, at most 4 MiB decoded and 16 megapixels.
+        The server applies orientation, resizes to at most 1024 pixels per side,
+        removes metadata and stores a generated JPEG filename. Replaces the prior
+        uploaded avatar. Responses include an absolute photo URL; no arbitrary
+        filesystem names or URLs are accepted for upload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PhotoUpload'}
+      responses:
+        '200':
+          description: Saved avatar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CafeProfile'
         default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
@@ -497,6 +569,11 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    PhotoUpload:
+      type: object
+      required: [image_base64]
+      properties:
+        image_base64: {type: string, format: byte, maxLength: 5592408, description: Raw base64 without a data-URL prefix}
     LoginRequest:
       type: object
       required: [email, password]
@@ -505,12 +582,13 @@ components:
         password: {type: string, format: password, writeOnly: true}
     User:
       type: object
-      required: [id, email, display_name, role]
+      required: [id, email, display_name, role, photo]
       properties:
         id: {type: integer}
         email: {type: string, format: email}
         display_name: {type: string}
         role: {type: string, enum: [OWNER, CAFE, ADMIN]}
+        photo: {type: string, format: uri, nullable: true}
     AuthSession:
       type: object
       required: [access, refresh, user]
@@ -532,7 +610,7 @@ components:
       type: object
       properties:
         name: {type: string, minLength: 1, maxLength: 100}
-        photo: {type: string, nullable: true, description: Absolute URL or blank/null; no upload endpoint}
+        photo: {type: string, nullable: true, description: Legacy external URL or blank/null. A separately uploaded avatar takes precedence in responses}
         breed_id: {type: integer, minimum: 1}
         age_months: {type: integer, minimum: 0}
         size: {$ref: '#/components/schemas/DogSize'}
@@ -594,6 +672,12 @@ components:
         description: {type: string}
         point_cost: {type: integer, minimum: 1}
         cafe_name: {type: string}
+        cafe_id: {type: integer}
+        cafe_photo: {type: string, format: uri, nullable: true}
+        cafe_address: {type: string}
+        cafe_description: {type: string}
+        cafe_opening_hours: {type: string}
+        cafe_google_maps_url: {type: string, format: uri}
     CafeProductInput:
       type: object
       additionalProperties: false
@@ -621,19 +705,28 @@ components:
         reward_name_snapshot: {type: string}
         point_cost_snapshot: {type: integer, minimum: 1}
         cafe_name_snapshot: {type: string}
+        cafe_id: {type: integer}
+        cafe_photo: {type: string, format: uri, nullable: true}
+        cafe_address: {type: string}
+        cafe_description: {type: string}
+        cafe_opening_hours: {type: string}
+        cafe_google_maps_url: {type: string, format: uri}
         status: {type: string, enum: [PENDING, COLLECTED, EXPIRED, CANCELLED]}
         created_at: {type: string, format: date-time}
         collected_at: {type: string, format: date-time, nullable: true}
         expires_at: {type: string, format: date-time, description: Next midnight in the configured server timezone}
     CafeProfile:
       type: object
-      required: [name, email, address, description, opening_hours]
+      required: [name, email, address, description, opening_hours, photo, google_maps_url, maps_link]
       properties:
         name: {type: string, maxLength: 100}
         email: {type: string, format: email, readOnly: true}
         address: {type: string, maxLength: 255}
         description: {type: string, maxLength: 2000}
         opening_hours: {type: string, maxLength: 500}
+        photo: {type: string, format: uri, nullable: true, readOnly: true}
+        google_maps_url: {type: string, maxLength: 2048, description: Stored Google Maps link or blank when using address search}
+        maps_link: {type: string, format: uri, readOnly: true, description: Saved link or automatic name/address search}
     CafeOrder:
       type: object
       required: [id, reference_number, owner_name, items, ordered_at]

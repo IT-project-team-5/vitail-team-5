@@ -97,6 +97,12 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+# Docker mounts backend at /app, so uploads survive container rebuilds.
+# A production web server/storage backend must serve MEDIA_URL when DEBUG=False.
+MEDIA_ROOT = Path(os.getenv("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
+MEDIA_URL = os.getenv("DJANGO_MEDIA_URL", "/media/")
+# 4 MiB images expand to ~5.4 MiB in the JSON upload payload.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.User"

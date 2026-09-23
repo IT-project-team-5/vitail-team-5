@@ -39,6 +39,7 @@ class Dog(models.Model):
     )
     name = models.CharField(max_length=100)
     photo = models.URLField(blank=True, null=True)
+    uploaded_photo = models.FileField(upload_to="avatars/dogs/", blank=True)
     breed = models.ForeignKey(Breed, on_delete=models.PROTECT, related_name="dogs")
     age_months = models.PositiveIntegerField(validators=[MinValueValidator(0)])
     size = models.CharField(max_length=10, choices=Size.choices)

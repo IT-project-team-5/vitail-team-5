@@ -1,5 +1,8 @@
 from rest_framework import serializers
 
+from accounts.photos import photo_url
+from accounts.venues import cafe_profile_for, google_maps_url
+
 from .models import PointEntry, Redemption, Reward
 
 
@@ -10,12 +13,45 @@ class PointEntrySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class RewardSerializer(serializers.ModelSerializer):
+CAFE_DETAIL_FIELDS = (
+    "cafe_id", "cafe_photo", "cafe_address", "cafe_description",
+    "cafe_opening_hours", "cafe_google_maps_url",
+)
+
+
+class CafeDetailsSerializer(serializers.ModelSerializer):
+    cafe_id = serializers.IntegerField(source="cafe_user_id", read_only=True)
+    cafe_photo = serializers.SerializerMethodField()
+    cafe_address = serializers.SerializerMethodField()
+    cafe_description = serializers.SerializerMethodField()
+    cafe_opening_hours = serializers.SerializerMethodField()
+    cafe_google_maps_url = serializers.SerializerMethodField()
+
+    def get_cafe_photo(self, instance):
+        return photo_url(instance.cafe_user.photo, self.context.get("request"))
+
+    def get_cafe_address(self, instance):
+        profile = cafe_profile_for(instance.cafe_user)
+        return profile.address if profile else ""
+
+    def get_cafe_description(self, instance):
+        profile = cafe_profile_for(instance.cafe_user)
+        return profile.description if profile else ""
+
+    def get_cafe_opening_hours(self, instance):
+        profile = cafe_profile_for(instance.cafe_user)
+        return profile.opening_hours if profile else ""
+
+    def get_cafe_google_maps_url(self, instance):
+        return google_maps_url(instance.cafe_user, cafe_profile_for(instance.cafe_user))
+
+
+class RewardSerializer(CafeDetailsSerializer):
     cafe_name = serializers.CharField(source="cafe_user.display_name", read_only=True)
 
     class Meta:
         model = Reward
-        fields = ("id", "name", "description", "point_cost", "cafe_name")
+        fields = ("id", "name", "description", "point_cost", "cafe_name") + CAFE_DETAIL_FIELDS
         read_only_fields = fields
 
 
@@ -42,14 +78,14 @@ class CafeProductSerializer(serializers.ModelSerializer):
         return super().to_internal_value(data)
 
 
-class RedemptionSerializer(serializers.ModelSerializer):
+class RedemptionSerializer(CafeDetailsSerializer):
     class Meta:
         model = Redemption
         fields = (
             "id", "reference_number", "reward", "reward_name_snapshot",
             "point_cost_snapshot", "status", "created_at", "collected_at", "expires_at",
             "cafe_name_snapshot",
-        )
+        ) + CAFE_DETAIL_FIELDS
         read_only_fields = fields
 
 

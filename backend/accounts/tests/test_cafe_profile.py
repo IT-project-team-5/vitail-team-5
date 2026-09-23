@@ -24,6 +24,9 @@ class CafeProfileApiTests(APITestCase):
         self.assertEqual(response.data, {
             "name": "Original Café", "email": self.cafe.email,
             "address": "", "description": "", "opening_hours": "",
+            "photo": None,
+            "google_maps_url": "",
+            "maps_link": "https://www.google.com/maps/search/?api=1&query=Original+Caf%C3%A9",
         })
         self.assertEqual(CafeProfile.objects.filter(user=self.cafe).count(), 1)
         self.assertEqual(self.client.get("/api/cafe/profile/").status_code, 200)

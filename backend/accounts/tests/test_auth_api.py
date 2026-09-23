@@ -204,6 +204,7 @@ class AuthApiTests(APITestCase):
                 "email": "owner@example.com",
                 "display_name": "Dog Owner",
                 "role": User.Role.OWNER,
+                "photo": None,
             },
         )
 

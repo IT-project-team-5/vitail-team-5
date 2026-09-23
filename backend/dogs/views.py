@@ -1,4 +1,7 @@
+from django.db import transaction
 from django.shortcuts import get_object_or_404
+
+from accounts.photos import ImageUploadSerializer, PhotoJSONParser, replace_photo
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -46,3 +49,17 @@ class DogGoalView(APIView):
             {"dog_id": dog.id, **self.service_class().calculate(dog)},
             status=status.HTTP_200_OK,
         )
+
+
+class DogPhotoView(APIView):
+    parser_classes = [PhotoJSONParser]
+    permission_classes = [IsOwner]
+
+    def post(self, request, pk):
+        # Check ownership before decoding a potentially large image.
+        with transaction.atomic():
+            dog = get_object_or_404(Dog.objects.select_for_update(), pk=pk, owner=request.user)
+            serializer = ImageUploadSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            replace_photo(dog, "uploaded_photo", serializer.validated_data["image_base64"])
+        return Response(DogSerializer(dog, context={"request": request}).data)

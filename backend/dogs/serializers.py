@@ -1,6 +1,8 @@
 from django.db import transaction
 from rest_framework import serializers
 
+from accounts.photos import photo_url
+
 from .models import Breed, Dog
 
 
@@ -45,6 +47,12 @@ class DogSerializer(serializers.ModelSerializer):
             "photo": {"required": False, "allow_null": True, "allow_blank": True},
             "age_months": {"min_value": 0},
         }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.uploaded_photo:
+            data["photo"] = photo_url(instance.uploaded_photo, self.context.get("request"))
+        return data
 
     def validate_name(self, value):
         value = value.strip()
