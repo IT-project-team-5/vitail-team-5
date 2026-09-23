@@ -133,6 +133,34 @@ final class BrandAppearanceTests: XCTestCase {
             .environment(\.dynamicTypeSize, .accessibility2), name: "Clean-Order-Large-Text", dark: false)
     }
 
+    func testExpandedLoginAndAppearanceSettingsSnapshots() async throws {
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            for role in AuthViewModel.AccountType.allCases {
+                let model = AuthViewModel()
+                model.select(role)
+                try await snapshot(AuthView(session: SessionStore(), viewModel: model),
+                                   name: "Accordion-\(role.rawValue)-\(mode)", dark: dark)
+            }
+            let suite = "AppearanceSnapshot-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let settings = AppearanceSettings(defaults: defaults)
+            settings.selection = dark ? .dark : .light
+            try await snapshot(Form { AppearanceSettingsSection(settings: settings) },
+                               name: "Appearance-\(mode)", dark: dark)
+        }
+    }
+
+    func testConfirmedPurchaseOpensReceiptAutomatically() async throws {
+        let model = RedemptionViewModel(service: BrandReceiptFixture())
+        await model.refresh()
+        try await snapshot(RedemptionView(viewModel: model), name: "Automatic-Purchase-Receipt", dark: false,
+                           beforeCapture: { await model.redeem(rewardID: 1) }, expectsSheet: true)
+        XCTAssertNil(model.purchasedReceipt, "The presented receipt event must be consumed once.")
+        XCTAssertEqual(model.pendingRedemptions.first?.referenceNumber, "VIT-RECEIPT")
+    }
+
     private func contrast(_ first: Color, _ second: Color, style: UIUserInterfaceStyle) -> Double {
         func luminance(_ color: Color) -> Double {
             var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
@@ -148,7 +176,10 @@ final class BrandAppearanceTests: XCTestCase {
         return (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 
-    private func snapshot<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
+    private func snapshot<Content: View>(
+        _ content: Content, name: String, dark: Bool,
+        beforeCapture: (() async -> Void)? = nil, expectsSheet: Bool = false
+    ) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let page = content.vitailAppearance().preferredColorScheme(dark ? .dark : .light)
@@ -166,6 +197,13 @@ final class BrandAppearanceTests: XCTestCase {
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
         try await Task.sleep(nanoseconds: 400_000_000)
+        if let beforeCapture {
+            await beforeCapture()
+            try await Task.sleep(nanoseconds: 600_000_000)
+        }
+        if expectsSheet {
+            XCTAssertNotNil(host.presentedViewController, "A successful purchase must present its receipt.")
+        }
         let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
         let image = renderer.image { _ in
             XCTAssertTrue(window.drawHierarchy(in: window.bounds, afterScreenUpdates: true))
@@ -175,6 +213,24 @@ final class BrandAppearanceTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+}
+
+private actor BrandReceiptFixture: RedemptionServing {
+    private var order: Redemption?
+    func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: order == nil ? 120 : 60) }
+    func fetchRewards() async throws -> [Reward] {
+        [Reward(id: 1, name: "Flat White", description: "Freshly made coffee.", pointCost: 60,
+                cafeName: "Riverside Paws Café", cafeID: 1, cafeOpeningHours: "Daily 7 am–3 pm")]
+    }
+    func fetchRedemptions() async throws -> [Redemption] { order.map { [$0] } ?? [] }
+    func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption {
+        let receipt = Redemption(id: 1, referenceNumber: "VIT-RECEIPT", rewardNameSnapshot: "Flat White",
+                                 pointCostSnapshot: 60, status: .pending, cafeNameSnapshot: "Riverside Paws Café",
+                                 expiresAt: "2026-09-24T14:00:00Z")
+        order = receipt
+        return receipt
+    }
+    func collectRedemption(id: Int) async throws -> Redemption { throw APIError.network("Read-only fixture") }
 }
 
 private actor BrandRedemptionFixture: RedemptionServing {
