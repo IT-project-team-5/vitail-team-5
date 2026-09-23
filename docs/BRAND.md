@@ -1,10 +1,14 @@
 # Vitail visual identity
 
-The approved mark is a left-facing golden retriever silhouette with a rounded
-square outline. The original 1024 × 1024 opaque PNG is reused without editing.
-It is included as `Assets.xcassets/AppIcon.appiconset` for the Home Screen and
-`BrandMark.imageset` for the sign-in screen. The source artwork was approved
-during the project's icon-design work; no additional stock asset was introduced.
+The approved mark retains the left-facing golden retriever silhouette and its
+curved ear cutout. The enlarged silhouette fills the lower portion of the image,
+with a cursive lowercase `vitail` wordmark behind it on a full-bleed cream
+background. There is no drawn outer frame or baked-in rounded corner mask.
+This revised artwork was approved on 23 September 2026 and resized to a
+1024 × 1024 opaque RGB PNG without changing its composition. The same image is
+included as `Assets.xcassets/AppIcon.appiconset` for the Home Screen and
+`BrandMark.imageset` for the sign-in screen. The system applies the Home Screen
+icon mask; the in-app brand component applies its own rounded clipping shape.
 
 The shared palette lives in `Core/DesignSystem/AppTheme.swift`:
 
