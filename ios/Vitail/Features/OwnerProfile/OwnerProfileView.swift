@@ -28,6 +28,7 @@ struct OwnerProfileView: View {
                 Button("Log Out", role: .destructive) {
                     Task { await session.logout() }
                 }
+                .foregroundStyle(AppColors.error)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(AppSpacing.large)
@@ -89,10 +90,14 @@ private struct EditOwnerProfileView: View {
                     LabeledContent("Email", value: user.email)
                         .foregroundStyle(AppColors.secondaryText)
                 }
+                .listRowBackground(AppColors.surface)
                 if let message = viewModel.errorMessage {
                     Section { Text(message).foregroundStyle(AppColors.error) }
+                        .listRowBackground(AppColors.surface)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AppColors.background)
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -43,6 +43,7 @@ struct DogFormView: View {
                     }
                     Toggle("Brachycephalic", isOn: $isBrachycephalic)
                 }
+                .listRowBackground(AppColors.surface)
 
                 Section("Age") {
                     TextField("Years", text: $years)
@@ -54,9 +55,11 @@ struct DogFormView: View {
                     }
                     .pickerStyle(.menu)
                 }
+                .listRowBackground(AppColors.surface)
 
                 if let message = validationMessage ?? viewModel.errorMessage {
                     Section { Text(message).foregroundStyle(AppColors.error) }
+                        .listRowBackground(AppColors.surface)
                 }
 
                 if dog != nil {
@@ -64,10 +67,14 @@ struct DogFormView: View {
                         Button("Delete Dog", role: .destructive) {
                             isConfirmingDelete = true
                         }
+                        .foregroundStyle(AppColors.error)
                         .frame(maxWidth: .infinity)
                     }
+                    .listRowBackground(AppColors.surface)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AppColors.background)
             .navigationTitle(dog == nil ? "Add Dog" : "Edit Dog")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

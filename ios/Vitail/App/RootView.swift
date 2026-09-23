@@ -29,6 +29,7 @@ struct RootView: View {
                 )
             }
         }
+        .vitailAppearance()
         .task {
             if session.state == .restoring {
                 await session.restore()

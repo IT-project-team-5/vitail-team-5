@@ -163,7 +163,7 @@ struct WalkDogSelectionCard: View {
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
             .overlay {
                 RoundedRectangle(cornerRadius: AppRadius.field)
-                    .stroke(isSelected ? AppColors.brand : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? AppColors.brand : AppColors.border, lineWidth: isSelected ? 2 : 1)
             }
         }
         .buttonStyle(.plain)
@@ -234,7 +234,7 @@ struct WalkDogSelectionCard: View {
                 WalkControlButton(
                     title: session.status == .paused ? "Resume" : "Pause",
                     icon: session.status == .paused ? "playpause.fill" : "pause.fill",
-                    colour: .orange,
+                    colour: AppColors.warning,
                     isDisabled: !session.canPauseOrResume
                         || (session.status == .paused && !WalkSessionTracker.isFresh(location))
                 ) {
@@ -292,8 +292,8 @@ struct WalkDogSelectionCard: View {
         switch session.status {
         case .idle: return AppColors.secondaryText
         case .walking: return AppColors.brand
-        case .paused: return .orange
-        case .finished: return .blue
+        case .paused: return AppColors.warning
+        case .finished: return AppColors.success
         }
     }
 
@@ -323,11 +323,11 @@ private struct WalkControlButton: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: 54)
             .foregroundStyle(isDisabled ? AppColors.secondaryText : colour)
-            .background(isDisabled ? Color.secondary.opacity(0.08) : colour.opacity(0.12))
+            .background(isDisabled ? AppColors.background : colour.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.field, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: AppRadius.field, style: .continuous)
-                    .stroke(isDisabled ? Color.secondary.opacity(0.12) : colour.opacity(0.35))
+                    .stroke(isDisabled ? AppColors.border : colour.opacity(0.35))
             }
         }
         .buttonStyle(.plain)

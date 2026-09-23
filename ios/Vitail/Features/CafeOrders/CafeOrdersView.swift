@@ -234,7 +234,7 @@ struct CafeOrdersView: View {
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.card)
-                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+                .stroke(AppColors.border, lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
     }

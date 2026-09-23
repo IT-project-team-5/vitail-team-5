@@ -207,7 +207,7 @@ struct WalkHistoryDetailView: View {
                 Marker("Start", systemImage: "play.fill", coordinate: first.coordinate)
                     .tint(AppColors.brand)
                 Marker("Finish", systemImage: "flag.fill", coordinate: last.coordinate)
-                    .tint(.orange)
+                    .tint(AppColors.success)
             }
         }
         .mapStyle(.standard)
@@ -309,7 +309,7 @@ struct WalkRouteThumbnail: View {
             context.fill(Path(ellipseIn: CGRect(x: start.x - 5, y: start.y - 5, width: 10, height: 10)),
                          with: .color(AppColors.brand))
             context.stroke(Path(ellipseIn: CGRect(x: end.x - 6, y: end.y - 6, width: 12, height: 12)),
-                           with: .color(.orange), lineWidth: 3)
+                           with: .color(AppColors.success), lineWidth: 3)
         }
         .background(AppColors.background)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
