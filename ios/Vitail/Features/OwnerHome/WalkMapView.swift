@@ -334,6 +334,52 @@ final class WalkSessionTracker: ObservableObject {
     }
 }
 
+enum WalkDrawerDetent: Equatable {
+    case collapsed
+    case expanded
+}
+
+/// The content keeps one expanded layout while its visible top edge follows the
+/// finger. Resizing never pins controls above an independently scrolling history.
+struct WalkDrawerGeometry: Equatable {
+    static let handleHeight: CGFloat = 44
+    let collapsedHeight: CGFloat
+    let expandedHeight: CGFloat
+    let controlsOverflowCollapsed: Bool
+
+    init(availableHeight: CGFloat, controlsHeight: CGFloat, accessibilitySize: Bool) {
+        let available = max(0, availableHeight)
+        let naturalHeight = Self.handleHeight + max(0, controlsHeight)
+        collapsedHeight = min(available * 0.65, max(Self.handleHeight + 88, naturalHeight))
+        expandedHeight = min(available * 0.94, max(
+            available * (accessibilitySize ? 0.72 : 0.52), collapsedHeight + 96
+        ))
+        controlsOverflowCollapsed = naturalHeight > collapsedHeight + 1
+    }
+
+    func height(at detent: WalkDrawerDetent, translation: CGFloat = 0) -> CGFloat {
+        let restingHeight = detent == .collapsed ? collapsedHeight : expandedHeight
+        return min(expandedHeight, max(collapsedHeight, restingHeight - translation))
+    }
+
+    func snap(from detent: WalkDrawerDetent, predictedTranslation: CGFloat) -> WalkDrawerDetent {
+        height(at: detent, translation: predictedTranslation) >= (collapsedHeight + expandedHeight) / 2
+            ? .expanded : .collapsed
+    }
+
+    func allowsContentScrolling(at detent: WalkDrawerDetent) -> Bool {
+        // A short screen or large text must never make Finish unreachable.
+        detent == .expanded || controlsOverflowCollapsed
+    }
+}
+
+private struct WalkDrawerControlsHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct WalkMapView: View {
     let isActive: Bool
     let onManageDogs: () -> Void
@@ -350,12 +396,18 @@ struct WalkMapView: View {
         )
     )
     @State private var hasCentredOnUser = false
-    @State private var panelExpanded = false
-    @GestureState private var panelDrag: CGFloat = 0
+    @State private var drawerDetent: WalkDrawerDetent
+    @State private var controlsHeight: CGFloat = 240
+    @GestureState(resetTransaction: Transaction(animation: .snappy)) private var panelDrag: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
 
-    init(coordinator: WalkSessionCoordinator, isActive: Bool, onManageDogs: @escaping () -> Void) {
+    init(
+        coordinator: WalkSessionCoordinator, isActive: Bool,
+        initialDrawerDetent: WalkDrawerDetent = .collapsed,
+        onManageDogs: @escaping () -> Void
+    ) {
+        _drawerDetent = State(initialValue: initialDrawerDetent)
         self.isActive = isActive
         self.onManageDogs = onManageDogs
         self.coordinator = coordinator
@@ -367,11 +419,15 @@ struct WalkMapView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let expandedHeight = geometry.size.height * (dynamicTypeSize.isAccessibilitySize ? 0.72 : 0.52)
+            let drawer = WalkDrawerGeometry(
+                availableHeight: geometry.size.height, controlsHeight: controlsHeight,
+                accessibilitySize: dynamicTypeSize.isAccessibilitySize
+            )
             ZStack(alignment: .bottom) {
                 mapCard
-                bottomPanel(expandedHeight: expandedHeight)
+                bottomPanel(geometry: drawer)
             }
+            .contentShape(Rectangle())
             .clipped()
         }
         .sheet(isPresented: Binding(
@@ -401,64 +457,130 @@ struct WalkMapView: View {
         }
     }
 
-    private func bottomPanel(expandedHeight: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(.snappy) { panelExpanded.toggle() }
-            } label: {
-                Capsule().fill(AppColors.secondaryText.opacity(0.35))
-                    .frame(width: 36, height: 4)
-                    .frame(maxWidth: .infinity).frame(height: 30)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(panelExpanded ? "Collapse walk menu" : "Expand walk menu")
-            .accessibilityHint("Shows walk history and walking information")
-            .highPriorityGesture(DragGesture(minimumDistance: 12)
-                .updating($panelDrag) { value, state, _ in state = value.translation.height }
-                .onEnded { value in
-                    withAnimation(.snappy) { panelExpanded = value.predictedEndTranslation.height < 0 }
-                })
+    private func bottomPanel(geometry: WalkDrawerGeometry) -> some View {
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                Button {
+                    withAnimation(.snappy) {
+                        drawerDetent = drawerDetent == .collapsed ? .expanded : .collapsed
+                    }
+                } label: {
+                    Capsule().fill(AppColors.secondaryText.opacity(0.35))
+                        .frame(width: 36, height: 4)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: WalkDrawerGeometry.handleHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(drawerDetent == .expanded ? "Collapse walk menu" : "Expand walk menu")
+                .accessibilityValue(drawerDetent == .expanded ? "Expanded" : "Collapsed")
+                .accessibilityHint("Drag the handle to resize. Scroll the open menu for walk history.")
+                .accessibilityAdjustableAction { direction in
+                    withAnimation(.snappy) {
+                        if direction == .increment { drawerDetent = .expanded }
+                        else if direction == .decrement { drawerDetent = .collapsed }
+                    }
+                }
+                .highPriorityGesture(drawerDrag(geometry: geometry))
 
+                ScrollView {
+                    VStack(spacing: 0) {
+                        drawerControls
+                            .id("walk-drawer-controls")
+                            .background {
+                                GeometryReader { controls in
+                                    Color.clear.preference(
+                                        key: WalkDrawerControlsHeightKey.self, value: controls.size.height
+                                    )
+                                }
+                            }
+                        drawerDetails
+                            .accessibilityHidden(drawerDetent == .collapsed)
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .scrollDisabled(!geometry.allowsContentScrolling(at: drawerDetent) || panelDrag != 0)
+                // Only the closed summary delegates its vertical drag to the
+                // drawer. The open content has native scrolling with no competing
+                // sheet gesture; the handle always remains available to resize.
+                .highPriorityGesture(
+                    drawerDrag(geometry: geometry),
+                    including: drawerDetent == .collapsed && !geometry.controlsOverflowCollapsed ? .all : .subviews
+                )
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: geometry.expandedHeight, alignment: .top)
+            .background(AppColors.surface)
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
+            .frame(height: geometry.height(at: drawerDetent, translation: panelDrag), alignment: .top)
+            .clipped()
+            .contentShape(Rectangle())
+            .shadow(color: .black.opacity(0.08), radius: 12, y: -3)
+            .onPreferenceChange(WalkDrawerControlsHeightKey.self) { height in
+                if height > 0, abs(controlsHeight - height) > 0.5 { controlsHeight = height }
+            }
+            .onChange(of: drawerDetent) { _, detent in
+                if detent == .collapsed {
+                    // The next collapsed presentation must show the main action,
+                    // even if history was scrolled far down before collapsing.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { proxy.scrollTo("walk-drawer-controls", anchor: .top) }
+                }
+            }
+        }
+    }
+
+    private func drawerDrag(geometry: WalkDrawerGeometry) -> some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .global)
+            .updating($panelDrag) { value, state, transaction in
+                transaction.animation = nil
+                state = value.translation.height
+            }
+            .onEnded { value in
+                withAnimation(.snappy) {
+                    drawerDetent = geometry.snap(from: drawerDetent, predictedTranslation: value.predictedEndTranslation.height)
+                }
+            }
+    }
+
+    private var drawerControls: some View {
+        VStack(spacing: 0) {
             WalkDogSelectionCard(
                 selection: dogSelection, session: walkTracker, location: locationManager.location,
                 canStartNewWalk: coordinator.canStartNewWalk, onManageDogs: onManageDogs,
                 onReviewFinish: {
                     if coordinator.finishSummary != nil { coordinator.isFinishPresented = true }
-                    else { coordinator.retryStorage(); panelExpanded = true }
+                    else { coordinator.retryStorage(); drawerDetent = .expanded }
                 }
             )
-
-            if panelExpanded {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: AppSpacing.large) {
-                        if let message = coordinator.storageErrorMessage {
-                            LocationStatusCard(
-                                icon: "exclamationmark.triangle.fill", title: "Save your walk",
-                                message: message, actionTitle: "Retry", action: coordinator.retryStorage
-                            )
-                        }
-                        if let notice = walkTracker.trackingNotice {
-                            Text(notice).font(.footnote).foregroundStyle(AppColors.secondaryText)
-                        }
-                        WalkHistorySection(store: walkHistory)
-                        WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
-                        Text("Walking continues with the screen locked. Pauses are excluded. After 5 minutes without activity, review your walk to finish.")
-                            .font(.footnote).foregroundStyle(AppColors.secondaryText)
-                    }
-                    .padding(.horizontal, AppSpacing.medium)
-                    .padding(.bottom, AppSpacing.large)
-                }
-            } else if coordinator.storageErrorMessage != nil {
+            if coordinator.storageErrorMessage != nil {
                 Button("Your walk needs attention · Retry") { coordinator.retryStorage() }
                     .font(.caption).padding(.bottom, AppSpacing.small)
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: panelExpanded ? max(260, min(expandedHeight + 50, expandedHeight - panelDrag)) : nil, alignment: .top)
-        .background(AppColors.surface)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
-        .shadow(color: .black.opacity(0.08), radius: 12, y: -3)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var drawerDetails: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.large) {
+            if let message = coordinator.storageErrorMessage {
+                LocationStatusCard(
+                    icon: "exclamationmark.triangle.fill", title: "Save your walk",
+                    message: message, actionTitle: "Retry", action: coordinator.retryStorage
+                )
+            }
+            if let notice = walkTracker.trackingNotice {
+                Text(notice).font(.footnote).foregroundStyle(AppColors.secondaryText)
+            }
+            WalkHistorySection(store: walkHistory)
+            WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
+            Text("Walking continues with the screen locked. Pauses are excluded. After 5 minutes without activity, review your walk to finish.")
+                .font(.footnote).foregroundStyle(AppColors.secondaryText)
+        }
+        .padding(.top, AppSpacing.medium)
+        .padding(.horizontal, AppSpacing.medium)
+        .padding(.bottom, AppSpacing.large)
     }
 
     private func reloadDogs() {

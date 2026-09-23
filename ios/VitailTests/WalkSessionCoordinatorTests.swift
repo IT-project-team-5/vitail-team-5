@@ -466,6 +466,41 @@ final class WalkSessionCoordinatorTests: XCTestCase {
                                 name: "Walk finish - no dogs saved - large text", largeText: true)
     }
 
+    func testDrawerFollowsTheFingerFromEitherDetentAndClampsAtItsBounds() {
+        let geometry = WalkDrawerGeometry(availableHeight: 800, controlsHeight: 200, accessibilitySize: false)
+        XCTAssertEqual(geometry.height(at: .collapsed, translation: -40), geometry.collapsedHeight + 40)
+        XCTAssertEqual(geometry.height(at: .collapsed, translation: -80), geometry.collapsedHeight + 80)
+        XCTAssertEqual(geometry.height(at: .expanded, translation: 40), geometry.expandedHeight - 40)
+        XCTAssertEqual(geometry.height(at: .expanded, translation: 80), geometry.expandedHeight - 80)
+        for detent in [WalkDrawerDetent.collapsed, .expanded] {
+            XCTAssertEqual(geometry.height(at: detent, translation: -10_000), geometry.expandedHeight)
+            XCTAssertEqual(geometry.height(at: detent, translation: 10_000), geometry.collapsedHeight)
+        }
+    }
+
+    func testDrawerSnapsToTheProjectedDetentRatherThanAnyDragDirection() {
+        let geometry = WalkDrawerGeometry(availableHeight: 800, controlsHeight: 200, accessibilitySize: false)
+        let halfway = (geometry.expandedHeight - geometry.collapsedHeight) / 2
+        XCTAssertEqual(geometry.snap(from: .collapsed, predictedTranslation: -10), .collapsed)
+        XCTAssertEqual(geometry.snap(from: .expanded, predictedTranslation: 10), .expanded)
+        XCTAssertEqual(geometry.snap(from: .collapsed, predictedTranslation: -halfway - 1), .expanded)
+        XCTAssertEqual(geometry.snap(from: .expanded, predictedTranslation: halfway + 1), .collapsed)
+    }
+
+    func testDrawerGivesExpandedHistoryNativeScrollingAndKeepsLargeControlsReachable() {
+        let standard = WalkDrawerGeometry(availableHeight: 800, controlsHeight: 200, accessibilitySize: false)
+        XCTAssertFalse(standard.controlsOverflowCollapsed)
+        XCTAssertFalse(standard.allowsContentScrolling(at: .collapsed))
+        XCTAssertTrue(standard.allowsContentScrolling(at: .expanded))
+        let accessible = WalkDrawerGeometry(availableHeight: 300, controlsHeight: 500, accessibilitySize: true)
+        XCTAssertTrue(accessible.controlsOverflowCollapsed)
+        XCTAssertTrue(accessible.allowsContentScrolling(at: .collapsed))
+        XCTAssertGreaterThan(accessible.expandedHeight, accessible.collapsedHeight)
+        XCTAssertLessThan(accessible.expandedHeight, 300)
+        let zero = WalkDrawerGeometry(availableHeight: 0, controlsHeight: 500, accessibilitySize: true)
+        XCTAssertEqual(zero.height(at: .expanded, translation: -100), 0)
+    }
+
     func testFullWalkMapSnapshotsIdleAndPaused() async throws {
         var now = referenceDate
         let client = CoordinatorLocationClientStub()
@@ -485,21 +520,29 @@ final class WalkSessionCoordinatorTests: XCTestCase {
         coordinator.tracker.pause()
         XCTAssertEqual(coordinator.tracker.elapsedActiveDuration(at: now), 120)
         for scheme in [ColorScheme.light, .dark] {
-            try await attachMap(coordinator, scheme: scheme, name: "Walk map - paused - \(scheme)")
+            try await attachMap(coordinator, scheme: scheme, name: "Walk map - paused - collapsed - \(scheme)")
+            try await attachMap(coordinator, scheme: scheme, name: "Walk map - paused - expanded - \(scheme)",
+                                detent: .expanded)
         }
+        try await attachMap(coordinator, scheme: .light, name: "Walk map - unified content scrolled - light",
+                            detent: .expanded, scrollDown: true)
+        try await attachMap(coordinator, scheme: .light, name: "Walk map - expanded - large text",
+                            detent: .expanded, largeText: true)
         XCTAssertEqual(coordinator.tracker.status, .paused)
         XCTAssertEqual(coordinator.locationManager.mode, .off)
     }
 
     private func attachMap(
-        _ coordinator: WalkSessionCoordinator, scheme: ColorScheme, name: String
+        _ coordinator: WalkSessionCoordinator, scheme: ColorScheme, name: String,
+        detent: WalkDrawerDetent = .collapsed, scrollDown: Bool = false, largeText: Bool = false
     ) async throws {
         let content = NavigationStack {
-            WalkMapView(coordinator: coordinator, isActive: false, onManageDogs: {})
+            WalkMapView(coordinator: coordinator, isActive: false, initialDrawerDetent: detent, onManageDogs: {})
                 .navigationTitle("Vitail")
                 .navigationBarTitleDisplayMode(.inline)
         }
         .vitailAppearance()
+        .environment(\.dynamicTypeSize, largeText ? .accessibility2 : .large)
         .preferredColorScheme(scheme)
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousWindow = scene.windows.first(where: \.isKeyWindow)
@@ -524,6 +567,24 @@ final class WalkSessionCoordinatorTests: XCTestCase {
         let map = try XCTUnwrap(maps(in: host.view).first)
         XCTAssertGreaterThan(map.bounds.height, bounds.height * 0.7, "Map should fill the page behind its controls.")
         XCTAssertGreaterThanOrEqual(map.bounds.width, bounds.width - 2)
+        func scrollViews(in view: UIView) -> [UIScrollView] {
+            (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
+        }
+        let drawerScrollViews = scrollViews(in: host.view).filter {
+            !$0.isDescendant(of: map) && $0.bounds.width > 200 && $0.contentSize.height > $0.bounds.height
+        }
+        XCTAssertEqual(drawerScrollViews.count, 1, "Controls and history must share one scroll container.")
+        if detent == .expanded {
+            let scrollView = try XCTUnwrap(drawerScrollViews.first)
+            XCTAssertTrue(scrollView.isScrollEnabled)
+            if scrollDown {
+                let offset = min(180, scrollView.contentSize.height - scrollView.bounds.height)
+                scrollView.setContentOffset(CGPoint(x: 0, y: offset), animated: false)
+                try await Task.sleep(nanoseconds: 100_000_000)
+                host.view.layoutIfNeeded()
+                XCTAssertGreaterThan(scrollView.contentOffset.y, 0)
+            }
+        }
         let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
             XCTAssertTrue(host.view.drawHierarchy(in: bounds, afterScreenUpdates: true))
         }
