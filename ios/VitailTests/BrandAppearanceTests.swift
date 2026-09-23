@@ -116,6 +116,23 @@ final class BrandAppearanceTests: XCTestCase {
         }
     }
 
+    func testCafeFirstRewardsAndCollectionSnapshots() async throws {
+        let model = RedemptionViewModel(service: BrandRedemptionFixture())
+        await model.refresh()
+        XCTAssertEqual(model.cafes.count, 2)
+        XCTAssertEqual(model.pendingRedemptions.count, 1)
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            try await snapshot(RedemptionView(viewModel: model), name: "Clean-Rewards-\(mode)", dark: dark)
+            try await snapshot(CafeMenuView(cafe: try XCTUnwrap(model.cafes.first { $0.id == "cafe-1" }), viewModel: model),
+                               name: "Clean-Cafe-Menu-\(mode)", dark: dark)
+            try await snapshot(RedemptionDetailView(order: try XCTUnwrap(model.pendingRedemptions.first), viewModel: model),
+                               name: "Clean-Order-\(mode)", dark: dark)
+        }
+        try await snapshot(RedemptionDetailView(order: try XCTUnwrap(model.pendingRedemptions.first), viewModel: model)
+            .environment(\.dynamicTypeSize, .accessibility2), name: "Clean-Order-Large-Text", dark: false)
+    }
+
     private func contrast(_ first: Color, _ second: Color, style: UIUserInterfaceStyle) -> Double {
         func luminance(_ color: Color) -> Double {
             var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
@@ -158,6 +175,28 @@ final class BrandAppearanceTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+}
+
+private actor BrandRedemptionFixture: RedemptionServing {
+    func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: 120) }
+    func fetchRewards() async throws -> [Reward] {
+        [Reward(id: 1, name: "Flat White", description: "Double espresso with silky steamed milk. Oat milk available.",
+                pointCost: 60, cafeName: "Riverside Paws Café", cafeID: 1,
+                cafeAddress: "12 River Walk, Southbank", cafeDescription: "Your quiet coffee stop after a riverside walk. Dogs welcome on the terrace.",
+                cafeOpeningHours: "Mon–Fri 7 am–3 pm · Sat–Sun 8 am–4 pm", cafeGoogleMapsURL: "https://www.google.com/maps/search/?api=1&query=Southbank"),
+         Reward(id: 2, name: "Banana Bread", description: "A thick slice, toasted and served warm.",
+                pointCost: 90, cafeName: "Riverside Paws Café", cafeID: 1),
+         Reward(id: 3, name: "Long Black", description: "", pointCost: 50, cafeName: "Garden Tails Café", cafeID: 2,
+                cafeOpeningHours: "Daily 7:30 am–3:30 pm")]
+    }
+    func fetchRedemptions() async throws -> [Redemption] {
+        [Redemption(id: 1, referenceNumber: "VIT-0123", rewardNameSnapshot: "Flat White", pointCostSnapshot: 60,
+                    status: .pending, cafeNameSnapshot: "Riverside Paws Café", cafeID: 1,
+                    cafeAddress: "12 River Walk, Southbank", cafeOpeningHours: "Mon–Fri 7 am–3 pm",
+                    cafeGoogleMapsURL: "https://www.google.com/maps/search/?api=1&query=Southbank")]
+    }
+    func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption { throw APIError.network("Read-only fixture") }
+    func collectRedemption(id: Int) async throws -> Redemption { throw APIError.network("Read-only fixture") }
 }
 
 private actor BrandCafeProductsFixture: CafeProductsServing {

@@ -3,6 +3,50 @@ import XCTest
 
 @MainActor
 final class RedemptionTests: XCTestCase {
+    func testCafeGroupingUsesIdentityRatherThanNameAndKeepsEachMenuSeparate() {
+        let offers = [
+            Reward(id: 1, name: "Coffee", description: "", pointCost: 60, cafeName: "Same Name", cafeID: 10),
+            Reward(id: 2, name: "Tea", description: "", pointCost: 40, cafeName: "Same Name", cafeID: 10),
+            Reward(id: 3, name: "Latte", description: "", pointCost: 70, cafeName: "Same Name", cafeID: 20)
+        ]
+        let cafes = CafeRewardGroup.grouped(offers)
+        XCTAssertEqual(cafes.count, 2)
+        XCTAssertEqual(cafes.first { $0.id == "cafe-10" }?.rewards.map(\.id), [2, 1])
+        XCTAssertEqual(cafes.first { $0.id == "cafe-20" }?.rewards.map(\.id), [3])
+    }
+
+    func testVenueResponseDecodesPhotoMapAndOpeningHoursWithoutBreakingOldResponses() throws {
+        let data = Data(#"{"id":1,"name":"Coffee","description":"","point_cost":60,"cafe_name":"Paws","cafe_id":9,"cafe_photo":"https://example.com/photo.jpg","cafe_opening_hours":"7–3","cafe_google_maps_url":"https://maps.google.com/?q=Paws"}"#.utf8)
+        let reward = try JSONDecoder().decode(Reward.self, from: data)
+        XCTAssertEqual(reward.cafeID, 9)
+        XCTAssertEqual(reward.cafePhoto, "https://example.com/photo.jpg")
+        XCTAssertEqual(CafeRewardGroup.grouped([reward]).first?.openingHours, "7–3")
+        let old = Data(#"{"id":2,"name":"Tea","description":"","point_cost":40,"cafe_name":"Legacy"}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(Reward.self, from: old).cafeID)
+    }
+
+    func testCoffeeEstimateUsesAgreedSixtyPointReference() {
+        XCTAssertEqual(CoffeeEstimate.pointsPerCup, 60)
+        XCTAssertEqual(CoffeeEstimate.text(for: 60), "≈ 1 cup of coffee")
+        XCTAssertEqual(CoffeeEstimate.text(for: 120), "≈ 2 cups of coffee")
+        XCTAssertEqual(CoffeeEstimate.text(for: 0), "≈ 0 cups of coffee")
+    }
+
+    func testCollectionRequiresCompleteEnabledSlideAndCannotConfirmTwice() {
+        var slide = SlideConfirmationState()
+        slide.offset = 100
+        XCTAssertFalse(slide.finish(travel: 250, isEnabled: true))
+        XCTAssertEqual(slide.offset, 0)
+        slide.offset = 250
+        XCTAssertFalse(slide.finish(travel: 250, isEnabled: false))
+        slide.offset = 250
+        XCTAssertTrue(slide.finish(travel: 250, isEnabled: true))
+        XCTAssertFalse(slide.finish(travel: 250, isEnabled: true))
+        slide.reset()
+        slide.offset = 250
+        XCTAssertTrue(slide.finish(travel: 250, isEnabled: true))
+    }
+
     func testAmbiguousRetryUsesSameIDAndDoesNotSubtractPointsTwice() async {
         let service = RedemptionStub(failFirstCreate: true)
         let model = RedemptionViewModel(service: service)
@@ -20,6 +64,24 @@ final class RedemptionTests: XCTestCase {
         XCTAssertNil(model.retryRewardID)
         XCTAssertEqual(model.balance, 50)
         XCTAssertEqual(model.pendingRedemptions.count, 1)
+    }
+
+    func testUncertainPurchaseCanRetryEvenWhenItsCafeLeavesTheCatalogue() async {
+        let service = RedemptionStub(failFirstCreate: true, hidePurchasedReward: true)
+        let model = RedemptionViewModel(service: service)
+        await model.refresh()
+        await model.redeem(rewardID: 1)
+        await model.refresh()
+        XCTAssertTrue(model.cafes.isEmpty)
+        XCTAssertEqual(model.retryRewardID, 1)
+        XCTAssertEqual(model.retryReward?.name, "Coffee")
+        await model.redeem(rewardID: 1)
+        let ids = await service.requestIDs
+        XCTAssertEqual(ids.count, 2)
+        XCTAssertEqual(ids.first, ids.last)
+        XCTAssertNil(model.retryRewardID)
+        XCTAssertNil(model.retryReward)
+        XCTAssertEqual(model.balance, 50)
     }
 
     func testExpiredCollectRefreshesRefundAndHistory() async {
@@ -72,15 +134,18 @@ private actor RedemptionStub: RedemptionServing {
     private var orders: [Redemption] = []
     private let failFirstCreate: Bool
     private let expireOnCollect: Bool
+    private let hidePurchasedReward: Bool
 
-    init(failFirstCreate: Bool = false, expireOnCollect: Bool = false) {
+    init(failFirstCreate: Bool = false, expireOnCollect: Bool = false, hidePurchasedReward: Bool = false) {
         self.failFirstCreate = failFirstCreate
         self.expireOnCollect = expireOnCollect
+        self.hidePurchasedReward = hidePurchasedReward
     }
 
     func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: balance) }
     func fetchRewards() async throws -> [Reward] {
-        [Reward(id: 1, name: "Coffee", description: "", pointCost: 10, cafeName: "Cafe")]
+        if hidePurchasedReward && !orders.isEmpty { return [] }
+        return [Reward(id: 1, name: "Coffee", description: "", pointCost: 10, cafeName: "Cafe")]
     }
     func fetchRedemptions() async throws -> [Redemption] { orders }
 

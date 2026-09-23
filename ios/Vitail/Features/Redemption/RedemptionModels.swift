@@ -10,6 +10,12 @@ struct Reward: Codable, Identifiable, Sendable {
     let description: String
     let pointCost: Int
     let cafeName: String
+    var cafeID: Int? = nil
+    var cafePhoto: String? = nil
+    var cafeAddress: String? = nil
+    var cafeDescription: String? = nil
+    var cafeOpeningHours: String? = nil
+    var cafeGoogleMapsURL: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -17,6 +23,46 @@ struct Reward: Codable, Identifiable, Sendable {
         case description
         case pointCost = "point_cost"
         case cafeName = "cafe_name"
+        case cafeID = "cafe_id"
+        case cafePhoto = "cafe_photo"
+        case cafeAddress = "cafe_address"
+        case cafeDescription = "cafe_description"
+        case cafeOpeningHours = "cafe_opening_hours"
+        case cafeGoogleMapsURL = "cafe_google_maps_url"
+    }
+
+    var venueKey: String { cafeID.map { "cafe-\($0)" } ?? "legacy-\(cafeName)" }
+}
+
+struct CafeRewardGroup: Identifiable {
+    let id: String
+    let name: String
+    let photo: String?
+    let address: String
+    let description: String
+    let openingHours: String
+    let googleMapsURL: String?
+    let rewards: [Reward]
+
+    static func grouped(_ rewards: [Reward]) -> [CafeRewardGroup] {
+        Dictionary(grouping: rewards, by: \.venueKey).compactMap { key, items in
+            guard let first = items.first else { return nil }
+            return CafeRewardGroup(
+                id: key, name: first.cafeName, photo: first.cafePhoto,
+                address: first.cafeAddress ?? "", description: first.cafeDescription ?? "",
+                openingHours: first.cafeOpeningHours ?? "", googleMapsURL: first.cafeGoogleMapsURL,
+                rewards: items.sorted { $0.pointCost == $1.pointCost ? $0.id < $1.id : $0.pointCost < $1.pointCost }
+            )
+        }.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+}
+
+enum CoffeeEstimate {
+    static let pointsPerCup = 60
+
+    static func text(for points: Int) -> String {
+        let cups = Double(max(0, points)) / Double(pointsPerCup)
+        return "≈ \(cups.formatted(.number.precision(.fractionLength(0...1)))) \(cups == 1 ? "cup" : "cups") of coffee"
     }
 }
 
@@ -34,6 +80,12 @@ struct Redemption: Codable, Identifiable, Equatable, Sendable {
     let pointCostSnapshot: Int
     let status: RedemptionStatus
     var cafeNameSnapshot: String? = nil
+    var cafeID: Int? = nil
+    var cafePhoto: String? = nil
+    var cafeAddress: String? = nil
+    var cafeOpeningHours: String? = nil
+    var cafeGoogleMapsURL: String? = nil
+    var expiresAt: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -42,6 +94,12 @@ struct Redemption: Codable, Identifiable, Equatable, Sendable {
         case pointCostSnapshot = "point_cost_snapshot"
         case status
         case cafeNameSnapshot = "cafe_name_snapshot"
+        case cafeID = "cafe_id"
+        case cafePhoto = "cafe_photo"
+        case cafeAddress = "cafe_address"
+        case cafeOpeningHours = "cafe_opening_hours"
+        case cafeGoogleMapsURL = "cafe_google_maps_url"
+        case expiresAt = "expires_at"
     }
 
     static func == (lhs: Redemption, rhs: Redemption) -> Bool {

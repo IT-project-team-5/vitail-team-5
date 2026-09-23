@@ -10,7 +10,9 @@ final class RedemptionViewModel: ObservableObject {
     @Published private(set) var redeemingRewardID: Int?
     @Published private(set) var collectingRedemptionID: Int?
     @Published private(set) var retryRewardID: Int?
+    @Published private(set) var retryReward: Reward?
     @Published var errorMessage: String?
+    @Published private(set) var purchaseNotice: String?
 
     private let service: any RedemptionServing
     private var pendingRequestID: UUID?
@@ -22,6 +24,7 @@ final class RedemptionViewModel: ObservableObject {
     var isMutating: Bool { redeemingRewardID != nil || collectingRedemptionID != nil }
     var pendingRedemptions: [Redemption] { redemptions.filter { $0.status == .pending } }
     var history: [Redemption] { redemptions.filter { $0.status != .pending } }
+    var cafes: [CafeRewardGroup] { CafeRewardGroup.grouped(rewards) }
 
     func refresh() async {
         guard !isLoading, !isMutating else { return }
@@ -54,17 +57,21 @@ final class RedemptionViewModel: ObservableObject {
               retryRewardID == nil || retryRewardID == rewardID else { return }
         let requestID = pendingRequestID ?? UUID()
         pendingRequestID = requestID
+        if retryRewardID == nil { retryReward = rewards.first { $0.id == rewardID } }
         retryRewardID = rewardID
         redeemingRewardID = rewardID
         errorMessage = nil
+        purchaseNotice = nil
         defer { redeemingRewardID = nil }
         do {
             let order = try await service.createRedemption(rewardID: rewardID, requestID: requestID)
             try Task.checkCancellation()
             redemptions.removeAll { $0.id == order.id }
             redemptions.insert(order, at: 0)
+            purchaseNotice = "\(order.rewardNameSnapshot) ordered. Find it in Ready to collect."
             pendingRequestID = nil
             retryRewardID = nil
+            retryReward = nil
             // Always use the server balance; never subtract twice on an idempotent retry.
             try await reload()
         } catch {
@@ -73,6 +80,7 @@ final class RedemptionViewModel: ObservableObject {
                [400, 403, 404, 409, 422].contains(status) {
                 pendingRequestID = nil
                 retryRewardID = nil
+                retryReward = nil
             }
             errorMessage = error.localizedDescription
         }
