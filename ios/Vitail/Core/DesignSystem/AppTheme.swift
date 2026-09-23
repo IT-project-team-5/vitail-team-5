@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -46,4 +47,58 @@ enum AppSpacing {
 enum AppRadius {
     static let field: CGFloat = 12
     static let card: CGFloat = 16
+}
+
+
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: Self { self }
+    var label: String { rawValue.capitalized }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+@MainActor
+final class AppearanceSettings: ObservableObject {
+    static let storageKey = "appearance.selectedMode"
+    static let shared = AppearanceSettings()
+
+    @Published var selection: AppAppearance {
+        didSet { defaults.set(selection.rawValue, forKey: Self.storageKey) }
+    }
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        selection = defaults.string(forKey: Self.storageKey).flatMap(AppAppearance.init(rawValue:)) ?? .system
+    }
+}
+
+struct AppearanceSettingsSection: View {
+    @ObservedObject var settings: AppearanceSettings
+
+    init(settings: AppearanceSettings? = nil) {
+        self.settings = settings ?? .shared
+    }
+
+    var body: some View {
+        Section("Appearance") {
+            Picker("Theme", selection: $settings.selection) {
+                ForEach(AppAppearance.allCases) { appearance in
+                    Text(appearance.label).tag(appearance)
+                }
+            }
+            .pickerStyle(.menu)
+        }
+        .listRowBackground(AppColors.surface)
+    }
 }

@@ -41,12 +41,17 @@ final class AuthViewModel: ObservableObject {
     }
 
     func select(_ accountType: AccountType) {
-        self.accountType = accountType
-        errorMessage = nil
-
-        if accountType == .cafeOwner {
+        if self.accountType == accountType {
+            chooseAnotherAccount()
+            return
+        }
+        if self.accountType != nil {
+            password = ""
             mode = .login
         }
+        self.accountType = accountType
+        errorMessage = nil
+        if accountType == .cafeOwner { mode = .login }
     }
 
     func chooseAnotherAccount() {

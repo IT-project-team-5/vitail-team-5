@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     @ObservedObject var session: SessionStore
     let cafeOrdersService: any CafeOrdersServing
     let dogService: any DogServicing
@@ -31,6 +32,7 @@ struct RootView: View {
             }
         }
         .vitailAppearance()
+        .preferredColorScheme(appearance.selection.colorScheme)
         .task {
             if session.state == .restoring {
                 await session.restore()

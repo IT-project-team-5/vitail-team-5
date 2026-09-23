@@ -87,6 +87,7 @@ struct CafeProfileView: View {
                         Section { Text(message).foregroundStyle(AppColors.success) }
                             .listRowBackground(AppColors.surface)
                     }
+                    AppearanceSettingsSection()
                     Section {
                         Button("Log Out", role: .destructive) {
                             Task { await session.logout() }

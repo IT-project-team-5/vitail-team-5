@@ -2,13 +2,18 @@ import SwiftUI
 
 struct AuthView: View {
     @ObservedObject var session: SessionStore
-    @StateObject private var viewModel = AuthViewModel()
+    @StateObject private var viewModel: AuthViewModel
     @ScaledMetric(relativeTo: .body) private var accountIconWidth = 24.0
     #if DEBUG
     @State private var debugBackendURL = AppConfiguration.debugAPIBaseURLText
     @State private var debugBackendMessage: String?
     @State private var debugBackendHasError = false
     #endif
+
+    init(session: SessionStore, viewModel: AuthViewModel? = nil) {
+        self.session = session
+        _viewModel = StateObject(wrappedValue: viewModel ?? AuthViewModel())
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,23 +22,20 @@ struct AuthView: View {
                     VStack(alignment: .leading, spacing: AppSpacing.extraLarge) {
                         VStack(alignment: .leading, spacing: AppSpacing.large) {
                             header
-                            if let accountType = viewModel.accountType {
-                                Button {
-                                    withAnimation { viewModel.chooseAnotherAccount() }
-                                } label: {
-                                    Label(accountType.rawValue, systemImage: "chevron.left")
-                                        .font(.headline)
-                                }
-                                .foregroundStyle(AppColors.brand)
-                                authenticationForm
-                            } else {
-                                VStack(spacing: AppSpacing.medium) {
-                                    ForEach(AuthViewModel.AccountType.allCases) { accountType in
+                            VStack(spacing: AppSpacing.medium) {
+                                ForEach(AuthViewModel.AccountType.allCases) { accountType in
+                                    VStack(alignment: .leading, spacing: AppSpacing.medium) {
                                         accountTypeButton(accountType)
+                                        if viewModel.accountType == accountType {
+                                            authenticationForm
+                                                .padding(.horizontal, AppSpacing.small)
+                                                .padding(.bottom, AppSpacing.medium)
+                                                .transition(.opacity.combined(with: .move(edge: .top)))
+                                        }
                                     }
                                 }
-                                .padding(.top, AppSpacing.large)
                             }
+                            .padding(.top, AppSpacing.large)
                             Spacer(minLength: AppSpacing.extraLarge)
                         }
                         .frame(minHeight: max(geometry.size.height - AppSpacing.large * 2, 0), alignment: .top)
@@ -99,7 +101,8 @@ struct AuthView: View {
                     .fontWeight(.semibold)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                Image(systemName: "arrow.right").font(.subheadline)
+                Image(systemName: viewModel.accountType == accountType ? "chevron.up" : "chevron.down")
+                    .font(.subheadline)
             }
             .foregroundStyle(AppColors.primaryText)
             .padding(AppSpacing.large)
@@ -108,6 +111,8 @@ struct AuthView: View {
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
         }
         .buttonStyle(.plain)
+        .accessibilityValue(viewModel.accountType == accountType ? "Expanded" : "Collapsed")
+        .accessibilityHint(viewModel.accountType == accountType ? "Hide sign-in fields" : "Show sign-in fields")
     }
 
     private var header: some View {

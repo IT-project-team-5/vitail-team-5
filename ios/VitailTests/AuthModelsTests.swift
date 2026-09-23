@@ -80,6 +80,53 @@ final class AuthModelsTests: XCTestCase {
         XCTAssertFalse(model.canSubmit)
     }
 
+    @MainActor
+    func testAccountAccordionCollapsesAndSwitchingClearsPassword() {
+        let model = AuthViewModel()
+        model.select(.dogOwner)
+        model.password = "owner password"
+        model.mode = .register
+        model.select(.cafeOwner)
+        XCTAssertEqual(model.accountType, .cafeOwner)
+        XCTAssertEqual(model.password, "")
+        XCTAssertEqual(model.mode, .login)
+        model.password = "cafe password"
+        model.select(.cafeOwner)
+        XCTAssertNil(model.accountType)
+        XCTAssertEqual(model.password, "")
+        XCTAssertFalse(model.canSubmit)
+        model.select(.dogOwner)
+        XCTAssertEqual(model.accountType, .dogOwner)
+    }
+
+    @MainActor
+    func testAppearanceDefaultsToSystemAndPersistsAcrossSettingsInstances() throws {
+        let suiteName = "AppearanceSettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppearanceSettings(defaults: defaults)
+        XCTAssertEqual(settings.selection, .system)
+        XCTAssertNil(settings.selection.colorScheme)
+        settings.selection = .dark
+        XCTAssertEqual(AppearanceSettings(defaults: defaults).selection, .dark)
+        XCTAssertEqual(settings.selection.colorScheme, .dark)
+        settings.selection = .light
+        XCTAssertEqual(AppearanceSettings(defaults: defaults).selection, .light)
+        XCTAssertEqual(settings.selection.colorScheme, .light)
+        settings.selection = .system
+        XCTAssertEqual(AppearanceSettings(defaults: defaults).selection, .system)
+        XCTAssertNil(settings.selection.colorScheme)
+    }
+
+    @MainActor
+    func testUnknownSavedAppearanceFallsBackToSystem() throws {
+        let suiteName = "AppearanceSettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("retired-theme", forKey: AppearanceSettings.storageKey)
+        XCTAssertEqual(AppearanceSettings(defaults: defaults).selection, .system)
+    }
+
     func testRoleMismatchExplainsHowToRetry() {
         let error = APIError.roleMismatch(expected: .owner, actual: .cafe)
 

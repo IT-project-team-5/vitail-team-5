@@ -94,6 +94,7 @@ private struct EditOwnerProfileView: View {
                         .foregroundStyle(AppColors.secondaryText)
                 }
                 .listRowBackground(AppColors.surface)
+                AppearanceSettingsSection()
                 Section {
                     Button("Log Out", role: .destructive) {
                         Task { await session.logout(); dismiss() }
