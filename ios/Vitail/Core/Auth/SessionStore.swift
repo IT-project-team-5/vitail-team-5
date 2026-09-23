@@ -97,6 +97,15 @@ final class SessionStore: ObservableObject {
         state = .signedIn(updatedUser)
     }
 
+    func updatePhoto(_ data: Data) async throws {
+        guard case let .signedIn(originalUser) = state else { throw APIError.missingSession }
+        let updatedUser = try await authService.uploadPhoto(data)
+        try validateMobileRole(updatedUser)
+        guard case let .signedIn(currentUser) = state,
+              currentUser.id == originalUser.id else { return }
+        state = .signedIn(updatedUser)
+    }
+
     func reloadCurrentUser() async throws {
         guard case let .signedIn(originalUser) = state,
               let updatedUser = try await authService.restoreUser() else {

@@ -2,7 +2,9 @@ import SwiftUI
 
 struct DogFormView: View {
     @ObservedObject var viewModel: DogViewModel
-    let dog: Dog?
+    @State private var dog: Dog?
+    private let onSave: (() -> Void)?
+    @State private var photoData: Data?
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var breedID: Int?
@@ -13,9 +15,10 @@ struct DogFormView: View {
     @State private var validationMessage: String?
     @State private var isConfirmingDelete = false
 
-    init(viewModel: DogViewModel, dog: Dog? = nil) {
+    init(viewModel: DogViewModel, dog: Dog? = nil, onSave: (() -> Void)? = nil) {
         self.viewModel = viewModel
-        self.dog = dog
+        _dog = State(initialValue: dog)
+        self.onSave = onSave
         let age = DogAgeInput.formValues(forAgeMonths: dog?.ageMonths ?? 1)
         _name = State(initialValue: dog?.name ?? "")
         _breedID = State(initialValue: dog?.breed.id)
@@ -28,8 +31,15 @@ struct DogFormView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    AvatarPhotoPicker(url: dog?.photo, name: name.isEmpty ? "your dog" : name,
+                                      systemImage: "dog.fill", photoData: $photoData)
+                        .padding(.vertical, AppSpacing.medium)
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
                 Section("Dog details") {
-                    TextField("Name", text: $name)
+                    TextField("Name", text: $name, prompt: Text("Name").foregroundStyle(AppColors.secondaryText))
                     Picker("Breed", selection: $breedID) {
                         Text("Select a breed").tag(Int?.none)
                         ForEach(viewModel.breeds) { breed in
@@ -46,7 +56,7 @@ struct DogFormView: View {
                 .listRowBackground(AppColors.surface)
 
                 Section("Age") {
-                    TextField("Years", text: $years)
+                    TextField("Years", text: $years, prompt: Text("Years").foregroundStyle(AppColors.secondaryText))
                         .keyboardType(.numberPad)
                     Picker("Months", selection: $months) {
                         ForEach(DogAgeInput.monthOptions, id: \.self) { month in
@@ -84,6 +94,7 @@ struct DogFormView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }
                         .disabled(viewModel.isSaving)
+            .interactiveDismissDisabled(viewModel.isSaving)
                 }
             }
             .disabled(viewModel.isSaving)
@@ -132,7 +143,13 @@ struct DogFormView: View {
             size: size,
             isBrachycephalic: isBrachycephalic
         )
-        if await viewModel.save(dog: dog, request: request) { dismiss() }
+        if await viewModel.save(dog: dog, request: request, photoData: photoData) {
+            onSave?()
+            dismiss()
+        } else if let savedDog = viewModel.lastSavedDog {
+            // A saved profile remains editable if its photo failed; retry must not create another dog.
+            dog = savedDog
+        }
     }
 
     private func deleteDog() async {

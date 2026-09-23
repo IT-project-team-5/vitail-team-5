@@ -16,6 +16,14 @@ struct CafeProfileView: View {
             } else {
                 Form {
                     if model.hasLoaded {
+                        Section {
+                            AvatarPhotoPicker(url: model.photo, name: model.name,
+                                              systemImage: "storefront.fill", photoData: $model.photoData)
+                                .padding(.vertical, AppSpacing.medium)
+                        }
+                        .disabled(model.isSaving)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                         Section("Café details") {
                             TextField("Café name", text: $model.name)
                             LabeledContent("Email", value: model.email)
@@ -25,6 +33,24 @@ struct CafeProfileView: View {
                                 .lineLimit(3...6)
                             TextField("Opening hours", text: $model.openingHours, axis: .vertical)
                                 .lineLimit(2...4)
+                        }
+                        .disabled(model.isSaving)
+                        .listRowBackground(AppColors.surface)
+
+                        Section {
+                            TextField("Google Maps link", text: $model.googleMapsURL,
+                                      prompt: Text("Google Maps link").foregroundStyle(AppColors.secondaryText))
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                            if let url = URL(string: model.googleMapsURL.isEmpty ? (model.mapsLink ?? "") : model.googleMapsURL),
+                               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                                Link("Open in Google Maps", destination: url)
+                            }
+                        } header: {
+                            Text("Google Maps")
+                        } footer: {
+                            Text("Paste a Google Maps share link, or leave it blank to use your café address.")
                         }
                         .disabled(model.isSaving)
                         .listRowBackground(AppColors.surface)

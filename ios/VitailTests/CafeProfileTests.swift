@@ -30,6 +30,21 @@ final class CafeProfileTests: XCTestCase {
         model.address = ""
         model.openingHours = ""
         XCTAssertTrue(model.canSave)
+        model.googleMapsURL = "not-a-url"
+        XCTAssertFalse(model.canSave)
+        model.googleMapsURL = "https://maps.app.goo.gl/example"
+        XCTAssertTrue(model.canSave)
+    }
+
+    func testCafePhotoAndMapsDecodeAndMapsUpdateUsesSnakeCase() throws {
+        let profile = try JSONDecoder().decode(CafeProfile.self, from: Data(#"{"name":"Cafe","email":"cafe@example.com","address":"","description":"","opening_hours":"","photo":"https://media.example/cafe.jpg","google_maps_url":"https://maps.app.goo.gl/example"}"#.utf8))
+        XCTAssertEqual(profile.photo, "https://media.example/cafe.jpg")
+        XCTAssertEqual(profile.googleMapsURL, "https://maps.app.goo.gl/example")
+        let request = CafeProfileRequest(name: "Cafe", address: "", description: "", openingHours: "",
+                                         googleMapsURL: profile.googleMapsURL!)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: String])
+        XCTAssertEqual(object["google_maps_url"], profile.googleMapsURL)
+        XCTAssertNil(object["photo"])
     }
 }
 

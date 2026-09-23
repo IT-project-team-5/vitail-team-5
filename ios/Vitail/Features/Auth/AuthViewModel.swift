@@ -4,8 +4,8 @@ import Foundation
 @MainActor
 final class AuthViewModel: ObservableObject {
     enum AccountType: String, CaseIterable, Identifiable {
-        case dogOwner = "I'm a dog owner"
-        case cafeOwner = "I'm a cafe owner"
+        case dogOwner = "Dog Owner"
+        case cafeOwner = "Cafe"
 
         var id: Self { self }
 
@@ -26,7 +26,7 @@ final class AuthViewModel: ObservableObject {
         var id: Self { self }
     }
 
-    @Published private(set) var accountType: AccountType = .dogOwner
+    @Published private(set) var accountType: AccountType? = nil
     @Published var mode: Mode = .login
     @Published var displayName = ""
     @Published var email = ""
@@ -35,6 +35,7 @@ final class AuthViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     var canSubmit: Bool {
+        guard accountType != nil else { return false }
         let hasCredentials = !trimmedEmail.isEmpty && !password.isEmpty
         return mode == .login ? hasCredentials : hasCredentials && !trimmedDisplayName.isEmpty
     }
@@ -48,8 +49,15 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    func chooseAnotherAccount() {
+        accountType = nil
+        mode = .login
+        password = ""
+        errorMessage = nil
+    }
+
     func submit(using session: SessionStore) async {
-        guard canSubmit else {
+        guard canSubmit, let accountType else {
             errorMessage = "Please complete all fields."
             return
         }
@@ -67,6 +75,10 @@ final class AuthViewModel: ObservableObject {
                     expectedRole: accountType.role
                 )
             case .register:
+                guard accountType == .dogOwner else {
+                    errorMessage = "Café accounts are created by a Vitail administrator."
+                    return
+                }
                 try await session.register(
                     email: trimmedEmail,
                     password: password,

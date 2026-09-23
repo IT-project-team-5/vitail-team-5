@@ -18,18 +18,11 @@ struct OwnerProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.large) {
                 profileCard
-                Divider()
                 DogListView(
                     viewModel: dogViewModel,
                     addDog: { isAddingDog = true },
                     editDog: { selectedDog = $0 }
                 )
-                Divider()
-                Button("Log Out", role: .destructive) {
-                    Task { await session.logout() }
-                }
-                .foregroundStyle(AppColors.error)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(AppSpacing.large)
         }
@@ -42,30 +35,29 @@ struct OwnerProfileView: View {
             DogFormView(viewModel: dogViewModel)
         }
         .sheet(item: $selectedDog) { dog in
-            DogFormView(viewModel: dogViewModel, dog: dog)
+            DogDetailView(viewModel: dogViewModel, dog: dog)
         }
     }
 
     private var profileCard: some View {
-        VStack(spacing: AppSpacing.medium) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 72))
-                .foregroundStyle(AppColors.brand)
-                .accessibilityLabel("Default profile avatar")
-            VStack(spacing: 4) {
-                Text(user.displayName)
-                    .font(.title2.bold())
-                Text(user.email)
-                    .foregroundStyle(AppColors.secondaryText)
+        Button { isEditingProfile = true } label: {
+            HStack(spacing: AppSpacing.large) {
+                AvatarView(url: user.photo, name: user.displayName, size: 76)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(user.displayName).font(.title2.bold())
+                        .foregroundStyle(AppColors.primaryText)
+                    Text(user.email).font(.subheadline)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").foregroundStyle(AppColors.secondaryText)
             }
-            Button("Edit Profile") { isEditingProfile = true }
-                .fontWeight(.semibold)
-                .foregroundStyle(AppColors.brand)
+            .padding(.vertical, AppSpacing.large)
+            .contentShape(Rectangle())
         }
-        .padding(AppSpacing.large)
-        .frame(maxWidth: .infinity)
-        .background(AppColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .buttonStyle(.plain)
+        .accessibilityLabel("Your profile, \(user.displayName)")
+        .accessibilityHint("Edit your photo and account details")
     }
 }
 
@@ -81,14 +73,32 @@ private struct EditOwnerProfileView: View {
         _viewModel = StateObject(wrappedValue: OwnerProfileViewModel(user: user))
     }
 
+    private var currentPhoto: String? {
+        if case let .signedIn(currentUser) = session.state { return currentUser.photo }
+        return user.photo
+    }
+
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    AvatarPhotoPicker(url: currentPhoto, name: user.displayName, photoData: $viewModel.photoData)
+                        .padding(.vertical, AppSpacing.medium)
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
                 Section("Profile") {
                     TextField("Display name", text: $viewModel.displayName)
                         .textContentType(.name)
                     LabeledContent("Email", value: user.email)
                         .foregroundStyle(AppColors.secondaryText)
+                }
+                .listRowBackground(AppColors.surface)
+                Section {
+                    Button("Log Out", role: .destructive) {
+                        Task { await session.logout(); dismiss() }
+                    }
+                    .foregroundStyle(AppColors.error)
                 }
                 .listRowBackground(AppColors.surface)
                 if let message = viewModel.errorMessage {
@@ -98,7 +108,7 @@ private struct EditOwnerProfileView: View {
             }
             .scrollContentBackground(.hidden)
             .background(AppColors.background)
-            .navigationTitle("Edit Profile")
+            .navigationTitle("Your Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -114,6 +124,7 @@ private struct EditOwnerProfileView: View {
                 }
             }
             .disabled(viewModel.isSaving)
+            .interactiveDismissDisabled(viewModel.isSaving)
         }
     }
 }

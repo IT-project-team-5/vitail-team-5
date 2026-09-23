@@ -6,10 +6,15 @@ struct CafeProfile: Codable, Equatable, Sendable {
     let address: String
     let description: String
     let openingHours: String
+    var googleMapsURL: String? = nil
+    var mapsLink: String? = nil
+    var photo: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case name, email, address, description
+        case name, email, address, description, photo
         case openingHours = "opening_hours"
+        case googleMapsURL = "google_maps_url"
+        case mapsLink = "maps_link"
     }
 }
 
@@ -18,9 +23,11 @@ struct CafeProfileRequest: Encodable, Sendable {
     let address: String
     let description: String
     let openingHours: String
+    var googleMapsURL: String = ""
 
     enum CodingKeys: String, CodingKey {
         case name, address, description
         case openingHours = "opening_hours"
+        case googleMapsURL = "google_maps_url"
     }
 }

@@ -5,6 +5,7 @@ import Foundation
 final class DogViewModel: ObservableObject {
     static let maximumDogs = 10
 
+    @Published private(set) var lastSavedDog: Dog?
     @Published private(set) var dogs: [Dog] = []
     @Published private(set) var breeds: [Breed] = []
     @Published private(set) var isLoading = false
@@ -33,7 +34,9 @@ final class DogViewModel: ObservableObject {
         }
     }
 
-    func save(dog: Dog?, request: DogWriteRequest) async -> Bool {
+    func save(dog: Dog?, request: DogWriteRequest, photoData: Data? = nil) async -> Bool {
+        guard !isSaving else { return false }
+        lastSavedDog = nil
         guard dog != nil || canAddDog else {
             errorMessage = "An account can have at most 10 dogs."
             return false
@@ -53,14 +56,22 @@ final class DogViewModel: ObservableObject {
                 savedDog = try await service.createDog(request)
                 dogs.append(savedDog)
             }
+            lastSavedDog = savedDog
+            if let photoData {
+                let updatedDog = try await service.uploadPhoto(dogID: savedDog.id, data: photoData)
+                if let index = dogs.firstIndex(where: { $0.id == savedDog.id }) { dogs[index] = updatedDog }
+                lastSavedDog = updatedDog
+            }
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = lastSavedDog == nil ? error.localizedDescription
+                : "Dog details saved. The photo could not upload: \(error.localizedDescription)"
             return false
         }
     }
 
     func delete(_ dog: Dog) async -> Bool {
+        guard !isSaving else { return false }
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }

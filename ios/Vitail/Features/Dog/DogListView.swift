@@ -34,19 +34,11 @@ struct DogListView: View {
                 ForEach(viewModel.dogs) { dog in
                     Button { editDog(dog) } label: {
                         HStack(spacing: AppSpacing.medium) {
-                            Image(systemName: "dog.fill")
-                                .font(.title2)
-                                .foregroundStyle(AppColors.brand)
-                                .frame(width: 48, height: 48)
-                                .background(AppColors.brand.opacity(0.12))
-                                .clipShape(Circle())
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(dog.name).font(.headline)
-                                Text(dog.breed.name)
-                                Text("\(dog.ageDescription) · \(dog.size.label)")
-                            }
-                            .foregroundStyle(AppColors.primaryText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 52)
+                            Text(dog.name)
+                                .font(.headline)
+                                .foregroundStyle(AppColors.primaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right")
                                 .foregroundStyle(AppColors.secondaryText)
                         }

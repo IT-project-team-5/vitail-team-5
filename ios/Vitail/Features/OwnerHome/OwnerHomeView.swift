@@ -38,7 +38,11 @@ struct OwnerHomeView: View {
     let walkService: any WalkServing
     @StateObject private var redemptionViewModel: RedemptionViewModel
     @StateObject private var walkCoordinator: WalkSessionCoordinator
+    @StateObject private var onboardingDogs: DogViewModel
     @State private var selection: Page = .walk
+    @State private var hasCheckedOnboarding = false
+    @State private var isAddingFirstDog = false
+    @State private var accountRefreshID = 0
 
     init(
         user: User, session: SessionStore,
@@ -50,6 +54,7 @@ struct OwnerHomeView: View {
         self.session = session
         self.dogService = dogService
         self.walkService = walkService
+        _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService))
         _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
             ownerID: user.id, session: session, dogService: dogService, walkService: walkService
         ))
@@ -63,8 +68,9 @@ struct OwnerHomeView: View {
             VStack(spacing: 0) {
                 TabView(selection: $selection) {
                     OwnerProfileView(user: user, session: session, dogService: dogService)
+                        .id(accountRefreshID)
                         .tag(Page.account)
-                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk) {
+                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog) {
                         selection = .account
                     }
                     .tag(Page.walk)
@@ -76,17 +82,20 @@ struct OwnerHomeView: View {
                 bottomNavigation
             }
             .background(AppColors.background)
-            .navigationTitle(selection.rawValue)
+            .navigationTitle("Vitail")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "pawprint.fill")
-                        Text(redemptionViewModel.balance.map { "\($0) pts" } ?? "— pts")
-                    }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(AppColors.brand)
-                }
+            .sheet(isPresented: $isAddingFirstDog, onDismiss: {
+                accountRefreshID += 1
+                Task { await walkCoordinator.dogSelection.load() }
+            }) {
+                DogFormView(viewModel: onboardingDogs)
+            }
+            .task {
+                guard !hasCheckedOnboarding else { return }
+                await onboardingDogs.load()
+                guard !Task.isCancelled else { return }
+                hasCheckedOnboarding = true
+                isAddingFirstDog = onboardingDogs.errorMessage == nil && onboardingDogs.dogs.isEmpty
             }
             .task(id: "\(selection.rawValue)-\(scenePhase == .active)") {
                 guard scenePhase == .active else { return }
@@ -120,8 +129,5 @@ struct OwnerHomeView: View {
         .padding(.bottom, AppSpacing.small)
         .padding(.horizontal, AppSpacing.small)
         .background(AppColors.surface)
-        .overlay(alignment: .top) {
-            Divider()
-        }
     }
 }

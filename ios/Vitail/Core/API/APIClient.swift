@@ -37,9 +37,9 @@ enum APIError: LocalizedError, Equatable, Sendable {
         case let .roleMismatch(expected, actual):
             switch (expected, actual) {
             case (.owner, .cafe):
-                return "This is a café account. Choose “I'm a cafe owner” to sign in."
+                return "This is a café account. Choose “Cafe” to sign in."
             case (.cafe, .owner):
-                return "This is a dog owner account. Choose “I'm a dog owner” to sign in."
+                return "This is a dog owner account. Choose “Dog Owner” to sign in."
             default:
                 return "This account does not match the selected account type."
             }

@@ -5,8 +5,13 @@ protocol DogServicing: Sendable {
     func getBreeds() async throws -> [Breed]
     func createDog(_ request: DogWriteRequest) async throws -> Dog
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog
+    func uploadPhoto(dogID: Int, data: Data) async throws -> Dog
     func deleteDog(id: Int) async throws
     func getGoal(dogID: Int) async throws -> DogGoal
+}
+
+extension DogServicing {
+    func uploadPhoto(dogID: Int, data: Data) async throws -> Dog { throw PhotoUploadError.unavailable }
 }
 
 actor DogService: DogServicing {
@@ -30,6 +35,10 @@ actor DogService: DogServicing {
 
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog {
         try await apiClient.patch("/api/dogs/\(id)", body: request)
+    }
+
+    func uploadPhoto(dogID: Int, data: Data) async throws -> Dog {
+        try await apiClient.post("/api/dogs/\(dogID)/photo", body: PhotoUploadRequest(data: data))
     }
 
     func deleteDog(id: Int) async throws {

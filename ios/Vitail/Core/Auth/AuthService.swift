@@ -9,6 +9,11 @@ protocol AuthServing: Sendable {
     func restoreUser() async throws -> User?
     func clearSession() async throws
     func updateProfile(displayName: String) async throws -> User
+    func uploadPhoto(_ data: Data) async throws -> User
+}
+
+extension AuthServing {
+    func uploadPhoto(_ data: Data) async throws -> User { throw PhotoUploadError.unavailable }
 }
 
 actor AuthService: AuthServing {
@@ -93,6 +98,13 @@ actor AuthService: AuthServing {
     func updateProfile(displayName: String) async throws -> User {
         let response: CurrentUserResponse = try await authenticatedAPIClient.patch(
             "/api/auth/me", body: ProfileUpdateRequest(displayName: displayName)
+        )
+        return response.user
+    }
+
+    func uploadPhoto(_ data: Data) async throws -> User {
+        let response: CurrentUserResponse = try await authenticatedAPIClient.post(
+            "/api/auth/me/photo", body: PhotoUploadRequest(data: data)
         )
         return response.user
     }

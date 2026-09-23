@@ -65,12 +65,27 @@ final class AuthModelsTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testLoginRequiresAnExplicitAccountChoiceAndBackClearsPassword() {
+        let model = AuthViewModel()
+        model.email = "owner@example.com"
+        model.password = "password"
+        XCTAssertNil(model.accountType)
+        XCTAssertFalse(model.canSubmit)
+        model.select(.dogOwner)
+        XCTAssertTrue(model.canSubmit)
+        model.chooseAnotherAccount()
+        XCTAssertNil(model.accountType)
+        XCTAssertEqual(model.password, "")
+        XCTAssertFalse(model.canSubmit)
+    }
+
     func testRoleMismatchExplainsHowToRetry() {
         let error = APIError.roleMismatch(expected: .owner, actual: .cafe)
 
         XCTAssertEqual(
             error.localizedDescription,
-            "This is a café account. Choose “I'm a cafe owner” to sign in."
+            "This is a café account. Choose “Cafe” to sign in."
         )
     }
 

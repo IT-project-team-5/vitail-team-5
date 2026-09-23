@@ -14,12 +14,13 @@ struct User: Codable, Equatable, Identifiable, Sendable {
     let email: String
     let displayName: String
     let role: UserRole
+    var photo: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
         case email
         case displayName = "display_name"
-        case role
+        case role, photo
     }
 }
 
@@ -87,6 +88,28 @@ struct CurrentUserResponse: Decodable, Sendable {
             user = wrappedUser
         } else {
             user = try User(from: decoder)
+        }
+    }
+}
+
+struct PhotoUploadRequest: Encodable, Sendable {
+    let imageBase64: String
+
+    init(data: Data) { imageBase64 = data.base64EncodedString() }
+
+    enum CodingKeys: String, CodingKey {
+        case imageBase64 = "image_base64"
+    }
+}
+
+enum PhotoUploadError: LocalizedError {
+    case unavailable
+    case invalidImage
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable: "Photo upload is unavailable. Please try again."
+        case .invalidImage: "This photo could not be opened. Please choose another image."
         }
     }
 }
