@@ -13,7 +13,7 @@ to **local businesses**, which general fitness apps do not do.
 ## Status
 
 Pilot scope, Melbourne. Product requirements and platform decisions are
-retained below; the connected build status is updated through 2026-09-09.
+retained below; the connected build status is updated through 2026-09-24.
 
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
@@ -23,7 +23,7 @@ behaviour for an open decision — raise it instead.
 The app stays deliberately small:
 
 ```text
-User selects "I'm a dog owner" or "I'm a cafe owner"
+User chooses Dog Owner or Cafe → authentication form opens
 Dog owner registers/signs in → Account / Walk / Redeem
 Café owner signs in with an admin-created account → Account / Products / Orders
 ```
@@ -33,18 +33,22 @@ refresh tokens, which the app stores in Keychain. Sign in with Apple waits until
 the project has its own Apple Developer Program account. Password reset and
 in-app account deletion are later use cases, not part of this first slice.
 
-An authenticated owner can also edit their display name and manage up to 10
-persistent dog profiles using breed reference data supplied by the backend.
+Owners tap their avatar/name card to edit their name/photo or log out. A new
+owner with no dogs sees the Add Dog form. Dog rows open a detail page, and up to
+10 profiles use backend breed reference data. People, dogs and cafés can choose
+and crop a photo from the system photo picker; uploads persist on the server.
 Personalised-goal inputs are stored, but no duration is displayed until the
 open numeric welfare and heat-adjustment rules are resolved.
 
 The role choice does not grant a role: the backend account is authoritative.
 Owners can edit their name and dogs, see their real wallet balance, browse
-available café products, confirm one reward per order, and collect it from their
-own order history. Café staff see those **same orders**, scoped to their own
-café, with a read-only feed that refreshes while open. Logout stays in Account.
-Café Account also lets staff edit the café name, address, description and opening
-hours. Login email is read-only. Products lets each café create and edit its own
+cafés by photo/name/hours, open a café menu, confirm one reward per order, and
+slide to collect from the order detail page. Café staff see those **same orders**, scoped to their own
+café, with a read-only feed that refreshes while open. Owner logout is inside
+the profile editor. The top owner title is Vitail; points appear only in Redeem
+with an approximate coffee count (60 points per cup; actual menu prices vary).
+Café Account also lets staff edit the café photo, name, address, description,
+opening hours and Google Maps link. A blank link uses a Maps address search. Login email is read-only. Products lets each café create and edit its own
 menu items, point prices and availability; existing order snapshots stay unchanged.
 
 Points deduct once at order creation. Retrying the same confirmation does not
@@ -56,10 +60,12 @@ The current catalogue uses one `Reward` linked directly to a café account and
 one item (quantity 1) per `Redemption`. There is no cart or separate venue/order
 database. Names, price and café ownership are snapshotted at order time.
 
-The Walk integration now preserves the compact multi-dog controls, manual pause
-and resume, lock-screen recording, protected recovery drafts and local route
-history. Finished records save on-device first, then upload measured GPS and
-segment boundaries to the canonical walking-points API. Server receipts, not
+Walk uses a full-height map with a bottom menu that expands to show history.
+Start begins recording; walking shows Pause, and paused walks show Resume and
+Finish. Finish saves a protected pending summary. The owner chooses dogs and
+confirms completion before an eligible record uploads measured GPS and segment
+boundaries for points. No dogs means local history with zero points. Pending
+summaries survive relaunch; lock-screen recording and recovery remain supported. Server receipts, not
 the live distance estimate, confirm points. Foreground Retry reconciles a
 previously timed-out upload before posting again. Old local records without
 accuracy/source metadata remain viewable but are not retroactively credited.
@@ -185,12 +191,13 @@ in-progress check-in.
 ## Walk Rules
 
 ```text
-Owner selects which dogs are coming
-→ taps Start
+Owner taps Start
 → GPS lock required before tracking begins
 → Core Location records the route, including while the app is backgrounded
 → pauses under 5 minutes are forgiven (sniffing)
-→ owner taps End
+→ owner pauses, then taps Finish
+→ reviews distance/time, chooses dogs and confirms completion
+→ server confirms awarded points (or zero points for a dogless local record)
 ```
 
 - Walks are started **manually**. There is no background auto-detection.
@@ -209,13 +216,13 @@ remain planned.
 **Partner offer**
 
 ```text
-Owner browses rewards and selects one item
+Owner browses cafés, opens a menu and selects one item
 → confirms order
 → points are deducted immediately
 → order receives a reference number
 → the order appears on the café's order screen within seconds
 → owner travels to the venue
-→ owner taps Redeem
+→ owner opens the order details and slides to collect
 → order is marked collected
 ```
 
@@ -235,6 +242,10 @@ disputes with merchants. Refunds are new credits valid for twelve calendar month
 the original debit and terminal order remain in the audit history.
 
 Merchants set their own point prices and thresholds when signing a partnership.
+The wallet uses 60 points ≈ 1 cup of coffee as an approximate display reference
+(confirmed on 2026-09-23), not a fixed price for every menu item.
+
+Photo storage and deployment requirements are in [backend/MEDIA.md](backend/MEDIA.md).
 
 ## Anti-Abuse
 

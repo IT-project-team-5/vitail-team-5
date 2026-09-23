@@ -56,6 +56,11 @@ behaviour for them, raise them instead.
 | R41 | MVP development approach | Use feature-first folders, a small central design system and the minimum `View → ViewModel → Service` layers. Review is lightweight: build, happy path, key failures, permissions and secrets; no coverage target or speculative architecture |
 | R42 | Café venue details | Café accounts may edit their own venue name, address, description and opening hours in Account. Login email, role, offers and point prices are not editable there. This updates R13's admin-only onboarding boundary for venue details, as requested on 2026-09-09 |
 | R43 | Café product management | As requested on 2026-09-23, café accounts may create/edit their own canonical Reward products, descriptions, positive point prices and availability in Products. Admin onboarding remains required. Unlisting replaces destructive deletion; existing order snapshots remain unchanged. This supersedes the offer-management restriction in R13 and R42 |
+| R44 | Minimal owner experience | Confirmed on 2026-09-23: select Dog Owner/Cafe before showing authentication; Debug URL below the fold; owner title Vitail; no header wallet; avatar card opens profile editing/logout; new owners without dogs see Add Dog; dog rows open details |
+| R45 | Profile photos and Maps | Owners, dogs and cafés can choose/crop/upload a photo; cafés can set a Google Maps link with an address-search fallback. Empty photos use role-specific placeholders |
+| R46 | Walk completion | Start without preselecting dogs; map fills the page above a draggable menu; controls are Start, Pause, or Resume/Finish. Finish persists a summary, then the owner chooses dogs and confirms before upload/awards. No dogs saves a local zero-point record. Automatic stops and logout never confirm participants |
+| R47 | Café-first redemption | Rewards lists café photo/name/hours, opens a menu with point price on Purchase, and shows order detail before slide-to-collect. Existing atomic deductions, refunds and retry IDs remain authoritative |
+| R48 | Coffee estimate | Temporarily use 60 points ≈ 1 cup for the wallet display. This is an estimate only; actual product prices and walking earn rates are unchanged |
 
 ### Connected MVP implementation notes (2026-09-09)
 

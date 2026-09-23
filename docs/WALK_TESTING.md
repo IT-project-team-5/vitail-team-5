@@ -17,7 +17,23 @@ Real route exports and personal device/server settings stay outside the reposito
 ## Automated checks
 
 In Xcode, select the Vitail scheme and a test simulator, then choose Product >
-Test (Command-U). The 2026-09-09 simulator run completed 116 tests: 115 passed,
+Test (Command-U). Current checks include deferred dog confirmation, zero-dog
+local history, unconfirmed-summary recovery, automatic stop/logout without an
+award, stable upload IDs, daily-cap estimates, and full-map/summary snapshots.
+They do not replace the real-iPhone tests below.
+
+The 2026-09-24 run for the minimal owner UI completed 203 simulator tests:
+202 passed, zero failed, and one device-only file-protection check was skipped.
+All 138 backend tests passed on disposable MySQL 9.3, and the unsigned Release
+device build passed. Light/dark snapshots cover authentication, profiles, the
+full map, finish summaries, café menus and collection; large-text snapshots cover
+the main confirmation flows. Photo selection and real GPS/background behaviour
+still require physical-iPhone acceptance.
+
+The following counts are **historical verification records**, not results for
+the current UI and finish-confirmation flow.
+
+The 2026-09-09 simulator run completed 116 tests: 115 passed,
 zero failed, and one file-protection attribute check was skipped because the
 simulator did not expose it. Native snapshots also cover normal and large-text
 recovery controls. These checks do not replace the real-iPhone tests below.
@@ -36,10 +52,14 @@ skipped five MySQL-only checks. The unsigned Release device build also passed.
 
 ## What this version supports
 
-- Select one or more dogs, then manually Start Walk while the app is in the
-  foreground. Start and Resume require a fresh location with accuracy of 30 m or
-  better, While Using the App permission, and Precise Location enabled. Always
-  permission is not required for this foreground-started recording flow.
+- The map fills the Walk page behind a bottom menu. The menu can be expanded
+  to roughly half the screen for history and walking information. Idle shows
+  **Start**, Walking shows **Pause**, and Paused shows **Resume** and **Finish**.
+- Tap Start while the app is in the foreground; no dog selection is required.
+  Dogs are chosen in the Finish summary after recording. Start and Resume require
+  a fresh location with accuracy of 30 m or better, While Using the App permission,
+  and Precise Location enabled. Always permission is not required for this
+  foreground-started recording flow.
 - An active walk requests background updates with a visible system location
   indicator. Automatic Core Location pausing is disabled while recording.
   Changing owner tabs does not end the walk.
@@ -55,16 +75,29 @@ skipped five MySQL-only checks. The unsigned Release device build also passed.
 - Active time excludes manual pauses and time after recovery while still paused.
   While a walk remains in Walking, active time can include GPS signal gaps. It is
   not yet a validated points-earning or welfare-goal time measurement.
-- Local checkpoints preserve the walk ID, dogs, route, distance and accumulated
-  time. Reopening restores the last successful checkpoint as **Paused**. Resume
-  starts a new route segment if the five-minute inactivity window has not
-  expired; otherwise the next inactivity check finishes the saved walk. Time
+- Local checkpoints preserve the walk ID, route, distance and accumulated time.
+  Legacy checkpoints may also contain previously selected dogs; new walks do
+  not choose participants until confirmation. Reopening restores the last
+  successful active checkpoint as **Paused**. Resume starts a new route segment
+  if the five-minute inactivity window has not expired; otherwise the next
+  inactivity check stops into a pending summary. Time
   while the app was closed is not added.
-- Finishing saves a stable record ID, so a retry after interruption does not
-  create a second history entry. History and checkpoints are separate for each
-  account and backend. Raw routes and checkpoints remain local. Eligible new
-  finished walks upload for validation; summaries and awarded points come from
-  the server. Old records without measured accuracy/source metadata stay local.
+- Pause → Finish stops capture and saves a pending summary outside uploadable
+  history. Choose the dogs who came along, then tap **Complete walk** to confirm.
+  The summary shows an estimate before confirmation and the actual receipt after
+  server validation. Selecting multiple dogs does not multiply points.
+- With no dogs selected, **Save without dogs · 0 pts** saves local history only;
+  it does not upload a walk or award points. The record is labelled as a solo walk.
+- **Later** dismisses the summary without confirming it. **Review walk** reopens
+  it; starting another walk is blocked until this one is confirmed and safely
+  saved. Pending summaries survive relaunch. Automatic stops and explicit logout
+  also create pending summaries without selecting dogs or awarding points.
+- A stable record ID prevents duplicate history and credits on retry. History
+  and checkpoints are separate for each account and backend. Raw routes and
+  checkpoints remain local. Only confirmed eligible records upload; awarded
+  points and accepted distance come from the server. Old confirmed records keep
+  their retry behavior, while records without measured accuracy/source metadata
+  stay local.
 
 ## Before taking the phone outside
 
@@ -72,9 +105,10 @@ skipped five MySQL-only checks. The unsigned Release device build also passed.
    iPhone model and iOS version in the results log.
 2. Stop the Xcode debugging session, unplug the cable, and open Vitail from the
    phone's Home Screen. Do not use Xcode's simulated location for this test.
-3. Connect to the backend, sign in with a test owner account, and load its dog
-   profiles. If the backend runs on a Mac, use a reachable Mac LAN address or
-   configured test server, not `localhost` on the phone.
+3. Connect to the backend, sign in with a test owner account, and add or verify
+   its dog profiles for the later confirmation step. If the backend runs on a
+   Mac, use a reachable Mac LAN address or configured test server, not `localhost`
+   on the phone.
 4. Enable Location Services and allow Vitail to use location **While Using the
    App**, with **Precise Location** on. Wait for an accurate position outdoors.
 5. Ensure the iPhone has been unlocked at least once since its last restart.
@@ -93,11 +127,16 @@ route and distance trend, not centimetre-level accuracy.
 
 ### 1. Foreground baseline and tab changes
 
-1. Select two dogs and Start Walk. Walk for about two minutes outdoors.
+1. Tap Start without selecting dogs. Walk for about two minutes outdoors.
 2. Open Account, then Redeem, and return to Walk without signing out.
-3. Confirm the walk remains Walking, the same dogs remain fixed, and the route
-   and distance continue instead of resetting or starting a second walk.
-4. Finish. Check date, dogs, distance, active time and route in Walk History.
+3. Confirm the walk remains Walking, with Pause as its only main action, and the
+   route and distance continue instead of resetting or starting a second walk.
+4. Tap Pause, then Finish. Check the summary's distance and active time. No new
+   walking award or confirmed history record should appear yet.
+5. Select two dogs and tap Complete walk. Check date, both dogs, distance, active
+   time and route in Walk History. Check the actual point receipt when online.
+6. Expand/collapse the bottom menu by dragging its handle or tapping it. The map
+   should remain visible, with history reachable inside the expanded menu.
 
 ### 2. Screen locked and other apps open
 
@@ -121,11 +160,14 @@ the test passed because the total distance changed.
    for about two minutes.
 2. Return to Walk. Distance must remain unchanged during the pause. The visible
    map may update its current-position preview, but that is not a recorded route.
-3. Wait for a fresh accurate location and tap Resume. Walk a further section and
-   Finish. Confirm history excludes paused time and has separate route sections,
-   with no line or distance crossing the paused movement.
-4. Lock the phone again after Finish. Background walk collection must stop. A
-   foreground map preview should not be mistaken for continued background use.
+3. Wait for a fresh accurate location and tap Resume. Walk a further section,
+   tap Pause, then Finish. Confirm the summary excludes paused time. Choose dogs
+   and tap Complete walk; history must have separate route sections with no line
+   or distance crossing the paused movement.
+4. In a separate run, lock the phone after Finish but before completing its
+   summary. Background capture must already have stopped; neither distance nor
+   time may grow while awaiting confirmation. A foreground map preview should
+   not be mistaken for continued background recording.
 
 ### 4. Permission and precise-location changes
 
@@ -147,27 +189,34 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 2. Force-quit Vitail from the app switcher. Wait or move for about two minutes.
    **The app cannot keep tracking after a user force-quit.**
 3. Reopen Vitail, reconnecting to the backend if login restoration needs it.
-4. Confirm the last successfully saved dogs, distance and route return as Paused
+4. Confirm the last successfully saved distance and route return as Paused
    with a recovery notice. The closed-app interval must not add time or distance.
    The unsaved tail after the last checkpoint may be missing; it is not recoverable.
-5. Resume within the five-minute inactivity window, walk another section, and
-   Finish. Confirm the new section is not connected across the closed-app
-   interval. Separately reopen after that window and confirm the recovered walk
-   finishes instead of restarting its inactivity timer.
-6. Close and reopen again. Check the finished walk appears exactly once and its
-   route and total remain stable. A storage Retry action must not duplicate it.
+5. Resume within the five-minute inactivity window, walk another section, then
+   Pause → Finish. Confirm the new section is not connected across the closed-app
+   interval. Choose dogs and tap Complete walk before checking confirmed history.
+6. Separately reopen after the inactivity window and confirm the recovered walk
+   stops into a pending summary instead of restarting its inactivity timer.
+   Refreshing must not award this walk before explicit completion.
+7. After confirmation, close and reopen again. Check history contains the walk
+   exactly once and its route and total remain stable. Storage or upload Retry
+   must not create another record or award.
 
 ### 6. Account isolation and sign-out
 
-1. Start a short test walk, then sign out from Account. Background collection
-   should stop; explicit logout finishes, saves and attempts to upload it before
-   credentials clear. A failed upload must not delete the local record.
+1. Start a short test walk, then open Account → profile → Sign Out. Background
+   capture should stop and the walk should become a protected pending summary.
+   Logout must not select dogs, add this walk to uploadable history, or award it.
+   Previously confirmed records may still retry before credentials clear.
 2. Sign in as a different test owner on the same backend. The first owner's
-   draft, participants and history must not appear.
-3. Sign back in as the original owner. Check the finished record is present and
-   pending uploads can retry. Separately test authentication expiry: it leaves
-   an unfinished checkpoint Paused for that owner, not automatically resumed.
-   Do not change a shared server or delete another person's data for this test.
+   pending summary, route and history must not appear or upload under that owner.
+3. Sign back in as the original owner. Open Walk and check the pending summary
+   returns with the same route and duration. Choose dogs and tap Complete walk;
+   only now may this record upload and earn points.
+4. Separately test authentication expiry: it leaves an unfinished checkpoint
+   Paused for that owner, not automatically resumed. A summary that was already
+   awaiting confirmation must remain unconfirmed. Do not change a shared server
+   or delete another person's data for this test.
 
 ### 7. Storage and interruptions
 
@@ -185,20 +234,45 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 
 ### 8. Connected points and retry
 
-1. Finish a real walk while online. Check its history card shows the server's
-   accepted distance and awarded points, and the wallet refreshes. Awards follow
-   cumulative daily rounding at 8 points/km, capped at 40 points per day.
-2. Pause for less than 60 seconds and move while paused, then Resume and Finish.
-   Neither local nor server distance should bridge that movement.
-3. Finish another walk with the backend unreachable, then reopen and tap Retry
-   when connected. Its saved route must survive and the award must occur once.
-   Submit within 12 hours of starting; later rejected routes remain local-only.
-4. Stay stationary or manually paused for five minutes, then return to Walk.
-   Confirm the session ends and no later movement earns points in that session.
-5. Confirm legacy history remains readable without retrospective awards. A
+1. Record a real walk while online, then Pause → Finish. Choose dogs and check the
+   estimated points before tapping Complete walk. Only after confirmation should
+   the history card show accepted distance and awarded points, and Redeem update
+   its balance. Awards use cumulative daily rounding at 8 points/km, capped at
+   40 points per Melbourne day; multiple dogs do not increase the award.
+2. Pause for less than 60 seconds and move while paused, then Resume, walk again
+   and Pause → Finish → choose dogs → Complete walk. Neither local nor server
+   distance should bridge that paused movement.
+3. Load the dogs in a finish summary, choose participants, then make the backend
+   unreachable before tapping Complete walk. The confirmed local record must
+   survive. Reopen and Retry when connected; its award must occur once. If the
+   dog list cannot be loaded, leave the summary pending until online instead of
+   choosing the zero-point option as an upload workaround.
+4. Submit within 12 hours of starting. Pending confirmation does not extend this
+   limit; rejected late records retain their local route and earn no points.
+5. Stay stationary or manually paused until the five-minute inactivity window
+   expires, then return to Walk. Capture must stop into a pending summary, and
+   later movement must not extend it. Refresh/Retry must not award anything
+   until dogs are chosen and Complete walk is pressed.
+6. Confirm legacy history remains readable without retrospective awards. A
    simulator-generated walk must not earn points. Do not remove its source flag.
-6. Use earned points for a test order and confirm the existing owner collection
-   and café order views still agree.
+7. Use earned points for a test order and verify the owner collection and café
+   order views still agree. Redeem's coffee equivalent uses 60 points per cup;
+   that estimate does not change either the walking rate or menu prices.
+
+### 9. Pending summary recovery and zero-dog completion
+
+1. Start a walk, record a short route, then Pause → Finish. Tap Later. The panel
+   should offer Review walk and prevent a new Start until this walk is resolved.
+2. Force-quit and reopen. Review the same pending summary: distance, time and
+   route must remain unchanged, without a new credit or confirmed history item.
+   Dog selections are made in the summary; verify the intended dogs again.
+3. Refresh, switch tabs and retry storage before completing it. None of those
+   actions may confirm the walk or send it for points. Choose dogs and tap
+   Complete walk once; repeated taps/retries must not create another award.
+4. In another run, leave every dog unselected and tap Save without dogs · 0 pts.
+   Expect one solo-walk entry with its route/time preserved, no upload, and no
+   points added to the wallet. Reopening or refreshing must not later award it.
+5. Confirm another walk can start after the zero-dog record is safely saved.
 
 ## Limits and result log
 
