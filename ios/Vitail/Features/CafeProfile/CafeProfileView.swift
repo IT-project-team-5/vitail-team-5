@@ -42,7 +42,7 @@ struct CafeProfileView: View {
                             }
                             .disabled(!model.canSave)
                         } footer: {
-                            Text("Offers and point prices are managed by the Vitail administrator.")
+                            Text("Manage your menu and point prices in Products.")
                         }
                     }
 

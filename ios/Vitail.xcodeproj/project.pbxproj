@@ -71,6 +71,11 @@
 		00000000000000000000E10E /* WalkBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E20E /* WalkBackgroundTests.swift */; };
 		00000000000000000000E10F /* WalkSessionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */; };
 		00000000000000000000E110 /* WalkMVPIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E210 /* WalkMVPIntegrationTests.swift */; };
+		000000000000000000000030 /* CafeProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000030 /* CafeProductModels.swift */; };
+		000000000000000000000031 /* CafeProductsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000031 /* CafeProductsService.swift */; };
+		000000000000000000000032 /* CafeProductsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000032 /* CafeProductsViewModel.swift */; };
+		000000000000000000000033 /* CafeProductsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000033 /* CafeProductsView.swift */; };
+		000000000000000000000034 /* CafeProductsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000034 /* CafeProductsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -156,6 +161,11 @@
 		00000000000000000000E20E /* WalkBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkBackgroundTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinatorTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E210 /* WalkMVPIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMVPIntegrationTests.swift; sourceTree = "<group>"; };
+		100000000000000000000030 /* CafeProductModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductModels.swift; sourceTree = "<group>"; };
+		100000000000000000000031 /* CafeProductsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsService.swift; sourceTree = "<group>"; };
+		100000000000000000000032 /* CafeProductsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000033 /* CafeProductsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsView.swift; sourceTree = "<group>"; };
+		100000000000000000000034 /* CafeProductsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -283,6 +293,7 @@
 				20C000000000000000000001 /* OwnerHome */,
 				20D000000000000000000001 /* CafeOrders */,
 				213000000000000000000001 /* CafeProfile */,
+				214000000000000000000001 /* CafeProducts */,
 				20F000000000000000000001 /* OwnerProfile */,
 				210000000000000000000001 /* Dog */,
 				212000000000000000000001 /* Walk */,
@@ -340,6 +351,7 @@
 				00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */,
 				00000000000000000000E210 /* WalkMVPIntegrationTests.swift */,
 				10000000000000000000002F /* CafeProfileTests.swift */,
+				100000000000000000000034 /* CafeProductsTests.swift */,
 				10000000000000000000002A /* WalkTests.swift */,
 				100000000000000000000024 /* APIIntegrationTests.swift */,
 				100000000000000000000023 /* RedemptionTests.swift */,
@@ -404,6 +416,17 @@
 				10000000000000000000002B /* CafeProfileModels.swift */,
 			);
 			path = CafeProfile;
+			sourceTree = "<group>";
+		};
+		214000000000000000000001 /* CafeProducts */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000030 /* CafeProductModels.swift */,
+				100000000000000000000031 /* CafeProductsService.swift */,
+				100000000000000000000032 /* CafeProductsViewModel.swift */,
+				100000000000000000000033 /* CafeProductsView.swift */,
+			);
+			path = CafeProducts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -514,6 +537,10 @@
 				00000000000000000000E107 /* WalkSessionCoordinator.swift in Sources */,
 				00000000000000000000E108 /* WalkSyncStore.swift in Sources */,
 				00000000000000000000E109 /* WalkSyncPanel.swift in Sources */,
+				000000000000000000000030 /* CafeProductModels.swift in Sources */,
+				000000000000000000000031 /* CafeProductsService.swift in Sources */,
+				000000000000000000000032 /* CafeProductsViewModel.swift in Sources */,
+				000000000000000000000033 /* CafeProductsView.swift in Sources */,
 				00000000000000000000002E /* CafeProfileView.swift in Sources */,
 				00000000000000000000002D /* CafeProfileViewModel.swift in Sources */,
 				00000000000000000000002C /* CafeProfileService.swift in Sources */,
@@ -567,6 +594,7 @@
 				00000000000000000000E10E /* WalkBackgroundTests.swift in Sources */,
 				00000000000000000000E10F /* WalkSessionCoordinatorTests.swift in Sources */,
 				00000000000000000000E110 /* WalkMVPIntegrationTests.swift in Sources */,
+				000000000000000000000034 /* CafeProductsTests.swift in Sources */,
 				00000000000000000000002F /* CafeProfileTests.swift in Sources */,
 				00000000000000000000002A /* WalkTests.swift in Sources */,
 				000000000000000000000024 /* APIIntegrationTests.swift in Sources */,

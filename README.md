@@ -25,7 +25,7 @@ The app stays deliberately small:
 ```text
 User selects "I'm a dog owner" or "I'm a cafe owner"
 Dog owner registers/signs in → Account / Walk / Redeem
-Café owner signs in with an admin-created account → Account / Orders
+Café owner signs in with an admin-created account → Account / Products / Orders
 ```
 
 Both roles use the same login API and iOS app. The API returns JWT access and
@@ -40,11 +40,12 @@ open numeric welfare and heat-adjustment rules are resolved.
 
 The role choice does not grant a role: the backend account is authoritative.
 Owners can edit their name and dogs, see their real wallet balance, browse
-admin-created rewards, confirm one reward per order, and collect it from their
+available café products, confirm one reward per order, and collect it from their
 own order history. Café staff see those **same orders**, scoped to their own
 café, with a read-only feed that refreshes while open. Logout stays in Account.
 Café Account also lets staff edit the café name, address, description and opening
-hours. Login email is read-only; offers and point prices remain Admin-managed.
+hours. Login email is read-only. Products lets each café create and edit its own
+menu items, point prices and availability; existing order snapshots stay unchanged.
 
 Points deduct once at order creation. Retrying the same confirmation does not
 create another order. Uncollected orders expire at the next Melbourne midnight
@@ -83,7 +84,7 @@ At pilot there are **three** account types.
 | Role | Interface | Notes |
 |---|---|---|
 | **Dog owner** | iOS app | Tracks walks, checks in, redeems points |
-| **Café staff** | iOS app | Signs in and watches incoming orders |
+| **Café staff** | iOS app | Manages own products and venue details; watches incoming orders |
 | **Vitail admin** | Django Admin | Onboards partners, handles support and disputes |
 
 Owners and café staff use the **same iOS app**. The account role decides
@@ -91,20 +92,21 @@ which interface loads.
 
 ```text
 OWNER → Account / Walk / Redeem
-CAFE  → Account / Orders
+CAFE  → Account / Products / Orders
 ADMIN → Django Admin
 ```
 
 Café accounts are created by a Vitail admin, not self-registered. Café staff
-cannot edit their own offers during pilot — they contact Vitail and an admin
-makes the change.
+manage their own products in Products: name, description, positive whole-number
+point price and availability. Unavailable items disappear from the owner catalogue;
+existing orders retain their original details. Admin can also manage the catalogue.
 
 For the first use case, dog owners self-register with email and password. Café
 staff use email-and-password accounts created by a Vitail admin. Google sign-in
 is not included. Sign in with Apple will be added only after the project has its
 own Apple Developer Program account.
 
-The café screen is **read-only**. It lists orders waiting to be collected and
+The café Orders screen is **read-only**. It lists orders waiting to be collected and
 refreshes every few seconds, and it cannot mark an order collected. Only the
 owner can do that by tapping Redeem in the iOS app. Order collection has no
 location gate during the pilot.
@@ -303,6 +305,10 @@ Use MySQL separately for row-lock/concurrency checks. To override the local
 Compose defaults, copy `backend/.env.example` to a root `.env` and edit it;
 neither `.env` nor `Local.xcconfig` is committed.
 
+For an explicitly requested clean local demo with one funded owner, one admin
+and three cafés with menus, see `docs/LOCAL_DEMO.md`. Resetting demo accounts is
+a separate, backed-up operation; it never runs automatically on startup.
+
 ### Quick connected-flow test
 
 1. Run `make up`, then `make superuser` in another terminal. Leave Compose running.
@@ -317,6 +323,8 @@ neither `.env` nor `Local.xcconfig` is committed.
 6. In a second simulator/iPhone, sign in as the café. Orders should show the same
    reference. Only the owner can tap Redeem/collect; it then disappears from the
    café feed. Café Account can save the venue name/address/description/hours.
+   In Products, create or edit an item and toggle availability; refresh the
+   owner catalogue to see the change. Another café must not be able to edit it.
    Signing out and switching roles on one device also works.
 7. To test a refund immediately, create another order, then select it in Admin
    → Redemptions → **Cancel pending orders and refund points**. Refresh the owner
@@ -383,7 +391,7 @@ Explicitly **not** built for pilot:
 
 ```text
 Android
-merchant self-registration and self-service offer editing
+merchant self-registration
 location-gated order collection (planned after MVP)
 general offline authentication and long-lived background upload workers
 remote push notifications
@@ -393,7 +401,6 @@ reviews and ratings
 pet wearable integration
 net-walking (parallel-walking boost)
 friends and leaderboards
-merchant-editable offers
 dog-count point multipliers
 point-earning from non-walking activity
 ```

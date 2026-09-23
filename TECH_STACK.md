@@ -65,13 +65,13 @@ interface loads.
 
 ```text
 Dog owner    → iOS app, Account / Walk / Redeem
-Café staff   → iOS app, Account / Orders
+Café staff   → iOS app, Account / Products / Orders
 Vitail admin → Django Admin
 ```
 
-Cafés do not self-register, do not scan codes and do not edit their own offers
-at pilot. Their accounts are created by an admin. Owners self-register with
-email and password.
+Cafés do not self-register or scan codes. Their accounts are created by an
+admin; Products lets them manage their own Reward records, point prices and
+availability. Owners self-register with email and password.
 
 Putting the café screen inside the app provides real authentication instead of
 a secret URL and lets the team reuse the same client foundation. During the
@@ -978,7 +978,8 @@ OWNER
 CAFE
 - view orders for own venue only
 - edit own venue name/address/description/opening hours
-- cannot edit login email, role, offers or prices; cannot collect an order
+- create/edit own products and positive point prices; toggle availability
+- cannot edit login email or role, manage another café's products, or collect an order
 
 ADMIN
 - Django Admin
@@ -1237,7 +1238,7 @@ User explicitly chooses dog owner or café owner on the login page
 Owner registers with email/password → receives OWNER role
 Café account and an available Reward are created in Django Admin
 Owner: swipe or tap between Account / Walk / Redeem; real wallet balance
-Café shell: tap between Account / Orders
+Café shell: tap between Account / Products / Orders
 Owner earns walking points (or receives an explicit positive Admin test grant)
 Owner confirms one reward → one debit/reference/order
 Café sees that same pending order on its next poll
@@ -1295,7 +1296,7 @@ point expiry at 12 months
 
 ```text
 Android
-merchant self-registration and self-service offer editing
+merchant self-registration
 location-gated order collection (planned after MVP)
 general offline authentication and long-lived background upload workers
 remote push notifications

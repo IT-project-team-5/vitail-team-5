@@ -7,6 +7,7 @@ struct RootView: View {
     let redemptionService: any RedemptionServing
     let walkService: any WalkServing
     let cafeProfileService: any CafeProfileServing
+    let cafeProductsService: any CafeProductsServing
 
     var body: some View {
         Group {
@@ -51,7 +52,8 @@ struct RootView: View {
                 user: user,
                 session: session,
                 service: cafeOrdersService,
-                profileService: cafeProfileService
+                profileService: cafeProfileService,
+                productsService: cafeProductsService
             )
             .id(user.id)
         case .admin:

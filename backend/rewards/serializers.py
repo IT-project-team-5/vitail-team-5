@@ -19,6 +19,29 @@ class RewardSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class CafeProductSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=100, trim_whitespace=True)
+    description = serializers.CharField(max_length=2000, allow_blank=True, required=False)
+    # Keep prices within the range supported by every Django database and the
+    # signed integer used for the matching wallet debit.
+    point_cost = serializers.IntegerField(min_value=1, max_value=2147483647)
+
+    class Meta:
+        model = Reward
+        fields = ("id", "name", "description", "point_cost", "is_available")
+        read_only_fields = ("id",)
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            allowed_fields = set(self.fields) - set(self.Meta.read_only_fields)
+            unsupported = set(data) - allowed_fields
+            if unsupported:
+                raise serializers.ValidationError({
+                    field: ["This field cannot be set."] for field in sorted(unsupported)
+                })
+        return super().to_internal_value(data)
+
+
 class RedemptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Redemption

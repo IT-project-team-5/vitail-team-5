@@ -5,6 +5,7 @@ struct CafeOrdersView: View {
 
     private enum Page: String, CaseIterable, Identifiable {
         case account = "Account"
+        case products = "Products"
         case orders = "Orders"
 
         var id: Self { self }
@@ -13,6 +14,8 @@ struct CafeOrdersView: View {
             switch self {
             case .account:
                 return "person.crop.circle"
+            case .products:
+                return "cup.and.saucer"
             case .orders:
                 return "list.bullet.rectangle"
             }
@@ -22,6 +25,8 @@ struct CafeOrdersView: View {
             switch self {
             case .account:
                 return "person.crop.circle.fill"
+            case .products:
+                return "cup.and.saucer.fill"
             case .orders:
                 return "list.bullet.rectangle.fill"
             }
@@ -33,16 +38,19 @@ struct CafeOrdersView: View {
     @StateObject private var ordersViewModel: CafeOrdersViewModel
     @State private var selection: Page = .orders
     private let profileService: any CafeProfileServing
+    private let productsService: any CafeProductsServing
 
     init(
         user: User,
         session: SessionStore,
         service: any CafeOrdersServing = CafeOrdersService(),
-        profileService: any CafeProfileServing = CafeProfileService()
+        profileService: any CafeProfileServing = CafeProfileService(),
+        productsService: any CafeProductsServing = CafeProductsService()
     ) {
         self.user = user
         self.session = session
         self.profileService = profileService
+        self.productsService = productsService
         _ordersViewModel = StateObject(
             wrappedValue: CafeOrdersViewModel(service: service)
         )
@@ -54,6 +62,8 @@ struct CafeOrdersView: View {
                 TabView(selection: $selection) {
                     CafeProfileView(session: session, service: profileService)
                         .tag(Page.account)
+                    CafeProductsView(service: productsService)
+                        .tag(Page.products)
                     ordersPage
                         .tag(Page.orders)
                 }
