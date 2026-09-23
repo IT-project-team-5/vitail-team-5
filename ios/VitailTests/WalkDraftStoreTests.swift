@@ -112,7 +112,7 @@ final class WalkDraftStoreTests: XCTestCase {
         for invalid in [
             draft(duration: -1), draft(duration: .infinity),
             draft(distance: -1), draft(distance: .nan),
-            draft(dogs: []), draft(dogs: [dog(), dog()]),
+            draft(dogs: [dog(), dog()]),
             draft(dogs: [dog(id: 0)]), draft(dogs: [dog(name: " \n ")]),
             draft(checkpoint: referenceDate.addingTimeInterval(-1)),
             draft(checkpoint: Date(timeIntervalSince1970: .infinity)),
@@ -140,6 +140,19 @@ final class WalkDraftStoreTests: XCTestCase {
         for route in invalidRoutes { XCTAssertFalse(draft(route: route).isValid) }
         XCTAssertTrue(draft(route: []).isValid)
         XCTAssertTrue(draft(route: [[point(seconds: -5)], [point(seconds: 10)]]).isValid)
+    }
+
+    func testDoglessDraftAndPendingConfirmationRoundTrip() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = WalkDraftFileStore(ownerID: 1, serverURL: nil, directory: directory)
+        var pending = draft(dogs: [])
+        pending.finishedRecord = finishedRecord(for: pending)
+        pending.requiresDogConfirmation = true
+        XCTAssertTrue(pending.isValid)
+        try store.save(pending)
+        XCTAssertEqual(try store.load(), pending)
+        XCTAssertEqual(try store.load()?.requiresDogConfirmation, true)
     }
 
     func testInvalidDogMetadataIsRejected() {

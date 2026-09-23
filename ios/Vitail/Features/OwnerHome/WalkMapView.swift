@@ -49,12 +49,16 @@ final class WalkSessionTracker: ObservableObject {
               let last = [pausedAt, lastMovementAt].compactMap({ $0 }).min(),
               date.timeIntervalSince(last) >= 300 else { return }
         finish()
-        trackingNotice = "Walk ended after 5 minutes without activity. Recorded points are validated by the server."
+        trackingNotice = "Walk ended after 5 minutes without activity. Review the summary and choose the dogs who came along."
     }
 
     init(now: @escaping () -> Date = Date.init, onFinish: @escaping (WalkRecord) -> Void = { _ in }) {
         self.now = now
         self.onFinish = onFinish
+    }
+
+    func elapsedActiveDuration(at date: Date) -> TimeInterval {
+        activeDuration + (activeIntervalStartedAt.map { max(0, date.timeIntervalSince($0)) } ?? 0)
     }
 
     var distanceKilometres: Double {
@@ -92,7 +96,7 @@ final class WalkSessionTracker: ObservableObject {
     }
 
     func start(from location: CLLocation?, dogs: [Dog]) {
-        guard canStart, let location, Self.canUse(location), !dogs.isEmpty else { return }
+        guard canStart, let location, Self.canUse(location) else { return }
 
         let startTime = now()
         lastMovementAt = startTime
@@ -346,7 +350,9 @@ struct WalkMapView: View {
         )
     )
     @State private var hasCentredOnUser = false
-    @State private var walkCardHeight: CGFloat = 300
+    @State private var panelExpanded = false
+    @GestureState private var panelDrag: CGFloat = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
 
     init(coordinator: WalkSessionCoordinator, isActive: Bool, onManageDogs: @escaping () -> Void) {
@@ -361,42 +367,18 @@ struct WalkMapView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ScrollView {
-                VStack(alignment: .leading, spacing: AppSpacing.medium) {
-                    WalkDogSelectionCard(
-                        selection: dogSelection,
-                        session: walkTracker,
-                        location: locationManager.location,
-                        canStartNewWalk: coordinator.canStartNewWalk,
-                        onManageDogs: onManageDogs
-                    )
-                    .background {
-                        GeometryReader { cardGeometry in
-                            Color.clear.preference(key: WalkCardHeightKey.self, value: cardGeometry.size.height)
-                        }
-                    }
-
-                    if let message = coordinator.storageErrorMessage {
-                        LocationStatusCard(
-                            icon: "exclamationmark.triangle.fill",
-                            title: "Walk storage needs attention",
-                            message: message, actionTitle: "Retry", action: coordinator.retryStorage
-                        )
-                    }
-
-                    mapCard
-                        .frame(height: Self.mapHeight(availableHeight: geometry.size.height, cardHeight: walkCardHeight))
-
-                    WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
-                    WalkHistorySection(store: walkHistory)
-                }
-                .padding(AppSpacing.medium)
+            let expandedHeight = geometry.size.height * (dynamicTypeSize.isAccessibilitySize ? 0.72 : 0.52)
+            ZStack(alignment: .bottom) {
+                mapCard
+                bottomPanel(expandedHeight: expandedHeight)
             }
-            .background(AppColors.background)
-            .refreshable { await dogSelection.load() }
-            .onPreferenceChange(WalkCardHeightKey.self) { height in
-                if height > 0 { walkCardHeight = height }
-            }
+            .clipped()
+        }
+        .sheet(isPresented: Binding(
+            get: { isActive && coordinator.isFinishPresented },
+            set: { if isActive { coordinator.isFinishPresented = $0 } }
+        )) {
+            WalkFinishSummaryView(coordinator: coordinator)
         }
         .onAppear {
             coordinator.setWalkPageVisible(isActive)
@@ -419,10 +401,64 @@ struct WalkMapView: View {
         }
     }
 
-    static func mapHeight(availableHeight: CGFloat, cardHeight: CGFloat) -> CGFloat {
-        // Use the space below the controls, but keep the map usable on short screens.
-        // The outer ScrollView handles extra height, including larger accessibility text.
-        max(220, availableHeight - cardHeight - AppSpacing.medium * 3)
+    private func bottomPanel(expandedHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.snappy) { panelExpanded.toggle() }
+            } label: {
+                Capsule().fill(AppColors.secondaryText.opacity(0.35))
+                    .frame(width: 36, height: 4)
+                    .frame(maxWidth: .infinity).frame(height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(panelExpanded ? "Collapse walk menu" : "Expand walk menu")
+            .accessibilityHint("Shows walk history and walking information")
+            .highPriorityGesture(DragGesture(minimumDistance: 12)
+                .updating($panelDrag) { value, state, _ in state = value.translation.height }
+                .onEnded { value in
+                    withAnimation(.snappy) { panelExpanded = value.predictedEndTranslation.height < 0 }
+                })
+
+            WalkDogSelectionCard(
+                selection: dogSelection, session: walkTracker, location: locationManager.location,
+                canStartNewWalk: coordinator.canStartNewWalk, onManageDogs: onManageDogs,
+                onReviewFinish: {
+                    if coordinator.finishSummary != nil { coordinator.isFinishPresented = true }
+                    else { coordinator.retryStorage(); panelExpanded = true }
+                }
+            )
+
+            if panelExpanded {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: AppSpacing.large) {
+                        if let message = coordinator.storageErrorMessage {
+                            LocationStatusCard(
+                                icon: "exclamationmark.triangle.fill", title: "Save your walk",
+                                message: message, actionTitle: "Retry", action: coordinator.retryStorage
+                            )
+                        }
+                        if let notice = walkTracker.trackingNotice {
+                            Text(notice).font(.footnote).foregroundStyle(AppColors.secondaryText)
+                        }
+                        WalkHistorySection(store: walkHistory)
+                        WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
+                        Text("Walking continues with the screen locked. Pauses are excluded. After 5 minutes without activity, review your walk to finish.")
+                            .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                    }
+                    .padding(.horizontal, AppSpacing.medium)
+                    .padding(.bottom, AppSpacing.large)
+                }
+            } else if coordinator.storageErrorMessage != nil {
+                Button("Your walk needs attention · Retry") { coordinator.retryStorage() }
+                    .font(.caption).padding(.bottom, AppSpacing.small)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: panelExpanded ? max(260, min(expandedHeight + 50, expandedHeight - panelDrag)) : nil, alignment: .top)
+        .background(AppColors.surface)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
+        .shadow(color: .black.opacity(0.08), radius: 12, y: -3)
     }
 
     private func reloadDogs() {
@@ -458,7 +494,7 @@ struct WalkMapView: View {
             statusCard
                 .padding(AppSpacing.medium)
         }
-        .overlay(alignment: .bottomTrailing) {
+        .overlay(alignment: .topTrailing) {
             if locationManager.location != nil {
                 Button {
                     centreOnCurrentLocation()
@@ -473,14 +509,9 @@ struct WalkMapView: View {
                 }
                 .accessibilityLabel("Centre map on my location")
                 .padding(AppSpacing.medium)
+                .padding(.top, 56)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
-                .stroke(AppColors.border, lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.1), radius: 6, y: 3)
     }
 
     private var currentLocationMarker: some View {
@@ -568,14 +599,6 @@ struct WalkMapView: View {
     }
 }
 
-private struct WalkCardHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat { 0 }
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
 private struct LocationStatusCard: View {
     let icon: String
     let title: String
@@ -611,5 +634,149 @@ private struct LocationStatusCard: View {
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
         .shadow(radius: 4, y: 2)
+    }
+}
+
+struct WalkFinishSummaryView: View {
+    @ObservedObject var coordinator: WalkSessionCoordinator
+    @ObservedObject private var selection: WalkDogSelectionViewModel
+    @ObservedObject private var history: WalkHistoryStore
+    @ObservedObject private var sync: WalkSyncStore
+    @Environment(\.dismiss) private var dismiss
+
+    init(coordinator: WalkSessionCoordinator) {
+        self.coordinator = coordinator
+        selection = coordinator.dogSelection
+        history = coordinator.history
+        sync = coordinator.sync
+    }
+
+    private var record: WalkRecord? {
+        guard let summary = coordinator.finishSummary else { return nil }
+        return history.records.first { $0.id == summary.id } ?? summary
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppSpacing.large) {
+                    if let record {
+                        VStack(alignment: .leading, spacing: AppSpacing.small) {
+                            HStack(spacing: AppSpacing.large) {
+                                summaryMetric("Distance", value: String(format: "%.2f km", record.distanceKilometres))
+                                summaryMetric("Walking time", value: WalkDogSelectionCard.durationText(record.activeDuration))
+                            }
+                        }
+                        pointsSummary(record)
+                        if coordinator.needsFinishConfirmation {
+                            dogPicker
+                            PrimaryButton(
+                                title: selection.selectedDogs.isEmpty ? "Save without dogs · 0 pts" : "Complete walk",
+                                isLoading: coordinator.isConfirmingFinish,
+                                isDisabled: selection.isLoading
+                            ) { Task { await coordinator.confirmFinishedWalk() } }
+                        } else {
+                            if !record.dogs.isEmpty {
+                                Text(record.dogs.map(\.name).joined(separator: ", "))
+                                    .foregroundStyle(AppColors.secondaryText)
+                            }
+                            if let message = sync.errorMessage {
+                                Text(message).font(.footnote).foregroundStyle(AppColors.secondaryText)
+                                Button("Retry upload") { Task { await sync.refreshAndUpload() } }
+                                    .disabled(sync.isSyncing)
+                            }
+                            PrimaryButton(title: "Done", isLoading: coordinator.isConfirmingFinish) { dismiss() }
+                        }
+                    }
+                    if let message = coordinator.storageErrorMessage {
+                        Text(message).font(.footnote).foregroundStyle(AppColors.error)
+                        Button("Retry saving") { coordinator.retryStorage() }
+                    }
+                }
+                .padding(AppSpacing.large)
+            }
+            .background(AppColors.background)
+            .navigationTitle("Walk summary")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(coordinator.needsFinishConfirmation ? "Later" : "Close") { dismiss() }
+                        .disabled(coordinator.isConfirmingFinish)
+                }
+            }
+            .task {
+                if coordinator.needsFinishConfirmation { await selection.load() }
+            }
+            .interactiveDismissDisabled(coordinator.isConfirmingFinish)
+        }
+        .vitailAppearance()
+    }
+
+    private func summaryMetric(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(AppColors.secondaryText)
+            Text(value).font(.title3.weight(.medium)).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func pointsSummary(_ record: WalkRecord) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
+            if let receipt = record.serverSummary {
+                Text("+\(receipt.pointsAwarded) points").font(.largeTitle.weight(.semibold))
+                Text("Added to your wallet · \(receipt.distanceM / 1_000, specifier: "%.2f") km accepted")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+            } else if coordinator.needsFinishConfirmation {
+                let estimate = coordinator.estimatedPoints(for: record, hasSelectedDogs: !selection.selectedDogs.isEmpty)
+                Text("≈ \(estimate) points").font(.largeTitle.weight(.semibold))
+                Text(selection.selectedDogs.isEmpty
+                     ? "Choose who came along. Walks without a dog are saved on this device and earn no points."
+                     : "Estimated from your route. Points are confirmed after your walk is checked, with a daily limit of 40.")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+            } else if record.dogs.isEmpty || record.uploadRequest == nil || record.uploadFailure != nil {
+                Text("0 points").font(.largeTitle.weight(.semibold))
+                Text(record.syncDescription).font(.footnote).foregroundStyle(AppColors.secondaryText)
+            } else {
+                Text("Points pending").font(.title2.weight(.semibold))
+                Text("Your walk is saved. Your points will appear when the upload is confirmed.")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                if sync.isSyncing { ProgressView() }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var dogPicker: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Text("Who came along?").font(.headline)
+            if selection.isLoading {
+                ProgressView("Loading your dogs…")
+            } else if let message = selection.errorMessage {
+                Text(message).font(.footnote).foregroundStyle(AppColors.secondaryText)
+                Button("Retry loading dogs") { Task { await selection.load() } }
+            } else if selection.dogs.isEmpty {
+                Text("No dogs added yet. Add your dog in Account for your next walk.")
+                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+            } else {
+                ForEach(selection.dogs) { dog in
+                    let selected = selection.selectedDogIDs.contains(dog.id)
+                    Button { selection.toggleDog(id: dog.id) } label: {
+                        HStack(spacing: AppSpacing.medium) {
+                            AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
+                            Text(dog.name).foregroundStyle(AppColors.primaryText)
+                            Spacer()
+                            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selected ? AppColors.brand : AppColors.secondaryText)
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(coordinator.isConfirmingFinish)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+        }
     }
 }

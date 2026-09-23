@@ -9,7 +9,7 @@ import XCTest
 final class WalkDogSelectionTests: XCTestCase {
     private var referenceDate = Date()
 
-    func testLoadingDogsRequiresAnExplicitSelectionBeforeStarting() async {
+    func testStartingDoesNotRequireLoadingOrSelectingDogs() async {
         let dogs = [dog(id: 1, name: "Milo"), dog(id: 2, name: "Luna")]
         let model = WalkDogSelectionViewModel(
             session: WalkSessionTracker(),
@@ -18,7 +18,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         XCTAssertFalse(model.hasLoaded)
         XCTAssertFalse(model.canEditSelection)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
 
         await model.load()
 
@@ -28,7 +28,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertEqual(model.dogs, dogs)
         XCTAssertTrue(model.selectedDogIDs.isEmpty)
         XCTAssertTrue(model.canEditSelection)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
     }
 
     func testMultipleDogsCanBeSelectedAndDeselectedWithoutDuplicates() async {
@@ -52,7 +52,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         model.toggleDog(id: 2)
         XCTAssertTrue(model.selectedDogs.isEmpty)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
     }
 
     func testSelectAllClearSelectionAndUnknownDogHandling() async {
@@ -73,10 +73,10 @@ final class WalkDogSelectionTests: XCTestCase {
 
         model.clearSelection()
         XCTAssertTrue(model.selectedDogIDs.isEmpty)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
     }
 
-    func testEmptyDogListCannotStartAWalk() async {
+    func testEmptyDogListCanStartAWalk() async {
         let model = WalkDogSelectionViewModel(
             session: WalkSessionTracker(),
             service: WalkDogServiceStub(dogs: [])
@@ -90,7 +90,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
         XCTAssertTrue(model.dogs.isEmpty)
         XCTAssertTrue(model.selectedDogIDs.isEmpty)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
     }
 
     func testRefreshRemovesDeletedDogsAndKeepsExistingSelections() async {
@@ -114,7 +114,7 @@ final class WalkDogSelectionTests: XCTestCase {
         await model.load()
 
         XCTAssertTrue(model.selectedDogIDs.isEmpty)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
     }
 
     func testFailedLoadShowsAnErrorAndCanBeRetried() async {
@@ -127,7 +127,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertNotNil(model.errorMessage)
         XCTAssertFalse(model.isLoading)
         XCTAssertFalse(model.canEditSelection)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
 
         await service.setDogs([dog(id: 1, name: "Milo")])
         await model.load()
@@ -138,7 +138,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertTrue(model.canStartWalk)
     }
 
-    func testFailedRefreshPreservesTheListButPreventsStartingFromStaleData() async {
+    func testFailedRefreshPreservesTheListButPreventsEditingStaleDogs() async {
         let dogs = [dog(id: 1, name: "Milo"), dog(id: 2, name: "Luna")]
         let service = WalkDogServiceStub(dogs: dogs)
         let model = WalkDogSelectionViewModel(session: WalkSessionTracker(), service: service)
@@ -154,14 +154,14 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertEqual(model.selectedDogIDs, Set([1]))
         XCTAssertNotNil(model.errorMessage)
         XCTAssertFalse(model.canEditSelection)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
 
         await model.load()
         XCTAssertNil(model.errorMessage)
         XCTAssertTrue(model.canStartWalk)
     }
 
-    func testLoadingBlocksEditingStartingAndOverlappingRequests() async {
+    func testLoadingBlocksEditingAndOverlappingRequestsButNotStarting() async {
         let service = WalkDogServiceStub(dogs: [dog(id: 1, name: "Milo")])
         let model = WalkDogSelectionViewModel(session: WalkSessionTracker(), service: service)
         await model.load()
@@ -173,7 +173,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         XCTAssertTrue(model.isLoading)
         XCTAssertFalse(model.canEditSelection)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
         model.clearSelection()
         model.toggleDog(id: 1)
         await model.load()
@@ -188,7 +188,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertTrue(model.canStartWalk)
     }
 
-    func testCancelledRetryAfterAFailedRefreshDoesNotEnableStarting() async {
+    func testCancelledRetryKeepsSelectionLockedButDoesNotBlockStarting() async {
         let service = WalkDogServiceStub(dogs: [dog(id: 1, name: "Milo")])
         let model = WalkDogSelectionViewModel(session: WalkSessionTracker(), service: service)
         await model.load()
@@ -197,7 +197,7 @@ final class WalkDogSelectionTests: XCTestCase {
         await service.failNextLoad()
         await model.load()
         XCTAssertNotNil(model.errorMessage)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
 
         await service.suspendNextLoad()
         let retry = Task { await model.load() }
@@ -210,7 +210,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertNotNil(model.errorMessage)
         XCTAssertEqual(model.selectedDogIDs, Set([1]))
         XCTAssertFalse(model.canEditSelection)
-        XCTAssertFalse(model.canStartWalk)
+        XCTAssertTrue(model.canStartWalk)
 
         await model.load()
         XCTAssertNil(model.errorMessage)
@@ -234,7 +234,7 @@ final class WalkDogSelectionTests: XCTestCase {
         model.toggleDog(id: 2)
 
         try await attachCardSnapshot(
-            name: "01 Normal - selected dogs and ready walk controls",
+            name: "01 Ready - Start only",
             selection: model,
             session: tracker,
             location: location(),
@@ -243,7 +243,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         model.selectAll()
         try await attachCardSnapshot(
-            name: "02 Compact phone - three dogs selected",
+            name: "02 Compact phone - Start only",
             selection: model,
             session: tracker,
             location: location(),
@@ -253,7 +253,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         tracker.start(from: location(), dogs: model.selectedDogs)
         try await attachCardSnapshot(
-            name: "03 Walking - pause and finish controls",
+            name: "03 Walking - Pause only",
             selection: model,
             session: tracker,
             location: location(),
@@ -262,7 +262,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         tracker.pause()
         try await attachCardSnapshot(
-            name: "04 Paused - locked dogs and resume controls",
+            name: "04 Paused - Resume and Finish",
             selection: model,
             session: tracker,
             location: location(),
@@ -276,7 +276,7 @@ final class WalkDogSelectionTests: XCTestCase {
         )
         await emptyModel.load()
         try await attachCardSnapshot(
-            name: "05 Empty - add a dog and disabled start",
+            name: "05 Empty dog list - Start remains available",
             selection: emptyModel,
             session: emptyTracker,
             location: location(),
@@ -296,7 +296,7 @@ final class WalkDogSelectionTests: XCTestCase {
         narrowModel.toggleDog(id: 1)
         narrowModel.toggleDog(id: 2)
         try await attachCardSnapshot(
-            name: "06 Narrow - long names and accessible large text",
+            name: "06 Narrow - accessible large text controls",
             selection: narrowModel,
             session: narrowTracker,
             location: location(),
@@ -305,23 +305,15 @@ final class WalkDogSelectionTests: XCTestCase {
         )
     }
 
-    func testMapAndCompactWalkCardFitStandardViewportHeights() {
-        let cardHeight: CGFloat = 300
-        let pageSpacing = AppSpacing.medium * 3
-        let viewportHeights: [CGFloat] = [600, 700]
-
-        for viewportHeight in viewportHeights {
-            let mapHeight = WalkMapView.mapHeight(
-                availableHeight: viewportHeight,
-                cardHeight: cardHeight
-            )
-
-            XCTAssertGreaterThanOrEqual(mapHeight, 220)
-            XCTAssertEqual(cardHeight + pageSpacing + mapHeight, viewportHeight, accuracy: 0.5)
-        }
+    func testOnlyTheActionsForTheCurrentWalkStateAreVisible() {
+        XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .idle), ["Start"])
+        XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .walking), ["Pause"])
+        XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .paused), ["Resume", "Finish"])
+        XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .finished, canStartNewWalk: false), ["Review walk"])
+        XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .finished), ["Start"])
     }
 
-    func testRecoveredWalkCardShowsSavedDogsBeforeAnyProfileRequest() async throws {
+    func testRecoveredWalkCanResumeBeforeAnyProfileRequest() async throws {
         referenceDate = Date()
         let savedDogs = [dog(id: 1, name: "Milo"), dog(id: 2, name: "Luna")]
         let startedAt = referenceDate.addingTimeInterval(-300)
@@ -358,7 +350,7 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertFalse(model.canEditSelection)
 
         try await attachCardSnapshot(
-            name: "07 Recovered walk - saved dogs and waiting for GPS",
+            name: "07 Recovered walk - paused and waiting for GPS",
             selection: model,
             session: tracker,
             location: nil,
@@ -379,21 +371,6 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertEqual(tracker.participatingDogs, savedDogs)
         XCTAssertEqual(tracker.status, .paused)
         XCTAssertEqual(tracker.makeDraft()?.id, draft.id)
-    }
-
-    func testMapKeepsUsableMinimumHeightWhenPageNeedsScrolling() {
-        let pageSpacing = AppSpacing.medium * 3
-        let layouts: [(CGFloat, CGFloat)] = [(450, 300), (700, 500)]
-
-        for (viewportHeight, cardHeight) in layouts {
-            let mapHeight = WalkMapView.mapHeight(
-                availableHeight: viewportHeight,
-                cardHeight: cardHeight
-            )
-
-            XCTAssertEqual(mapHeight, 220)
-            XCTAssertGreaterThan(cardHeight + pageSpacing + mapHeight, viewportHeight)
-        }
     }
 
     func testWalkingAndPausedSessionsLockSelectionAndSkipReloads() async {
@@ -431,23 +408,16 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertEqual(tracker.participatingDogs, [dogs[0]])
     }
 
-    func testTrackerRequiresDogsAndAccurateLocationBeforeStarting() {
+    func testTrackerRequiresAccurateLocationButDogsAreChosenAfterward() {
         let tracker = WalkSessionTracker(now: { self.referenceDate })
-        let milo = dog(id: 1, name: "Milo")
-
+        tracker.start(from: nil, dogs: [])
+        XCTAssertEqual(tracker.status, .idle)
+        tracker.start(from: location(accuracy: 100), dogs: [])
+        XCTAssertEqual(tracker.status, .idle)
         tracker.start(from: location(), dogs: [])
-        XCTAssertEqual(tracker.status, .idle)
-        XCTAssertTrue(tracker.participatingDogs.isEmpty)
-
-        tracker.start(from: nil, dogs: [milo])
-        XCTAssertEqual(tracker.status, .idle)
-        tracker.start(from: location(accuracy: 100), dogs: [milo])
-        XCTAssertEqual(tracker.status, .idle)
-        XCTAssertTrue(tracker.participatingDogs.isEmpty)
-
-        tracker.start(from: location(), dogs: [milo])
         XCTAssertEqual(tracker.status, .walking)
-        XCTAssertEqual(tracker.participatingDogs, [milo])
+        XCTAssertTrue(tracker.participatingDogs.isEmpty)
+        XCTAssertTrue(tracker.makeDraft()?.isValid == true)
     }
 
     func testParticipantsAreDeduplicatedAndCopiedForEachWalk() {
@@ -630,12 +600,6 @@ final class WalkDogSelectionTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000)
         host.view.layoutIfNeeded()
 
-        let displayedDogs = session.isInProgress ? session.participatingDogs : selection.dogs
-        if !displayedDogs.isEmpty {
-            let scrollView = try XCTUnwrap(scrollViews(in: host.view).first, "\(name) must render the dog list.")
-            XCTAssertGreaterThan(scrollView.bounds.height, 40)
-            XCTAssertGreaterThan(scrollView.contentSize.width, 0)
-        }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 2
         let renderer = UIGraphicsImageRenderer(bounds: bounds, format: format)
@@ -643,7 +607,7 @@ final class WalkDogSelectionTests: XCTestCase {
             XCTAssertTrue(host.view.drawHierarchy(in: bounds, afterScreenUpdates: true), "Could not render \(name)")
         }
         XCTAssertEqual(image.size.width, width, accuracy: 0.5)
-        XCTAssertGreaterThan(image.size.height, 120)
+        XCTAssertGreaterThan(image.size.height, 70)
         XCTAssertLessThan(image.size.height, 2_500)
         if let maximumCardHeight {
             // Exclude the snapshot's 16-point top and bottom page margins.

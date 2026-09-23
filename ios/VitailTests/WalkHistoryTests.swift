@@ -165,7 +165,6 @@ final class WalkHistoryTests: XCTestCase {
         let tracker = WalkSessionTracker(now: { self.referenceDate }, onFinish: { completed.append($0) })
         tracker.start(from: nil, dogs: [dog()])
         tracker.start(from: location(accuracy: 100), dogs: [dog()])
-        tracker.start(from: location(), dogs: [])
         tracker.finish()
 
         XCTAssertEqual(tracker.status, .idle)

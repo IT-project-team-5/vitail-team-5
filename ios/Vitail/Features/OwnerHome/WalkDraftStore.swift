@@ -12,6 +12,9 @@ struct WalkDraft: Codable, Equatable, Sendable {
     let dogs: [Dog]
     let routeSegments: [[WalkRoutePoint]]
     var finishedRecord: WalkRecord? = nil
+    // Missing on older archives, which were already confirmed when finished.
+    // New captures stay here (outside uploadable history) until the owner confirms dogs.
+    var requiresDogConfirmation: Bool? = nil
 
     var isValid: Bool {
         guard startedAt.timeIntervalSince1970.isFinite,
@@ -19,7 +22,6 @@ struct WalkDraft: Codable, Equatable, Sendable {
               checkpointAt >= startedAt,
               activeDuration.isFinite, activeDuration >= 0,
               distanceMetres.isFinite, distanceMetres >= 0,
-              !dogs.isEmpty,
               Set(dogs.map(\.id)).count == dogs.count,
               dogs.allSatisfy({ dog in
                   dog.id > 0 && !dog.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

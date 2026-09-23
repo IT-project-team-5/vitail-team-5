@@ -6,7 +6,7 @@ extension WalkRecord {
     /// Legacy records without measured accuracy/source metadata stay local-only.
     var uploadRequest: WalkRequest? {
         let points = routeSegments.flatMap { $0 }
-        guard (2...5000).contains(points.count),
+        guard !dogs.isEmpty, (2...5000).contains(points.count),
               points.allSatisfy({ point in
                   point.isValid && point.accuracyM.map { $0.isFinite && $0 >= 0 } == true
                       && point.isSimulated != nil
@@ -28,6 +28,7 @@ extension WalkRecord {
         if let summary = serverSummary {
             return String(format: "Synced · +%d pts · %.2f km accepted", summary.pointsAwarded, summary.distanceM / 1000)
         }
+        if dogs.isEmpty { return "Saved on this device · 0 points · no dogs selected" }
         if let uploadFailure { return "Saved locally · \(uploadFailure)" }
         return uploadRequest == nil ? "Local history only · not eligible for upload" : "Saved locally · waiting to upload"
     }

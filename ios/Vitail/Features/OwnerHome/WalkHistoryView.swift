@@ -84,7 +84,7 @@ struct WalkHistoryCard: View {
                     .accessibilityHidden(true)
             }
 
-            Label(walk.dogs.map(\.name).joined(separator: ", "), systemImage: "dog.fill")
+            Label(walk.dogs.isEmpty ? "Solo walk" : walk.dogs.map(\.name).joined(separator: ", "), systemImage: "dog.fill")
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -129,10 +129,9 @@ struct WalkHistoryDetailView: View {
                     VStack(alignment: .leading, spacing: AppSpacing.small) {
                         Text(walk.startedAt, format: .dateTime.day().month(.wide).year())
                             .font(.title2.bold())
-                        Label(walk.dogs.map(\.name).joined(separator: ", "), systemImage: "dog.fill")
+                        Label(walk.dogs.isEmpty ? "Solo walk" : walk.dogs.map(\.name).joined(separator: ", "), systemImage: "dog.fill")
                             .font(.subheadline)
                         WalkHistoryStats(walk: walk)
-                        Divider()
                         LabeledContent("Started") {
                             Text(walk.startedAt, format: .dateTime.hour().minute())
                         }

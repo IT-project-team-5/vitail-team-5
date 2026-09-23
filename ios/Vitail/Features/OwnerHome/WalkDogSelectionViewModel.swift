@@ -26,7 +26,7 @@ final class WalkDogSelectionViewModel: ObservableObject {
     }
 
     var canStartWalk: Bool {
-        canEditSelection && !selectedDogs.isEmpty
+        session.canStart
     }
 
     func load() async {
@@ -60,6 +60,10 @@ final class WalkDogSelectionViewModel: ObservableObject {
     func selectAll() {
         guard canEditSelection else { return }
         selectedDogIDs = Set(dogs.map(\.id))
+    }
+
+    func resetForNewWalk() {
+        selectedDogIDs.removeAll()
     }
 
     func clearSelection() {
