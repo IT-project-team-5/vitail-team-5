@@ -25,7 +25,7 @@ behaviour for them, raise them instead.
 | R10 | Speed check | Exclude driving and cycling by implied speed |
 | R11 | Offline | No offline tracking or queued sync. Local buffering during a walk only |
 | R12 | Point expiry | 12 months from earning |
-| R13 | Merchant onboarding | Admin portal only; merchants contact Vitail to change offers |
+| R13 | Merchant onboarding | Admin portal only; merchants contact Vitail to change offers. **Offer management superseded by R43** |
 | R14 | Merchant pricing | Merchants set their own point prices at partnership signing |
 | R15 | Redemption model | Order first, points deducted on order, collected in store |
 | R16 | Redemption record | Every redemption gets a reference number, visible in owner history |
@@ -55,6 +55,7 @@ behaviour for them, raise them instead.
 | R40 | First authentication slice | Email/password only: owners self-register, while café accounts are created in Django Admin. Both use the same iOS login and route by `OWNER` or `CAFE`. JWT access/refresh tokens are stored in Keychain. Sign in with Apple waits for a project-owned Apple Developer Program account; password reset and account deletion are later use cases. This supersedes R36's delivery order, not its long-term intent |
 | R41 | MVP development approach | Use feature-first folders, a small central design system and the minimum `View → ViewModel → Service` layers. Review is lightweight: build, happy path, key failures, permissions and secrets; no coverage target or speculative architecture |
 | R42 | Café venue details | Café accounts may edit their own venue name, address, description and opening hours in Account. Login email, role, offers and point prices are not editable there. This updates R13's admin-only onboarding boundary for venue details, as requested on 2026-09-09 |
+| R43 | Café product management | As requested on 2026-09-23, café accounts may create/edit their own canonical Reward products, descriptions, positive point prices and availability in Products. Admin onboarding remains required. Unlisting replaces destructive deletion; existing order snapshots remain unchanged. This supersedes the offer-management restriction in R13 and R42 |
 
 ### Connected MVP implementation notes (2026-09-09)
 

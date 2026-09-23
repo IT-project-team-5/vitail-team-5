@@ -21,3 +21,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 ios/Config/Local.xcconfig
+
+# Local demo credentials and database backups
+.local-demo/

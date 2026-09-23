@@ -345,6 +345,63 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
         default: {$ref: '#/components/responses/Error'}
+  /api/cafe/products:
+    get:
+      summary: List all products belonging to the signed-in CAFE
+      description: Includes available and unavailable products. Other cafés' products are never returned.
+      responses:
+        '200':
+          description: Own menu, ordered by point cost, name and ID; an empty menu returns an empty array
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/CafeProduct'}}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Create a product for the signed-in CAFE
+      description: >-
+        CAFE only. The server assigns the café; IDs, ownership fields and unknown
+        properties are rejected. New products are immediately listed in the
+        owner reward catalogue unless is_available is false.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/CafeProductInput'
+                - required: [name, point_cost]
+      responses:
+        '201':
+          description: Created product
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CafeProduct'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/cafe/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+    patch:
+      summary: Edit an owned product or change its availability (CAFE only)
+      description: >-
+        Partial updates are accepted. Other cafés' IDs and missing IDs return
+        404. IDs, ownership fields and unknown properties are rejected. Changes
+        are atomic with concurrent order creation. Setting is_available to false
+        removes the product from the owner catalogue and blocks new orders;
+        existing orders retain their original name, price and café snapshots
+        and can still be collected. Products are unlisted instead of deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CafeProductInput'}
+      responses:
+        '200':
+          description: Updated product
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CafeProduct'}
+        '404': {description: No such product owned by this café}
+        default: {$ref: '#/components/responses/Error'}
   /api/cafe/orders:
     get:
       summary: Read-only pending order feed for the signed-in CAFE
@@ -353,7 +410,7 @@ paths:
         order-time café. No since parameter returns a reset snapshot. A cursor
         returns changed upserts/removals; unchanged returns 304 with no body.
         Due orders expire/refund before polling. Empty catalogues return an
-        empty feed. No café write endpoints exist.
+        empty feed. Cafés cannot modify orders through this endpoint.
       parameters:
         - name: since
           in: query
@@ -537,6 +594,23 @@ components:
         description: {type: string}
         point_cost: {type: integer, minimum: 1}
         cafe_name: {type: string}
+    CafeProductInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100, description: Trimmed; whitespace-only names are invalid}
+        description: {type: string, maxLength: 2000, default: ''}
+        point_cost: {type: integer, minimum: 1, maximum: 2147483647}
+        is_available: {type: boolean, default: true}
+    CafeProduct:
+      type: object
+      required: [id, name, description, point_cost, is_available]
+      properties:
+        id: {type: integer, readOnly: true}
+        name: {type: string, minLength: 1, maxLength: 100}
+        description: {type: string, maxLength: 2000}
+        point_cost: {type: integer, minimum: 1, maximum: 2147483647}
+        is_available: {type: boolean}
     Redemption:
       type: object
       required: [id, reference_number, reward, reward_name_snapshot, point_cost_snapshot, status, created_at, collected_at, expires_at, cafe_name_snapshot]

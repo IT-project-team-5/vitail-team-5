@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from .models import PointEntry, Redemption, Reward
 from .permissions import IsCafeRole, IsOwnerRole
 from .serializers import (
-    CafeOrderSerializer, CreateRedemptionSerializer, PointEntrySerializer,
+    CafeOrderSerializer, CafeProductSerializer, CreateRedemptionSerializer, PointEntrySerializer,
     RedemptionSerializer, RewardSerializer,
 )
 from .services import (
@@ -47,6 +47,38 @@ class RewardListView(APIView):
             is_available=True, cafe_user__is_active=True, cafe_user__role="CAFE"
         ).select_related("cafe_user")
         return Response(RewardSerializer(rewards, many=True).data)
+
+
+class CafeProductListCreateView(APIView):
+    permission_classes = [IsCafeRole]
+
+    def get(self, request):
+        products = Reward.objects.filter(cafe_user=request.user)
+        return Response(CafeProductSerializer(products, many=True).data)
+
+    def post(self, request):
+        serializer = CafeProductSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(cafe_user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class CafeProductUpdateView(APIView):
+    permission_classes = [IsCafeRole]
+
+    def patch(self, request, product_id):
+        with transaction.atomic():
+            # Redemption creation locks the same reward, so a concurrent order
+            # snapshots either the complete old product or the complete edit.
+            product = Reward.objects.select_for_update().filter(
+                pk=product_id, cafe_user=request.user
+            ).first()
+            if product is None:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+            serializer = CafeProductSerializer(product, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
 
 
 class RedemptionListCreateView(APIView):

@@ -478,7 +478,7 @@ struct WalkMapView: View {
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.card, style: .continuous)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                .stroke(AppColors.border, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.1), radius: 6, y: 3)
     }

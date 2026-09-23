@@ -106,6 +106,50 @@ final class APIIntegrationTests: XCTestCase {
         XCTAssertEqual(calls.requests.count, 6)
     }
 
+    func testCafeProductRequestsUseSharedCredentialsAndOnlyEditableFields() async throws {
+        let session = makeSession()
+        defer { session.invalidateAndCancel() }
+        let client = APIClient(baseURL: URL(string: "https://shared.example"), session: session)
+        let authority = CredentialAuthority(apiClient: client, store: IntegrationTokenStore())
+        try await authority.install(AuthTokens(access: "cafe-token", refresh: "refresh"))
+        let authenticated = AuthenticatedAPIClient(apiClient: client, credentials: authority)
+        let products = CafeProductsService(apiClient: authenticated)
+        let calls = RequestLog()
+        let productJSON = #"{"id":7,"name":"Coffee","description":"Freshly brewed","point_cost":25,"is_available":false}"#
+        IntegrationURLProtocol.handler = { request in
+            calls.add(request)
+            XCTAssertEqual(request.url?.host, "shared.example")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cafe-token")
+            if request.httpMethod == "GET" {
+                XCTAssertEqual(request.url?.path, "/api/cafe/products")
+                return (200, "[\(productJSON)]")
+            }
+            let body = try? integrationRequestBody(request)
+            XCTAssertEqual(body?["name"] as? String, "Coffee")
+            XCTAssertEqual(body?["description"] as? String, "Freshly brewed")
+            XCTAssertEqual(body?["point_cost"] as? Int, 25)
+            XCTAssertEqual(body?["is_available"] as? Bool, false)
+            XCTAssertEqual(body?.count, 4)
+            if request.httpMethod == "POST" {
+                XCTAssertEqual(request.url?.path, "/api/cafe/products")
+                return (201, productJSON)
+            }
+            XCTAssertEqual(request.httpMethod, "PATCH")
+            XCTAssertEqual(request.url?.path, "/api/cafe/products/7")
+            return (200, productJSON)
+        }
+        let list = try await products.fetchProducts()
+        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list.first?.pointCost, 25)
+        XCTAssertEqual(list.first?.isAvailable, false)
+        let request = CafeProductRequest(name: "Coffee", description: "Freshly brewed", pointCost: 25, isAvailable: false)
+        let created = try await products.createProduct(request)
+        let updated = try await products.updateProduct(id: 7, request: request)
+        XCTAssertEqual(created, updated)
+        XCTAssertEqual(created.id, 7)
+        XCTAssertEqual(calls.requests.count, 3)
+    }
+
     #if DEBUG
     func testBackendSwitchRejectsOldCredentialsBeforeSending() async throws {
         let defaults = UserDefaults.standard
@@ -181,6 +225,21 @@ final class APIIntegrationTests: XCTestCase {
         config.protocolClasses = [IntegrationURLProtocol.self]
         return URLSession(configuration: config)
     }
+}
+
+private func integrationRequestBody(_ request: URLRequest) throws -> [String: Any] {
+    var data = request.httpBody ?? Data()
+    if data.isEmpty, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+    }
+    return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 }
 
 private final class IntegrationTokenStore: CredentialStoring, @unchecked Sendable {

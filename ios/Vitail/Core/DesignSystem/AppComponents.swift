@@ -11,20 +11,22 @@ struct PrimaryButton: View {
             HStack(spacing: AppSpacing.small) {
                 if isLoading {
                     ProgressView()
-                        .tint(AppColors.brandForeground)
+                        .tint(isDisabled ? AppColors.secondaryText : AppColors.brandForeground)
                 }
                 Text(title)
                     .fontWeight(.semibold)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal, AppSpacing.medium)
+            .padding(.vertical, AppSpacing.small)
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .foregroundStyle(AppColors.brandForeground)
-            .background(AppColors.brand)
+            .frame(minHeight: 50)
+            .foregroundStyle(isDisabled ? AppColors.secondaryText : AppColors.brandForeground)
+            .background(isDisabled ? AppColors.border.opacity(0.45) : AppColors.brand)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
         }
         .buttonStyle(.plain)
         .disabled(isDisabled || isLoading)
-        .opacity(isDisabled ? 0.55 : 1)
     }
 }
 struct AppTextField: View {
@@ -37,9 +39,9 @@ struct AppTextField: View {
     var body: some View {
         Group {
             if isSecure {
-                SecureField(title, text: $text)
+                SecureField(title, text: $text, prompt: Text(title).foregroundStyle(AppColors.secondaryText))
             } else {
-                TextField(title, text: $text)
+                TextField(title, text: $text, prompt: Text(title).foregroundStyle(AppColors.secondaryText))
             }
         }
         .textContentType(textContentType)
@@ -47,13 +49,28 @@ struct AppTextField: View {
         .textInputAutocapitalization(keyboardType == .emailAddress ? .never : .sentences)
         .autocorrectionDisabled(keyboardType == .emailAddress)
         .padding(.horizontal, AppSpacing.medium)
-        .frame(height: 50)
+        .padding(.vertical, AppSpacing.small)
+        .frame(minHeight: 50)
         .background(AppColors.surface)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.field)
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                .stroke(AppColors.border, lineWidth: 1)
         }
+    }
+}
+
+/// The approved full-color brand artwork, also used for the Home Screen icon.
+struct VitailBrandMark: View {
+    var size: CGFloat = 80
+
+    var body: some View {
+        Image("BrandMark")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            .accessibilityHidden(true)
     }
 }
 
