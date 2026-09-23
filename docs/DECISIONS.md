@@ -62,6 +62,7 @@ behaviour for them, raise them instead.
 | R47 | Café-first redemption | Rewards lists café photo/name/hours, opens a menu with point price on Purchase, and shows order detail before slide-to-collect. Existing atomic deductions, refunds and retry IDs remain authoritative |
 | R48 | Coffee estimate | Temporarily use 60 points ≈ 1 cup for the wallet display. This is an estimate only; actual product prices and walking earn rates are unchanged |
 | R49 | UI refinements | Confirmed on 2026-09-24: login forms expand beneath their role row; Walk uses play/pause symbols with more spacing and a slogan; product-titled centred purchase alerts show café/deadline and open the receipt on success; café menus omit the Vitail title and stale purchase notices; café order cards show item/customer/profile dogs with details on tap; users can persist System/Light/Dark appearance |
+| R50 | Drawer, receipt and dog photos | Follow-up on 2026-09-24: the Walk drawer moves as one piece, with controls and history in one scroll area. Receipt uses a large café photo, opens café details on tap, replaces point cost with order number, and fills the collect slider as it moves. Café order cards show dog avatars and omit the entire update-time header |
 
 ### Connected MVP implementation notes (2026-09-09)
 

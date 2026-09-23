@@ -283,6 +283,12 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 
 ## Limits and result log
 
+Drawer interaction check: drag the handle from collapsed to expanded and back.
+The controls, slogan and history should move together. Once expanded, scroll the
+content until the controls leave the viewport; collapsing should return to the
+controls. Repeat with large text and a paused walk to confirm Resume and Finish
+remain reachable.
+
 High-accuracy continuous GPS consumes battery. Finish or Pause when not walking;
 the app does not run a perpetual background location service or silently restart
 a walk after force-quit. Standard iOS location indication is intentional.
@@ -293,6 +299,7 @@ flow. It does not validate advanced anti-cheat or personalised welfare rules.
 | Date / build | iPhone / iOS | Test | Result | Observed issue / evidence |
 |---|---|---|---|---|
 | 2026-09-09 / MVP checkpoint | Real iPhone | Initial outdoor walks and exported local history | Partial evidence | Saved history is readable and distance matches the within-segment sum; implausible GPS jumps remain a known issue. Export does not include lock-screen or pause event logs. |
+| 2026-09-24 / drawer and receipt refinements | iPhone 17 Pro simulator / iOS 26.2 | 83 affected iOS tests, including drawer geometry, shared scroll hierarchy, redemption and café order compatibility; light/dark and large-text snapshots | Passed | Snapshot inspection confirms shared drawer scrolling and reachable controls. This is not evidence of physical-device gestures or background GPS behaviour. |
 | Pending | — | Full physical-device checklist | Not yet completed | Add results for the remaining cases after testing |
 
 Record route screenshots, expected versus observed pause/recovery behaviour,

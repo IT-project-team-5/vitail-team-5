@@ -49,6 +49,8 @@ Owners can edit their name and dogs, see their real wallet balance, browse
 cafés by photo/name/hours, open a café menu and confirm one reward in a centred
 alert titled with the product, café and Melbourne collection deadline. A confirmed
 purchase opens its receipt immediately; owners slide there to collect.
+Receipts show a large café photo and the order reference; tap the photo or café
+name for contact details. The collection slider fills with colour as it moves.
 Café staff see those **same orders**, scoped to their own
 café, with a read-only feed that refreshes while open. Owner logout is inside
 the profile editor. The top owner title is Vitail; points appear only in Redeem
@@ -56,8 +58,9 @@ with an approximate coffee count (60 points per cup; actual menu prices vary).
 Café Account also lets staff edit the café photo, name, address, description,
 opening hours and Google Maps link. A blank link uses a Maps address search. Login email is read-only. Products lets each café create and edit its own
 menu items, point prices and availability; existing order snapshots stay unchanged.
-Café order cards show the product, customer and current profile dog names; tap
-for reference, time and collection details. Dog names describe the customer's
+Café order cards show the product, customer and current profile dog names/photos;
+tap for reference, time and collection details. There is no update-time header.
+Dog names describe the customer's
 profile, not a claim that those dogs accompanied an order or walk.
 
 Points deduct once at order creation. Retrying the same confirmation does not
@@ -70,6 +73,8 @@ one item (quantity 1) per `Redemption`. There is no cart or separate venue/order
 database. Names, price and café ownership are snapshotted at order time.
 
 Walk uses a full-height map with a bottom menu that expands to show history.
+The entire drawer follows a drag; controls, slogan and history share one scroll
+area, so the Start control is not pinned above the history.
 Play begins recording; walking shows a pause symbol, and paused walks show play
 to resume and an explicit Finish action. Controls have accessible labels and a
 short slogan below. Finish saves a protected pending summary. The owner chooses dogs and
