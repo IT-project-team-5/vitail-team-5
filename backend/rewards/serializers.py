@@ -95,13 +95,18 @@ class CreateRedemptionSerializer(serializers.Serializer):
 
 
 class CafeOrderSerializer(serializers.ModelSerializer):
+    owner_dog_names = serializers.SerializerMethodField()
     owner_name = serializers.CharField(source="owner_name_snapshot", read_only=True)
     items = serializers.SerializerMethodField()
     ordered_at = serializers.DateTimeField(source="created_at", read_only=True)
 
     class Meta:
         model = Redemption
-        fields = ("id", "reference_number", "owner_name", "items", "ordered_at")
+        fields = ("id", "reference_number", "owner_name", "owner_dog_names", "items", "ordered_at", "status", "expires_at")
+
+    def get_owner_dog_names(self, order):
+        # Current profile dogs, not an assertion of dogs present at collection.
+        return [dog.name for dog in order.owner_user.dogs.all()]
 
     def get_items(self, order):
         return [{"name": order.reward_name_snapshot, "quantity": 1}]

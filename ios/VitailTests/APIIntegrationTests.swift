@@ -79,7 +79,9 @@ final class APIIntegrationTests: XCTestCase {
                 XCTAssertEqual(request.httpMethod, "DELETE")
                 return (204, "")
             case "/api/cafe/orders":
-                XCTAssertEqual(request.url?.query, "since=4")
+                let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                XCTAssertEqual(query.first { $0.name == "since" }?.value, "4")
+                XCTAssertEqual(query.first { $0.name == "include_owner_dogs" }?.value, "true")
                 return (200, #"{"cursor":5,"upserts":[],"removed_ids":[3]}"#)
             case "/api/cafe/profile":
                 XCTAssertTrue(["GET", "PATCH"].contains(request.httpMethod ?? ""))

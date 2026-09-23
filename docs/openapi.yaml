@@ -411,11 +411,19 @@ paths:
         returns changed upserts/removals; unchanged returns 304 with no body.
         Due orders expire/refund before polling. Empty catalogues return an
         empty feed. Cafés cannot modify orders through this endpoint.
+        owner_dog_names contains current customer-profile names, not dogs tied to
+        this order or a walk. Clients displaying those names should request
+        include_owner_dogs=true: every poll then returns a reset snapshot so
+        profile edits are visible even when the order cursor has not changed.
       parameters:
         - name: since
           in: query
           description: One non-negative integer cursor from this café/backend, not a timestamp
           schema: {type: integer, format: int64, minimum: 0}
+        - name: include_owner_dogs
+          in: query
+          description: true requests a complete pending-order snapshot with fresh profile dog names; false or omitted preserves order-only delta/304 behavior
+          schema: {type: boolean, default: false}
       responses:
         '200':
           description: Snapshot or delta
@@ -729,11 +737,17 @@ components:
         maps_link: {type: string, format: uri, readOnly: true, description: Saved link or automatic name/address search}
     CafeOrder:
       type: object
-      required: [id, reference_number, owner_name, items, ordered_at]
+      required: [id, reference_number, owner_name, owner_dog_names, items, ordered_at, status, expires_at]
       properties:
         id: {type: integer}
         reference_number: {type: string}
         owner_name: {type: string, description: Order-time customer name snapshot}
+        owner_dog_names:
+          type: array
+          items: {type: string}
+          description: Current profile dog names belonging to this order's customer; not an order-time snapshot or walk association
+        status: {type: string, enum: [PENDING], description: This feed only returns orders awaiting collection}
+        expires_at: {type: string, format: date-time}
         ordered_at: {type: string, format: date-time}
         items:
           type: array

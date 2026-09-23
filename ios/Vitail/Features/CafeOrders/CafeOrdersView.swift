@@ -117,7 +117,16 @@ struct CafeOrdersView: View {
                 } else {
                     LazyVStack(spacing: AppSpacing.medium) {
                         ForEach(ordersViewModel.orders) { order in
-                            orderCard(order)
+                            NavigationLink {
+                                CafeOrderDetailView(
+                                    orderID: order.id,
+                                    initialOrder: order,
+                                    viewModel: ordersViewModel
+                                )
+                            } label: {
+                                orderCard(order)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(AppSpacing.medium)
@@ -134,9 +143,6 @@ struct CafeOrdersView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.displayName)
                     .font(.headline)
-                Label("Updates every 5 seconds", systemImage: "arrow.clockwise")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.secondaryText)
             }
 
             Spacer()
@@ -195,48 +201,21 @@ struct CafeOrdersView: View {
     }
 
     private func orderCard(_ order: CafeOrder) -> some View {
-        VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            HStack(alignment: .top, spacing: AppSpacing.small) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(order.referenceNumber)
-                        .font(.headline.monospaced())
-                        .textSelection(.enabled)
-                    Label("Awaiting collection", systemImage: "clock.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.brand)
-                }
-
-                Spacer()
-
-                Text(order.orderedAt, format: .dateTime.hour().minute())
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColors.secondaryText)
-            }
-
-            Label(order.ownerName, systemImage: "person.fill")
-                .font(.subheadline)
-
-            Divider()
-
+        HStack(spacing: AppSpacing.medium) {
             VStack(alignment: .leading, spacing: AppSpacing.small) {
-                if order.items.isEmpty {
-                    Text("No items recorded")
-                        .foregroundStyle(AppColors.secondaryText)
-                } else {
-                    ForEach(Array(order.items.enumerated()), id: \.offset) { _, item in
-                        HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                            Text("\(item.quantity)×")
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                                .frame(minWidth: 28, alignment: .trailing)
-                            Text(item.name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(item.quantity) \(item.name)")
-                    }
-                }
+                Text(order.itemTitle)
+                    .font(.headline)
+                    .foregroundStyle(AppColors.primaryText)
+                Text(order.customerSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(AppColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(AppColors.secondaryText)
+                .accessibilityHidden(true)
         }
         .padding(AppSpacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -246,7 +225,9 @@ struct CafeOrdersView: View {
             RoundedRectangle(cornerRadius: AppRadius.card)
                 .stroke(AppColors.border, lineWidth: 1)
         }
-        .accessibilityElement(children: .contain)
+        .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("View order details")
     }
 
     private var bottomNavigation: some View {
@@ -274,5 +255,68 @@ struct CafeOrdersView: View {
         .overlay(alignment: .top) {
             Divider()
         }
+    }
+}
+
+private struct CafeOrderDetailView: View {
+    let orderID: Int
+    let initialOrder: CafeOrder
+    @ObservedObject var viewModel: CafeOrdersViewModel
+
+    private var currentOrder: CafeOrder? {
+        viewModel.orders.first { $0.id == orderID }
+    }
+
+    private var order: CafeOrder { currentOrder ?? initialOrder }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppSpacing.large) {
+                Text(order.itemTitle)
+                    .font(.title2.bold())
+                    .foregroundStyle(AppColors.primaryText)
+
+                VStack(alignment: .leading, spacing: AppSpacing.small) {
+                    Text(order.ownerName)
+                        .font(.headline)
+                    if !order.ownerDogNames.isEmpty {
+                        Text("Customer’s dogs")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+                        Text(order.ownerDogNames.joined(separator: ", "))
+                            .font(.subheadline)
+                    }
+                }
+
+                VStack(spacing: AppSpacing.medium) {
+                    LabeledContent("Reference", value: order.referenceNumber)
+                        .textSelection(.enabled)
+                    LabeledContent("Ordered") {
+                        Text(order.orderedAt, format: .dateTime.day().month().hour().minute())
+                            .multilineTextAlignment(.trailing)
+                    }
+                    LabeledContent("Status") {
+                        Text(currentOrder == nil ? "No longer awaiting collection" : order.statusLabel)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    if currentOrder != nil, let expiresAt = order.expiresAt {
+                        LabeledContent("Collect before") {
+                            Text(expiresAt, format: .dateTime.day().month().hour().minute())
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(AppColors.secondaryText)
+                .padding(AppSpacing.medium)
+                .background(AppColors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.large)
+        }
+        .background(AppColors.background)
+        .navigationTitle("Order")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

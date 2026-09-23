@@ -1,6 +1,9 @@
 import re
 
 from django.db import transaction
+from django.db.models import Prefetch
+
+from dogs.models import Dog
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -140,26 +143,40 @@ class CafeOrderFeedView(APIView):
         ):
             return Response({"code": "INVALID_CURSOR", "message": "The since cursor must be a non-negative integer."}, status=400)
         since = int(values[0]) if values else None
+        dog_options = request.query_params.getlist("include_owner_dogs")
+        if dog_options and (len(dog_options) != 1 or dog_options[0] not in {"true", "false"}):
+            return Response({"code": "INVALID_OPTION", "message": "include_owner_dogs must be true or false."}, status=400)
+        include_owner_dogs = dog_options == ["true"]
+        # The cursor tracks order changes, not profile edits. Clients showing
+        # current dog names request a fresh snapshot so a 304 never conceals a
+        # renamed/added/deleted dog. Legacy delta clients retain their contract.
+        reset = since is None or include_owner_dogs
         now = timezone.now()
         expire_redemptions(cafe=request.user, now=now)
         with transaction.atomic():
             state = lock_feed_state(request.user.pk)
             if since is not None and since > state.cursor:
                 return Response({"code": "INVALID_CURSOR", "message": "The since cursor is ahead of the server."}, status=400)
-            if since == state.cursor:
+            if since == state.cursor and not include_owner_dogs:
                 response = Response(status=status.HTTP_304_NOT_MODIFIED)
             else:
-                orders = Redemption.objects.filter(cafe_user=request.user, feed_cursor__lte=state.cursor)
-                if since is not None:
+                orders = Redemption.objects.filter(
+                    cafe_user=request.user, feed_cursor__lte=state.cursor
+                ).select_related("owner_user").prefetch_related(Prefetch(
+                    "owner_user__dogs", queryset=Dog.objects.only("id", "owner_id", "name", "created_at")
+                ))
+                if reset:
+                    orders = orders.filter(status=Redemption.Status.PENDING, expires_at__gt=now)
+                else:
                     orders = orders.filter(feed_cursor__gt=since)
                 rows = list(orders)
                 pending = [row for row in rows if row.status == Redemption.Status.PENDING and row.expires_at > now]
-                removed_ids = [] if since is None else sorted(
+                removed_ids = [] if reset else sorted(
                     row.id for row in rows if row.status != Redemption.Status.PENDING or row.expires_at <= now
                 )
                 response = Response({
                     "cursor": state.cursor, "upserts": CafeOrderSerializer(pending, many=True).data,
-                    "removed_ids": removed_ids, "reset": since is None,
+                    "removed_ids": removed_ids, "reset": reset,
                 })
             response[CURSOR_HEADER] = str(state.cursor)
             response["Cache-Control"] = "no-store"

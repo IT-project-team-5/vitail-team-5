@@ -12,9 +12,12 @@ actor CafeOrdersService: CafeOrdersServing {
     }
 
     func fetchOrders(since cursor: Int?) async throws -> CafeOrdersFetchResult {
-        let queryItems = cursor.map {
-            [URLQueryItem(name: "since", value: String($0))]
-        } ?? []
+        // Order cursors do not change when a customer edits their dogs.
+        // Request the fresh profile-aware snapshot while retaining polling.
+        var queryItems = [URLQueryItem(name: "include_owner_dogs", value: "true")]
+        if let cursor {
+            queryItems.append(URLQueryItem(name: "since", value: String(cursor)))
+        }
         let response: ConditionalAPIResponse<CafeOrdersFeed> = try await apiClient.getConditional(
             "/api/cafe/orders",
             queryItems: queryItems

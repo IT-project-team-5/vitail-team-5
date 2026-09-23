@@ -166,6 +166,61 @@ class ConnectedRedemptionFlowTests(APITestCase):
         self.assertEqual([item["id"] for item in history.data], [order_id])
         self.assertEqual(history.data[0]["status"], Redemption.Status.COLLECTED)
 
+    def test_profile_aware_feed_refreshes_dog_names_without_an_order_change(self):
+        created = self.create_order()
+        initial = self.cafe_client.get(self.feed_url, {"include_owner_dogs": "true"})
+        self.assertEqual(initial.status_code, 200)
+        self.assertEqual(initial.data["upserts"][0]["owner_dog_names"], [])
+        self.assertEqual(initial.data["upserts"][0]["status"], "PENDING")
+        self.assertEqual(initial.data["upserts"][0]["expires_at"], created.data["expires_at"])
+        cursor = initial.data["cursor"]
+        breed = Breed.objects.create(name="Order dog breed", energy_level="LOW", default_size="SMALL")
+        dog = Dog.objects.create(owner=self.owner, breed=breed, name="Coco", age_months=12, size="SMALL", is_brachycephalic=False)
+        query = {"since": cursor, "include_owner_dogs": "true"}
+        for name in ("Coco", "Coco Updated"):
+            dog.name = name
+            dog.save(update_fields=["name"])
+            response = self.cafe_client.get(self.feed_url, query)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.data["reset"])
+            self.assertEqual(response.data["cursor"], cursor)
+            self.assertEqual(response.data["upserts"][0]["owner_dog_names"], [name])
+            self.assertEqual(response.data["upserts"][0]["owner_name"], "Connected Owner")
+        # Legacy order-only clients keep unchanged/delta semantics.
+        self.assertEqual(self.cafe_client.get(self.feed_url, {"since": cursor}).status_code, 304)
+        dog.delete()
+        self.assertEqual(self.cafe_client.get(self.feed_url, query).data["upserts"][0]["owner_dog_names"], [])
+        self.owner_client.post(f"{self.orders_url}/{created.data['id']}/collect")
+        removed = self.cafe_client.get(self.feed_url, query)
+        self.assertEqual(removed.status_code, 200)
+        self.assertTrue(removed.data["reset"])
+        self.assertEqual(removed.data["upserts"], [])
+        self.assertEqual(removed.data["removed_ids"], [])
+
+    def test_order_dog_names_are_scoped_to_the_customer_and_order_time_cafe(self):
+        self.create_order()
+        breed = Breed.objects.create(name="Private order breed", energy_level="LOW", default_size="SMALL")
+        for owner, name in ((self.owner, "Customer Dog"), (self.other_owner, "Unrelated Dog")):
+            Dog.objects.create(owner=owner, breed=breed, name=name, age_months=12, size="SMALL", is_brachycephalic=False)
+        feed = self.cafe_client.get(self.feed_url, {"include_owner_dogs": "true"})
+        self.assertEqual(feed.data["upserts"][0]["owner_dog_names"], ["Customer Dog"])
+        self.assertNotIn("Unrelated Dog", str(feed.data))
+        # Changing catalogue ownership must not expose existing customer orders
+        # or dogs to a different café.
+        self.reward.cafe_user = self.other_cafe
+        self.reward.save(update_fields=["cafe_user"])
+        other = self.login(self.other_cafe).get(self.feed_url, {"include_owner_dogs": "true"})
+        self.assertEqual(other.data["upserts"], [])
+        self.assertNotIn("Customer Dog", str(other.data))
+        self.assertEqual(self.owner_client.get(self.feed_url, {"include_owner_dogs": "true"}).status_code, 403)
+        self.assertEqual(APIClient().get(self.feed_url, {"include_owner_dogs": "true"}).status_code, 401)
+
+    def test_profile_aware_feed_rejects_invalid_or_repeated_options(self):
+        for query in ("include_owner_dogs=maybe", "include_owner_dogs=true&include_owner_dogs=false"):
+            response = self.cafe_client.get(f"{self.feed_url}?{query}")
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.data["code"], "INVALID_OPTION")
+
     def test_cafe_poll_expires_order_removes_it_and_refunds_only_once(self):
         created = self.create_order()
         self.assertEqual(created.status_code, status.HTTP_201_CREATED)

@@ -12,6 +12,9 @@ final class CafeOrdersTests: XCTestCase {
               "id": 42,
               "reference_number": "RDM-ABC123",
               "owner_name": "Taylor",
+              "owner_dog_names": ["Coco", "Milo"],
+              "status": "PENDING",
+              "expires_at": "2026-09-07T14:00:00Z",
               "items": [
                 {"name": "Flat white", "quantity": 2},
                 {"name": "Puppuccino", "quantity": 1}
@@ -32,6 +35,45 @@ final class CafeOrdersTests: XCTestCase {
         XCTAssertEqual(feed.orders.first?.ownerName, "Taylor")
         XCTAssertEqual(feed.orders.first?.items.count, 2)
         XCTAssertEqual(feed.orders.first?.items.first?.quantity, 2)
+        XCTAssertEqual(feed.orders.first?.ownerDogNames, ["Coco", "Milo"])
+        XCTAssertEqual(feed.orders.first?.itemTitle, "2 × Flat white · Puppuccino")
+        XCTAssertEqual(feed.orders.first?.customerSummary, "Taylor · Dogs: Coco, Milo")
+        XCTAssertEqual(feed.orders.first?.statusLabel, "Awaiting collection")
+        XCTAssertNotNil(feed.orders.first?.expiresAt)
+    }
+
+    func testLegacyOrderWithoutCustomerDogsOrStatusStillDecodes() throws {
+        let data = #"""
+        {"id":1,"reference_number":"RDM-1","owner_name":"Taylor",
+         "items":[{"name":"Coffee","quantity":1}],"ordered_at":"2026-09-07T03:15:12Z"}
+        """#.data(using: .utf8)!
+        let order = try JSONDecoder().decode(CafeOrder.self, from: data)
+        XCTAssertEqual(order.ownerDogNames, [])
+        XCTAssertEqual(order.itemTitle, "Coffee")
+        XCTAssertEqual(order.customerSummary, "Taylor")
+        XCTAssertEqual(order.status, "PENDING")
+        XCTAssertNil(order.expiresAt)
+    }
+
+    @MainActor
+    func testSameCursorSnapshotRefreshesCustomerDogsAndRemovesMissingOrders() async {
+        let initial = makeOrder(id: 1, minute: 0)
+        let updated = CafeOrder(
+            id: initial.id, referenceNumber: initial.referenceNumber,
+            ownerName: initial.ownerName, items: initial.items,
+            orderedAt: initial.orderedAt, ownerDogNames: ["Coco"]
+        )
+        let service = CafeOrdersServiceStub(responses: [
+            .result(.updated(CafeOrdersFeed(cursor: 1, orders: [initial], removedOrderIDs: [], reset: true))),
+            .result(.updated(CafeOrdersFeed(cursor: 1, orders: [updated], removedOrderIDs: [], reset: true))),
+            .result(.updated(CafeOrdersFeed(cursor: 2, orders: [], removedOrderIDs: [], reset: true)))
+        ])
+        let model = CafeOrdersViewModel(service: service)
+        await model.refresh()
+        await model.refresh()
+        XCTAssertEqual(model.orders.first?.ownerDogNames, ["Coco"])
+        await model.refresh()
+        XCTAssertTrue(model.orders.isEmpty)
     }
 
     func testFeedDefaultsResetToFalseForOlderResponses() throws {
