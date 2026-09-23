@@ -41,8 +41,13 @@ final class WalkSessionTracker: ObservableObject {
     var pointCount: Int { routeSegments.reduce(0) { $0 + $1.count } }
 
     func checkInactivity() {
+        checkInactivity(at: now())
+    }
+
+    private func checkInactivity(at date: Date) {
         guard enforcesRewardLimits, isInProgress,
-              let last = pausedAt ?? lastMovementAt, now().timeIntervalSince(last) >= 300 else { return }
+              let last = [pausedAt, lastMovementAt].compactMap({ $0 }).min(),
+              date.timeIntervalSince(last) >= 300 else { return }
         finish()
         trackingNotice = "Walk ended after 5 minutes without activity. Recorded points are validated by the server."
     }
@@ -224,21 +229,43 @@ final class WalkSessionTracker: ObservableObject {
         lastTrackedLocation = nil
         startsNewSegment = true
         trackingNotice = "Previous walk recovered. Tap Resume when ready. Time while the app was closed is not counted."
-        lastMovementAt = nil
-        pausedAt = nil
+        // Recovery is another segment boundary, not a reset of the inactivity
+        // window. Reconstruct accepted movement without bridging saved segments.
+        lastMovementAt = draft.routeSegments.first?.first?.timestamp ?? draft.startedAt
+        savedSegments: for segment in draft.routeSegments {
+            if let first = segment.first, let lastMovementAt,
+               first.timestamp.timeIntervalSince(lastMovementAt) >= 300 { break }
+            for (previous, point) in zip(segment, segment.dropFirst()) {
+                if let lastMovementAt,
+                   point.timestamp.timeIntervalSince(lastMovementAt) >= 300 { break savedSegments }
+                let seconds = point.timestamp.timeIntervalSince(previous.timestamp)
+                let distance = CLLocation(latitude: point.latitude, longitude: point.longitude)
+                    .distance(from: CLLocation(latitude: previous.latitude, longitude: previous.longitude))
+                if seconds > 0, seconds <= Self.maximumRouteGap,
+                   distance >= 1, distance / seconds <= 3 {
+                    lastMovementAt = point.timestamp
+                }
+            }
+        }
+        pausedAt = draft.checkpointAt
         status = .paused
         onChange?()
         return true
     }
 
     private func recordLocation(_ location: CLLocation) -> Bool {
+        guard status == .walking, isNewRouteTimestamp(location.timestamp) else { return false }
         if enforcesRewardLimits && pointCount >= 5000 { return false }
+        // Use sample time here so a delayed batch can first establish movement
+        // before the cutoff. A later sample must never revive an expired walk.
+        checkInactivity(at: location.timestamp)
+        guard status == .walking else { return false }
         if enforcesRewardLimits && !Self.canUse(location) {
             lastTrackedLocation = nil
             startsNewSegment = true
             return false
         }
-        guard status == .walking, Self.canUse(location), isNewRouteTimestamp(location.timestamp) else { return false }
+        guard Self.canUse(location) else { return false }
 
         if let previous = lastTrackedLocation,
            location.timestamp.timeIntervalSince(previous.timestamp) > Self.maximumRouteGap {

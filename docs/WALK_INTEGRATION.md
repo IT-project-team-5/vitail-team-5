@@ -20,6 +20,10 @@ WalkSessionCoordinator; the older main WalkView/WalkRecorder are not mounted.
   transport errors leave it pending. A receipt does not delete the local route.
 - Receipt metadata uses the existing account/backend-scoped history store.
   Storage failures stay visible; failed writes do not erase the old archive.
+- Finishing during an upload queues another reconciliation pass. Explicit logout
+  waits for that pass before clearing credentials; changing tabs does not cancel
+  a durable upload. Account shutdown cancels synchronization and ignores late
+  responses. Terminal 400/409 errors remain recorded even without server text.
 - No background network worker is added. Finished records may wait offline on
   this device; server submission must still be within 12 hours of starting.
   Rejected or expired walks keep their route but do not earn points.
@@ -38,8 +42,10 @@ WalkSessionCoordinator; the older main WalkView/WalkRecorder are not mounted.
   inactivity on a timer, new batches and foreground/Resume; a manual pause of
   five minutes also ends the session on the next opportunity to run. iOS may
   suspend timers, so exact background stop timing is not promised.
-- Active drafts recovered after termination remain Paused until user action.
-  Missing movement cannot be recovered. Long gaps can make the remaining
+- Active drafts recovered after termination restore as Paused and retain their
+  original inactivity window. Expired drafts finish on the next inactivity
+  check; Resume does not restart that window. Missing movement cannot be
+  recovered. Long gaps can make the remaining
   route ineligible under server inactivity/12-hour rules; local route survives.
 - Explicit logout ends/saves the current walk and attempts upload before
   credentials clear. Authentication expiry instead stops capture and leaves
@@ -53,10 +59,14 @@ Run the complete iOS suite and `DATABASE_ENGINE=sqlite python manage.py test`
 in an isolated environment. SQLite skips the MySQL-only concurrency checks;
 run those separately against a disposable MySQL test database, not shared data.
 
-Local verification on 2026-09-15: iOS Simulator 158 tests (157 passed, one
-file-protection check skipped); isolated SQLite backend 96 tests (92 passed,
-four database-lock checks skipped). No failures. Migration dry-run reports no
-new changes; the integration adds no migration beyond main's existing ones.
+Local verification on 2026-09-16, integrated with main's registration fixes:
+iPhone 17 Pro / iOS 26.2 Simulator 169 tests (168 passed, one device-only
+file-protection check skipped); isolated SQLite backend 100 tests (95 passed,
+five MySQL-only checks skipped); disposable MySQL 9.3 backend 100 tests passed
+with no skips. Release device build with signing disabled also passed. There
+were no failures. System checks and migration dry-run report no changes; the
+integration adds no migration beyond main's existing ones. Temporary test
+database removal was verified without modifying existing database data.
 
 Integrated regression coverage includes pause boundaries, invalid segment
 indices, unchanged legacy request fingerprints, retry reconciliation after a

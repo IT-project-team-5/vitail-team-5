@@ -474,6 +474,101 @@ final class WalkDogSelectionTests: XCTestCase {
         XCTAssertEqual(tracker.participatingDogs, [luna])
     }
 
+    func testDelayedMovementCannotReviveAWalkAfterFiveMinutesOfInactivity() {
+        let start = referenceDate
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
+        tracker.enforcesRewardLimits = true
+        tracker.start(from: routeLocation(0, at: start), dogs: [dog(id: 1, name: "Milo")])
+
+        referenceDate = start.addingTimeInterval(320)
+        tracker.recordBatch([
+            routeLocation(10, at: start.addingTimeInterval(301)),
+            routeLocation(20, at: start.addingTimeInterval(311))
+        ])
+
+        XCTAssertEqual(tracker.status, .finished)
+        XCTAssertEqual(tracker.distanceMetres, 0)
+        XCTAssertEqual(tracker.completedWalk?.routeSegments.map(\.count), [1])
+        XCTAssertNotNil(tracker.trackingNotice)
+    }
+
+    func testDelayedBatchPreservesContinuousMovementBeforeCheckingCurrentTime() {
+        let start = referenceDate
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
+        tracker.enforcesRewardLimits = true
+        tracker.start(from: routeLocation(0, at: start), dogs: [dog(id: 1, name: "Milo")])
+
+        referenceDate = start.addingTimeInterval(320)
+        tracker.recordBatch(stride(from: 50, through: 300, by: 50).map { seconds in
+            routeLocation(Double(seconds), at: start.addingTimeInterval(Double(seconds)))
+        })
+
+        XCTAssertEqual(tracker.status, .walking)
+        XCTAssertEqual(tracker.distanceMetres, 300, accuracy: 0.2)
+        XCTAssertEqual(tracker.routeSegments.map(\.count), [7])
+    }
+
+    func testPauseDoesNotResetTheExistingInactivityWindow() {
+        let start = referenceDate
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
+        tracker.enforcesRewardLimits = true
+        tracker.start(from: routeLocation(0, at: start), dogs: [dog(id: 1, name: "Milo")])
+        referenceDate = start.addingTimeInterval(250)
+        tracker.pause()
+
+        referenceDate = start.addingTimeInterval(301)
+        tracker.resume(from: routeLocation(10, at: referenceDate))
+
+        XCTAssertEqual(tracker.status, .finished)
+        XCTAssertEqual(tracker.distanceMetres, 0)
+    }
+
+    func testRecoveredStationaryDraftKeepsItsInactivityWindow() throws {
+        let start = referenceDate
+        let original = WalkSessionTracker(now: { self.referenceDate })
+        original.enforcesRewardLimits = true
+        original.start(from: routeLocation(0, at: start), dogs: [dog(id: 1, name: "Milo")])
+        referenceDate = start.addingTimeInterval(250)
+        original.recordBatch([routeLocation(0, at: referenceDate)])
+        let draft = try XCTUnwrap(original.makeDraft())
+
+        referenceDate = start.addingTimeInterval(301)
+        let restored = WalkSessionTracker(now: { self.referenceDate })
+        restored.enforcesRewardLimits = true
+        XCTAssertTrue(restored.restore(draft))
+        XCTAssertEqual(restored.status, .paused)
+        restored.resume(from: routeLocation(10, at: referenceDate))
+
+        XCTAssertEqual(restored.status, .finished)
+        XCTAssertEqual(restored.completedWalk?.id, draft.id)
+        XCTAssertEqual(restored.distanceMetres, 0)
+    }
+
+    func testOldWeakFixDoesNotSplitTheCurrentAccurateRoute() {
+        let start = referenceDate
+        let tracker = WalkSessionTracker(now: { self.referenceDate })
+        tracker.enforcesRewardLimits = true
+        tracker.start(from: routeLocation(0, at: start), dogs: [dog(id: 1, name: "Milo")])
+        referenceDate = start.addingTimeInterval(10)
+        tracker.recordBatch([routeLocation(10, at: referenceDate)])
+        referenceDate = start.addingTimeInterval(20)
+        tracker.recordBatch([
+            routeLocation(0, at: start.addingTimeInterval(5), accuracy: 100),
+            routeLocation(20, at: referenceDate)
+        ])
+
+        XCTAssertEqual(tracker.status, .walking)
+        XCTAssertEqual(tracker.distanceMetres, 20, accuracy: 0.2)
+        XCTAssertEqual(tracker.routeSegments.map(\.count), [3])
+    }
+
+    private func routeLocation(_ metres: Double, at date: Date, accuracy: Double = 5) -> CLLocation {
+        CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 0, longitude: metres / 111_319.5),
+            altitude: 0, horizontalAccuracy: accuracy, verticalAccuracy: 5, timestamp: date
+        )
+    }
+
     private func dog(id: Int, name: String) -> Dog {
         Dog(
             id: id,
