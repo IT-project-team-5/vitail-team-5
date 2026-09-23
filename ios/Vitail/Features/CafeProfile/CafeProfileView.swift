@@ -27,6 +27,7 @@ struct CafeProfileView: View {
                                 .lineLimit(2...4)
                         }
                         .disabled(model.isSaving)
+                        .listRowBackground(AppColors.surface)
 
                         Section {
                             if let message = model.validationMessage {
@@ -44,6 +45,7 @@ struct CafeProfileView: View {
                         } footer: {
                             Text("Manage your menu and point prices in Products.")
                         }
+                        .listRowBackground(AppColors.surface)
                     }
 
                     if let message = model.errorMessage {
@@ -53,16 +55,20 @@ struct CafeProfileView: View {
                                 Button("Try Again") { Task { await model.load() } }
                             }
                         }
+                        .listRowBackground(AppColors.surface)
                     }
                     if let message = model.successMessage {
-                        Section { Text(message).foregroundStyle(AppColors.brand) }
+                        Section { Text(message).foregroundStyle(AppColors.success) }
+                            .listRowBackground(AppColors.surface)
                     }
                     Section {
                         Button("Log Out", role: .destructive) {
                             Task { await session.logout() }
                         }
+                        .foregroundStyle(AppColors.error)
                         .disabled(model.isSaving)
                     }
+                    .listRowBackground(AppColors.surface)
                 }
                 .scrollContentBackground(.hidden)
             }

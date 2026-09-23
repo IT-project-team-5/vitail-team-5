@@ -3,6 +3,7 @@ import SwiftUI
 struct AuthView: View {
     @ObservedObject var session: SessionStore
     @StateObject private var viewModel = AuthViewModel()
+    @ScaledMetric(relativeTo: .body) private var accountIconWidth = 24.0
     #if DEBUG
     @State private var debugBackendURL = AppConfiguration.debugAPIBaseURLText
     @State private var debugBackendMessage: String?
@@ -106,15 +107,17 @@ struct AuthView: View {
         } label: {
             HStack(spacing: AppSpacing.medium) {
                 Image(systemName: accountType == .dogOwner ? "dog.fill" : "cup.and.saucer.fill")
-                    .frame(width: 24)
+                    .frame(width: accountIconWidth)
                 Text(accountType.rawValue)
                     .fontWeight(.semibold)
-                Spacer()
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
             }
             .foregroundStyle(isSelected ? AppColors.brandForeground : AppColors.primaryText)
             .padding(.horizontal, AppSpacing.medium)
-            .frame(height: 52)
+            .padding(.vertical, AppSpacing.small)
+            .frame(minHeight: 52)
             .background(isSelected ? AppColors.brand : AppColors.surface)
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
         }
@@ -124,9 +127,7 @@ struct AuthView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
-            Image(systemName: "pawprint.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(AppColors.brand)
+            VitailBrandMark()
             Text("Vitail")
                 .font(.largeTitle.bold())
             Text("Walk more. Earn local rewards.")
@@ -159,6 +160,7 @@ struct AuthView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppColors.brand)
+                .foregroundStyle(AppColors.brandForeground)
 
                 Button("Reset") {
                     AppConfiguration.resetDebugAPIBaseURL()
