@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase, skipUnlessDBFeature
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -197,14 +198,66 @@ class ConnectedRedemptionFlowTests(APITestCase):
         self.assertEqual(removed.data["upserts"], [])
         self.assertEqual(removed.data["removed_ids"], [])
 
+    def test_order_dog_avatars_preserve_legacy_urls_and_prefer_absolute_upload_urls(self):
+        self.create_order()
+        breed = Breed.objects.create(name="Order avatar breed", energy_level="LOW", default_size="SMALL")
+        dogs = [
+            Dog.objects.create(owner=self.owner, breed=breed, name=name, age_months=12,
+                               size="SMALL", is_brachycephalic=False, photo=photo,
+                               uploaded_photo=uploaded)
+            for name, photo, uploaded in (
+                ("Legacy", "https://images.example.com/legacy.jpg", ""),
+                ("Uploaded", "https://images.example.com/old.jpg", "avatars/dogs/current.jpg"),
+                ("No photo", None, ""),
+            )
+        ]
+        query = {"include_owner_dogs": "true"}
+        feed = self.cafe_client.get(self.feed_url, query, HTTP_HOST="testserver:8123")
+        self.assertEqual(feed.status_code, 200)
+        self.assertEqual(feed.data["upserts"][0]["owner_dogs"], [
+            {"id": dogs[0].pk, "name": "Legacy", "photo": "https://images.example.com/legacy.jpg"},
+            {"id": dogs[1].pk, "name": "Uploaded", "photo": "http://testserver:8123/media/avatars/dogs/current.jpg"},
+            {"id": dogs[2].pk, "name": "No photo", "photo": None},
+        ])
+        query["since"] = feed.data["cursor"]
+        dogs[1].uploaded_photo = "avatars/dogs/replaced.jpg"
+        dogs[1].save(update_fields=["uploaded_photo"])
+        refreshed = self.cafe_client.get(self.feed_url, query, HTTP_HOST="testserver:8123")
+        self.assertTrue(refreshed.data["reset"])
+        self.assertEqual(refreshed.data["cursor"], feed.data["cursor"])
+        self.assertEqual(refreshed.data["upserts"][0]["owner_dogs"][1]["photo"], "http://testserver:8123/media/avatars/dogs/replaced.jpg")
+        self.assertEqual(refreshed.data["upserts"][0]["owner_dog_names"], ["Legacy", "Uploaded", "No photo"])
+
+    def test_more_dog_avatars_do_not_add_database_queries(self):
+        self.create_order()
+        breed = Breed.objects.create(name="Order avatar queries", energy_level="LOW", default_size="SMALL")
+        def add_dog(name):
+            return Dog.objects.create(owner=self.owner, breed=breed, name=name, age_months=12,
+                                      size="SMALL", is_brachycephalic=False,
+                                      uploaded_photo=f"avatars/dogs/{name}.jpg")
+        add_dog("Coco")
+        query = {"include_owner_dogs": "true"}
+        with CaptureQueriesContext(connection) as single_dog_queries:
+            first = self.cafe_client.get(self.feed_url, query)
+        for name in ("Milo", "Luna", "Max"):
+            add_dog(name)
+        with CaptureQueriesContext(connection) as multiple_dog_queries:
+            second = self.cafe_client.get(self.feed_url, query)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(len(second.data["upserts"][0]["owner_dogs"]), 4)
+        self.assertEqual(len(multiple_dog_queries), len(single_dog_queries))
+
     def test_order_dog_names_are_scoped_to_the_customer_and_order_time_cafe(self):
         self.create_order()
         breed = Breed.objects.create(name="Private order breed", energy_level="LOW", default_size="SMALL")
         for owner, name in ((self.owner, "Customer Dog"), (self.other_owner, "Unrelated Dog")):
-            Dog.objects.create(owner=owner, breed=breed, name=name, age_months=12, size="SMALL", is_brachycephalic=False)
+            Dog.objects.create(owner=owner, breed=breed, name=name, age_months=12, size="SMALL", is_brachycephalic=False, photo=f"https://images.example.com/{owner.pk}.jpg")
         feed = self.cafe_client.get(self.feed_url, {"include_owner_dogs": "true"})
         self.assertEqual(feed.data["upserts"][0]["owner_dog_names"], ["Customer Dog"])
         self.assertNotIn("Unrelated Dog", str(feed.data))
+        self.assertNotIn(f"https://images.example.com/{self.other_owner.pk}.jpg", str(feed.data))
+        self.assertEqual(set(feed.data["upserts"][0]["owner_dogs"][0]), {"id", "name", "photo"})
         # Changing catalogue ownership must not expose existing customer orders
         # or dogs to a different café.
         self.reward.cafe_user = self.other_cafe

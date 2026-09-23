@@ -1,3 +1,5 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Vitail
 
@@ -13,6 +15,10 @@ final class CafeOrdersTests: XCTestCase {
               "reference_number": "RDM-ABC123",
               "owner_name": "Taylor",
               "owner_dog_names": ["Coco", "Milo"],
+              "owner_dogs": [
+                {"id": 7, "name": "Coco", "photo": "https://shared.example/media/avatars/dogs/coco.jpg"},
+                {"id": 8, "name": "Milo", "photo": null}
+              ],
               "status": "PENDING",
               "expires_at": "2026-09-07T14:00:00Z",
               "items": [
@@ -36,6 +42,9 @@ final class CafeOrdersTests: XCTestCase {
         XCTAssertEqual(feed.orders.first?.items.count, 2)
         XCTAssertEqual(feed.orders.first?.items.first?.quantity, 2)
         XCTAssertEqual(feed.orders.first?.ownerDogNames, ["Coco", "Milo"])
+        XCTAssertEqual(feed.orders.first?.ownerDogs.map(\.id), [7, 8])
+        XCTAssertEqual(feed.orders.first?.ownerDogs.first?.photo, "https://shared.example/media/avatars/dogs/coco.jpg")
+        XCTAssertNil(feed.orders.first?.ownerDogs.last?.photo)
         XCTAssertEqual(feed.orders.first?.itemTitle, "2 × Flat white · Puppuccino")
         XCTAssertEqual(feed.orders.first?.customerSummary, "Taylor · Dogs: Coco, Milo")
         XCTAssertEqual(feed.orders.first?.statusLabel, "Awaiting collection")
@@ -49,10 +58,55 @@ final class CafeOrdersTests: XCTestCase {
         """#.data(using: .utf8)!
         let order = try JSONDecoder().decode(CafeOrder.self, from: data)
         XCTAssertEqual(order.ownerDogNames, [])
+        XCTAssertEqual(order.ownerDogs, [])
         XCTAssertEqual(order.itemTitle, "Coffee")
         XCTAssertEqual(order.customerSummary, "Taylor")
         XCTAssertEqual(order.status, "PENDING")
         XCTAssertNil(order.expiresAt)
+    }
+
+    func testNameOnlyDogResponseUsesDistinctAvatarPlaceholders() throws {
+        let data = #"""
+        {"id":1,"reference_number":"RDM-1","owner_name":"Taylor",
+         "owner_dog_names":["Coco","Coco"],
+         "items":[{"name":"Coffee","quantity":1}],"ordered_at":"2026-09-07T03:15:12Z"}
+        """#.data(using: .utf8)!
+        let order = try JSONDecoder().decode(CafeOrder.self, from: data)
+        XCTAssertEqual(order.ownerDogs.map(\.name), ["Coco", "Coco"])
+        XCTAssertEqual(Set(order.ownerDogs.map(\.id)).count, 2)
+        XCTAssertTrue(order.ownerDogs.allSatisfy { $0.photo == nil })
+    }
+
+    @MainActor
+    func testDogAvatarCardsRenderWithMultipleDogsAndLargeText() throws {
+        let dogs = ["Coco", "Milo", "Luna", "Max", "Maple", "Poppy", "Pepper", "Teddy"].enumerated().map { index, name in
+            CafeOrderDog(id: index + 1, name: name, photo: nil)
+        }
+        let order = CafeOrder(
+            id: 1, referenceNumber: "RDM-AVATARS", ownerName: "Taylor Morgan",
+            items: [CafeOrderItem(name: "Flat white", quantity: 2)],
+            orderedAt: Date(timeIntervalSince1970: 1_800_000_000), ownerDogs: dogs
+        )
+        for (name, size, scheme) in [
+            ("Cafe order dog avatars", DynamicTypeSize.large, ColorScheme.light),
+            ("Cafe order dog avatars large text", DynamicTypeSize.accessibility2, ColorScheme.dark)
+        ] {
+            let card = CafeOrderCardView(order: order)
+                .padding(16)
+                .frame(width: 393)
+                .background(AppColors.background)
+                .environment(\.dynamicTypeSize, size)
+                .environment(\.colorScheme, scheme)
+            let renderer = ImageRenderer(content: card)
+            renderer.scale = 2
+            let image = try XCTUnwrap(renderer.uiImage)
+            XCTAssertGreaterThan(image.size.height, 100)
+            XCTAssertLessThan(image.size.height, 1_000)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     @MainActor
@@ -61,7 +115,8 @@ final class CafeOrdersTests: XCTestCase {
         let updated = CafeOrder(
             id: initial.id, referenceNumber: initial.referenceNumber,
             ownerName: initial.ownerName, items: initial.items,
-            orderedAt: initial.orderedAt, ownerDogNames: ["Coco"]
+            orderedAt: initial.orderedAt,
+            ownerDogs: [CafeOrderDog(id: 7, name: "Coco", photo: "https://shared.example/coco.jpg")]
         )
         let service = CafeOrdersServiceStub(responses: [
             .result(.updated(CafeOrdersFeed(cursor: 1, orders: [initial], removedOrderIDs: [], reset: true))),
@@ -72,6 +127,7 @@ final class CafeOrdersTests: XCTestCase {
         await model.refresh()
         await model.refresh()
         XCTAssertEqual(model.orders.first?.ownerDogNames, ["Coco"])
+        XCTAssertEqual(model.orders.first?.ownerDogs.first?.photo, "https://shared.example/coco.jpg")
         await model.refresh()
         XCTAssertTrue(model.orders.isEmpty)
     }

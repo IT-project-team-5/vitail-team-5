@@ -163,7 +163,7 @@ class CafeOrderFeedView(APIView):
                 orders = Redemption.objects.filter(
                     cafe_user=request.user, feed_cursor__lte=state.cursor
                 ).select_related("owner_user").prefetch_related(Prefetch(
-                    "owner_user__dogs", queryset=Dog.objects.only("id", "owner_id", "name", "created_at")
+                    "owner_user__dogs", queryset=Dog.objects.only("id", "owner_id", "name", "created_at", "photo", "uploaded_photo")
                 ))
                 if reset:
                     orders = orders.filter(status=Redemption.Status.PENDING, expires_at__gt=now)
@@ -175,7 +175,7 @@ class CafeOrderFeedView(APIView):
                     row.id for row in rows if row.status != Redemption.Status.PENDING or row.expires_at <= now
                 )
                 response = Response({
-                    "cursor": state.cursor, "upserts": CafeOrderSerializer(pending, many=True).data,
+                    "cursor": state.cursor, "upserts": CafeOrderSerializer(pending, many=True, context={"request": request}).data,
                     "removed_ids": removed_ids, "reset": reset,
                 })
             response[CURSOR_HEADER] = str(state.cursor)

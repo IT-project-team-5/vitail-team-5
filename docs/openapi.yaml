@@ -411,10 +411,10 @@ paths:
         returns changed upserts/removals; unchanged returns 304 with no body.
         Due orders expire/refund before polling. Empty catalogues return an
         empty feed. Cafés cannot modify orders through this endpoint.
-        owner_dog_names contains current customer-profile names, not dogs tied to
+        owner_dog_names and owner_dogs contain current customer-profile dogs, not dogs tied to
         this order or a walk. Clients displaying those names should request
         include_owner_dogs=true: every poll then returns a reset snapshot so
-        profile edits are visible even when the order cursor has not changed.
+        profile name/photo edits are visible even when the order cursor has not changed.
       parameters:
         - name: since
           in: query
@@ -737,11 +737,21 @@ components:
         maps_link: {type: string, format: uri, readOnly: true, description: Saved link or automatic name/address search}
     CafeOrder:
       type: object
-      required: [id, reference_number, owner_name, owner_dog_names, items, ordered_at, status, expires_at]
+      required: [id, reference_number, owner_name, owner_dog_names, owner_dogs, items, ordered_at, status, expires_at]
       properties:
         id: {type: integer}
         reference_number: {type: string}
         owner_name: {type: string, description: Order-time customer name snapshot}
+        owner_dogs:
+          type: array
+          description: Current profile dogs belonging to this order's customer; upload photos take precedence over legacy external URLs. Only id, name and photo are exposed.
+          items:
+            type: object
+            required: [id, name, photo]
+            properties:
+              id: {type: integer}
+              name: {type: string}
+              photo: {type: string, nullable: true, description: Absolute uploaded-photo URL or legacy external URL; null or blank when unset}
         owner_dog_names:
           type: array
           items: {type: string}

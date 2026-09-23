@@ -100,8 +100,6 @@ struct CafeOrdersView: View {
 
     private var loadedOrdersPage: some View {
         VStack(spacing: 0) {
-            ordersHeader
-
             if let errorMessage = ordersViewModel.errorMessage {
                 refreshErrorBanner(errorMessage)
             }
@@ -124,7 +122,7 @@ struct CafeOrdersView: View {
                                     viewModel: ordersViewModel
                                 )
                             } label: {
-                                orderCard(order)
+                                CafeOrderCardView(order: order)
                             }
                             .buttonStyle(.plain)
                         }
@@ -135,31 +133,6 @@ struct CafeOrdersView: View {
             .refreshable {
                 await ordersViewModel.refresh()
             }
-        }
-    }
-
-    private var ordersHeader: some View {
-        HStack(alignment: .center, spacing: AppSpacing.small) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName)
-                    .font(.headline)
-            }
-
-            Spacer()
-
-            if let lastUpdatedAt = ordersViewModel.lastUpdatedAt {
-                Text(lastUpdatedAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(AppColors.secondaryText)
-                    .accessibilityLabel("Last updated")
-                    .accessibilityValue(lastUpdatedAt.formatted(date: .omitted, time: .shortened))
-            }
-        }
-        .padding(.horizontal, AppSpacing.medium)
-        .padding(.vertical, AppSpacing.small)
-        .background(AppColors.surface)
-        .overlay(alignment: .bottom) {
-            Divider()
         }
     }
 
@@ -200,36 +173,6 @@ struct CafeOrdersView: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func orderCard(_ order: CafeOrder) -> some View {
-        HStack(spacing: AppSpacing.medium) {
-            VStack(alignment: .leading, spacing: AppSpacing.small) {
-                Text(order.itemTitle)
-                    .font(.headline)
-                    .foregroundStyle(AppColors.primaryText)
-                Text(order.customerSummary)
-                    .font(.subheadline)
-                    .foregroundStyle(AppColors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(AppColors.secondaryText)
-                .accessibilityHidden(true)
-        }
-        .padding(AppSpacing.medium)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
-        .overlay {
-            RoundedRectangle(cornerRadius: AppRadius.card)
-                .stroke(AppColors.border, lineWidth: 1)
-        }
-        .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("View order details")
-    }
-
     private var bottomNavigation: some View {
         HStack {
             ForEach(Page.allCases) { page in
@@ -258,6 +201,54 @@ struct CafeOrdersView: View {
     }
 }
 
+struct CafeOrderCardView: View {
+    let order: CafeOrder
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            HStack(spacing: AppSpacing.medium) {
+                VStack(alignment: .leading, spacing: AppSpacing.small) {
+                    Text(order.itemTitle)
+                        .font(.headline)
+                        .foregroundStyle(AppColors.primaryText)
+                    Text(order.customerSummary)
+                        .font(.subheadline)
+                        .foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppColors.secondaryText)
+                    .accessibilityHidden(true)
+            }
+            if !order.ownerDogs.isEmpty {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 44, maximum: 52), spacing: AppSpacing.small)],
+                    alignment: .leading,
+                    spacing: AppSpacing.small
+                ) {
+                    ForEach(order.ownerDogs) { dog in
+                        AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+        }
+        .padding(AppSpacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.card)
+                .stroke(AppColors.border, lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("View order details")
+    }
+}
+
 private struct CafeOrderDetailView: View {
     let orderID: Int
     let initialOrder: CafeOrder
@@ -283,8 +274,16 @@ private struct CafeOrderDetailView: View {
                         Text("Customer’s dogs")
                             .font(.caption)
                             .foregroundStyle(AppColors.secondaryText)
-                        Text(order.ownerDogNames.joined(separator: ", "))
-                            .font(.subheadline)
+                        ForEach(order.ownerDogs) { dog in
+                            HStack(spacing: AppSpacing.medium) {
+                                AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 52)
+                                    .accessibilityHidden(true)
+                                Text(dog.name)
+                                    .font(.subheadline)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
                     }
                 }
 

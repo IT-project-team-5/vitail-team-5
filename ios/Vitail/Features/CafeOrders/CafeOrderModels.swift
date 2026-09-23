@@ -5,6 +5,12 @@ struct CafeOrderItem: Decodable, Equatable, Sendable {
     let quantity: Int
 }
 
+struct CafeOrderDog: Decodable, Equatable, Identifiable, Sendable {
+    let id: Int
+    let name: String
+    let photo: String?
+}
+
 struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
     let id: Int
     let referenceNumber: String
@@ -12,6 +18,7 @@ struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
     let items: [CafeOrderItem]
     let orderedAt: Date
     let ownerDogNames: [String]
+    let ownerDogs: [CafeOrderDog]
     let status: String
     let expiresAt: Date?
 
@@ -22,6 +29,7 @@ struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
         case items
         case orderedAt = "ordered_at"
         case ownerDogNames = "owner_dog_names"
+        case ownerDogs = "owner_dogs"
         case status
         case expiresAt = "expires_at"
     }
@@ -33,6 +41,7 @@ struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
         items: [CafeOrderItem],
         orderedAt: Date,
         ownerDogNames: [String] = [],
+        ownerDogs: [CafeOrderDog]? = nil,
         status: String = "PENDING",
         expiresAt: Date? = nil
     ) {
@@ -41,7 +50,8 @@ struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
         self.ownerName = ownerName
         self.items = items
         self.orderedAt = orderedAt
-        self.ownerDogNames = ownerDogNames
+        self.ownerDogs = ownerDogs ?? Self.placeholderDogs(names: ownerDogNames)
+        self.ownerDogNames = self.ownerDogs.map(\.name)
         self.status = status
         self.expiresAt = expiresAt
     }
@@ -52,7 +62,10 @@ struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
         referenceNumber = try container.decode(String.self, forKey: .referenceNumber)
         ownerName = try container.decode(String.self, forKey: .ownerName)
         items = try container.decode([CafeOrderItem].self, forKey: .items)
-        ownerDogNames = try container.decodeIfPresent([String].self, forKey: .ownerDogNames) ?? []
+        let names = try container.decodeIfPresent([String].self, forKey: .ownerDogNames) ?? []
+        ownerDogs = try container.decodeIfPresent([CafeOrderDog].self, forKey: .ownerDogs)
+            ?? Self.placeholderDogs(names: names)
+        ownerDogNames = ownerDogs.map(\.name)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "PENDING"
         if let value = try container.decodeIfPresent(String.self, forKey: .expiresAt) {
             guard let date = Self.parseISO8601(value) else {
@@ -96,6 +109,14 @@ struct CafeOrder: Decodable, Equatable, Identifiable, Sendable {
         case "EXPIRED": return "Expired"
         case "CANCELLED": return "Cancelled"
         default: return status.capitalized
+        }
+    }
+
+    private static func placeholderDogs(names: [String]) -> [CafeOrderDog] {
+        // Older servers supplied names only. Negative IDs are local view keys,
+        // never server dog identifiers and never submitted to an API.
+        names.enumerated().map { index, name in
+            CafeOrderDog(id: -(index + 1), name: name, photo: nil)
         }
     }
 
