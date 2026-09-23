@@ -32,6 +32,31 @@ final class RedemptionTests: XCTestCase {
         XCTAssertEqual(CoffeeEstimate.text(for: 0), "≈ 0 cups of coffee")
     }
 
+    func testCollectionDeadlineUsesMelbourneMidnightAcrossDaylightSaving() throws {
+        let parser = ISO8601DateFormatter()
+        for (now, expected) in [
+            ("2026-09-23T14:30:00Z", "2026-09-24T14:00:00Z"),
+            ("2026-10-03T15:30:00Z", "2026-10-04T13:00:00Z"),
+            ("2026-04-04T14:30:00Z", "2026-04-05T14:00:00Z")
+        ] {
+            XCTAssertEqual(CollectionDeadline.nextDeadline(after: try XCTUnwrap(parser.date(from: now))),
+                           try XCTUnwrap(parser.date(from: expected)))
+        }
+    }
+
+    func testSuccessfulPurchasePresentsReceiptEvenWhenFollowupRefreshFails() async {
+        let model = RedemptionViewModel(service: RedemptionStub(failReloadAfterCreate: true))
+        await model.refresh()
+        await model.redeem(rewardID: 1)
+
+        XCTAssertEqual(model.purchasedReceipt?.referenceNumber, "VIT-TEST")
+        XCTAssertEqual(model.pendingRedemptions.count, 1)
+        XCTAssertNil(model.retryRewardID, "A confirmed order must not be purchased again after a refresh failure.")
+        XCTAssertNotNil(model.errorMessage)
+        model.acknowledgePurchasedReceipt()
+        XCTAssertNil(model.purchasedReceipt, "Returning to the menu must not reopen an old receipt.")
+    }
+
     func testCollectionRequiresCompleteEnabledSlideAndCannotConfirmTwice() {
         var slide = SlideConfirmationState()
         slide.offset = 100
@@ -56,6 +81,7 @@ final class RedemptionTests: XCTestCase {
         await model.redeem(rewardID: 1)
         XCTAssertEqual(model.retryRewardID, 1)
         XCTAssertNotNil(model.errorMessage)
+        XCTAssertNil(model.purchasedReceipt, "An uncertain purchase cannot show an unconfirmed receipt.")
         await model.redeem(rewardID: 1)
 
         let ids = await service.requestIDs
@@ -64,6 +90,7 @@ final class RedemptionTests: XCTestCase {
         XCTAssertNil(model.retryRewardID)
         XCTAssertEqual(model.balance, 50)
         XCTAssertEqual(model.pendingRedemptions.count, 1)
+        XCTAssertEqual(model.purchasedReceipt?.id, model.pendingRedemptions.first?.id)
     }
 
     func testUncertainPurchaseCanRetryEvenWhenItsCafeLeavesTheCatalogue() async {
@@ -135,11 +162,14 @@ private actor RedemptionStub: RedemptionServing {
     private let failFirstCreate: Bool
     private let expireOnCollect: Bool
     private let hidePurchasedReward: Bool
+    private let failReloadAfterCreate: Bool
 
-    init(failFirstCreate: Bool = false, expireOnCollect: Bool = false, hidePurchasedReward: Bool = false) {
+    init(failFirstCreate: Bool = false, expireOnCollect: Bool = false, hidePurchasedReward: Bool = false,
+         failReloadAfterCreate: Bool = false) {
         self.failFirstCreate = failFirstCreate
         self.expireOnCollect = expireOnCollect
         self.hidePurchasedReward = hidePurchasedReward
+        self.failReloadAfterCreate = failReloadAfterCreate
     }
 
     func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: balance) }
@@ -147,7 +177,10 @@ private actor RedemptionStub: RedemptionServing {
         if hidePurchasedReward && !orders.isEmpty { return [] }
         return [Reward(id: 1, name: "Coffee", description: "", pointCost: 10, cafeName: "Cafe")]
     }
-    func fetchRedemptions() async throws -> [Redemption] { orders }
+    func fetchRedemptions() async throws -> [Redemption] {
+        if failReloadAfterCreate && !orders.isEmpty { throw APIError.network("Refresh unavailable") }
+        return orders
+    }
 
     func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption {
         requestIDs.append(requestID)

@@ -3,7 +3,9 @@ import SwiftUI
 struct RedemptionView: View {
     @ObservedObject var viewModel: RedemptionViewModel
     @State private var selectedCafe: CafeRewardGroup?
+    @State private var isMenuPresented = false
     @State private var selectedOrder: Redemption?
+    @State private var receiptAfterMenu: Redemption?
 
     var body: some View {
         ScrollView {
@@ -40,7 +42,10 @@ struct RedemptionView: View {
                                                description: Text("Check back soon for local rewards."))
                     }
                     ForEach(viewModel.cafes) { cafe in
-                        Button { selectedCafe = cafe } label: {
+                        Button {
+                            isMenuPresented = true
+                            selectedCafe = cafe
+                        } label: {
                             VStack(alignment: .leading, spacing: 12) {
                                 CafeCoverPhoto(url: cafe.photo, name: cafe.name)
                                     .frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 16))
@@ -68,7 +73,24 @@ struct RedemptionView: View {
         .overlay {
             if viewModel.isLoading && viewModel.balance == nil { LoadingView(message: "Loading cafés…") }
         }
-        .sheet(item: $selectedCafe) { cafe in CafeMenuView(cafe: cafe, viewModel: viewModel) }
+        .onChange(of: viewModel.purchasedReceipt) { _, receipt in
+            guard let receipt else { return }
+            viewModel.acknowledgePurchasedReceipt()
+            if isMenuPresented {
+                // Wait for the menu to dismiss before presenting another sheet.
+                receiptAfterMenu = receipt
+                selectedCafe = nil
+            } else {
+                selectedOrder = receipt
+            }
+        }
+        .sheet(item: $selectedCafe, onDismiss: {
+            isMenuPresented = false
+            if let receipt = receiptAfterMenu {
+                receiptAfterMenu = nil
+                selectedOrder = receipt
+            }
+        }) { cafe in CafeMenuView(cafe: cafe, viewModel: viewModel) }
         .sheet(item: $selectedOrder) { order in RedemptionDetailView(order: order, viewModel: viewModel) }
     }
 
@@ -143,10 +165,6 @@ struct CafeMenuView: View {
                         }
                     }
                     .foregroundStyle(AppColors.secondaryText)
-                    if let notice = viewModel.purchaseNotice {
-                        Label(notice, systemImage: "checkmark.circle.fill")
-                            .font(.subheadline).foregroundStyle(AppColors.success)
-                    }
                     if let message = viewModel.errorMessage {
                         Text(message).font(.subheadline).foregroundStyle(AppColors.error)
                     }
@@ -178,16 +196,17 @@ struct CafeMenuView: View {
                 .padding(AppSpacing.large)
             }
             .background(AppColors.background)
-            .navigationTitle("Vitail").navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .confirmationDialog("Confirm purchase", isPresented: Binding(
+            .alert(selectedReward?.name ?? "Confirm purchase", isPresented: Binding(
                 get: { selectedReward != nil }, set: { if !$0 { selectedReward = nil } }
-            ), titleVisibility: .visible, presenting: selectedReward) { reward in
+            ), presenting: selectedReward) { reward in
                 Button("Purchase · \(reward.pointCost) pts") {
                     Task { await viewModel.redeem(rewardID: reward.id) }
                 }
+                Button("Cancel", role: .cancel) { selectedReward = nil }
             } message: { reward in
-                Text("\(reward.name) at \(reward.cafeName). Points are deducted now; collect before the end of today.")
+                Text("\(reward.cafeName)\n\(CollectionDeadline.purchaseText())")
             }
         }
         .vitailAppearance()
@@ -206,8 +225,8 @@ struct RedemptionDetailView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     AvatarView(url: current.cafePhoto, name: current.cafeNameSnapshot ?? "Café", systemImage: "storefront.fill", size: 80)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(current.cafeNameSnapshot ?? "Café").font(.title2.weight(.semibold))
-                        Text(current.rewardNameSnapshot).font(.title3)
+                        Text(current.rewardNameSnapshot).font(.title2.weight(.semibold))
+                        Text(current.cafeNameSnapshot ?? "Café").font(.subheadline)
                         Text("\(current.pointCostSnapshot) points").foregroundStyle(AppColors.secondaryText)
                     }
                     VStack(alignment: .leading, spacing: 10) {
@@ -228,7 +247,7 @@ struct RedemptionDetailView: View {
                         Text("Show this order to the café. Slide only after you receive your item.")
                             .font(.subheadline).foregroundStyle(AppColors.secondaryText)
                         if let expiry = current.expiresAt.flatMap(Self.date) {
-                            Text("Collect by \(expiry.formatted(date: .abbreviated, time: .shortened))")
+                            Text(CollectionDeadline.receiptText(expiry))
                                 .font(.caption).foregroundStyle(AppColors.secondaryText)
                         }
                         SlideToCollect(isLoading: viewModel.collectingRedemptionID == current.id,
@@ -244,7 +263,7 @@ struct RedemptionDetailView: View {
                 .padding(AppSpacing.large).frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(AppColors.background)
-            .navigationTitle("Your order").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Receipt").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { await viewModel.refresh() }
         }

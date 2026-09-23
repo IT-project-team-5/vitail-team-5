@@ -66,6 +66,33 @@ enum CoffeeEstimate {
     }
 }
 
+enum CollectionDeadline {
+    // The café pilot's collection window ends at Melbourne midnight. Use
+    // calendar days so daylight-saving changes do not move the displayed cutoff.
+    private static var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(identifier: "Australia/Melbourne")!
+        return value
+    }
+
+    static func nextDeadline(after now: Date) -> Date {
+        calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
+    }
+
+    static func purchaseText(now: Date = Date()) -> String {
+        receiptText(nextDeadline(after: now))
+    }
+
+    static func receiptText(_ deadline: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return "Collect before \(formatter.string(from: deadline)) (Melbourne)"
+    }
+}
+
 enum RedemptionStatus: String, Codable, Sendable {
     case pending = "PENDING"
     case collected = "COLLECTED"

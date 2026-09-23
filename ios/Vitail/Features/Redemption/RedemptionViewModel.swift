@@ -12,7 +12,7 @@ final class RedemptionViewModel: ObservableObject {
     @Published private(set) var retryRewardID: Int?
     @Published private(set) var retryReward: Reward?
     @Published var errorMessage: String?
-    @Published private(set) var purchaseNotice: String?
+    @Published private(set) var purchasedReceipt: Redemption?
 
     private let service: any RedemptionServing
     private var pendingRequestID: UUID?
@@ -61,17 +61,18 @@ final class RedemptionViewModel: ObservableObject {
         retryRewardID = rewardID
         redeemingRewardID = rewardID
         errorMessage = nil
-        purchaseNotice = nil
         defer { redeemingRewardID = nil }
         do {
             let order = try await service.createRedemption(rewardID: rewardID, requestID: requestID)
             try Task.checkCancellation()
             redemptions.removeAll { $0.id == order.id }
             redemptions.insert(order, at: 0)
-            purchaseNotice = "\(order.rewardNameSnapshot) ordered. Find it in Ready to collect."
             pendingRequestID = nil
             retryRewardID = nil
             retryReward = nil
+            // Open the server-confirmed receipt immediately, even if refreshing
+            // the balance or catalogue is slow or fails after a successful order.
+            purchasedReceipt = order
             // Always use the server balance; never subtract twice on an idempotent retry.
             try await reload()
         } catch {
@@ -84,6 +85,10 @@ final class RedemptionViewModel: ObservableObject {
             }
             errorMessage = error.localizedDescription
         }
+    }
+
+    func acknowledgePurchasedReceipt() {
+        purchasedReceipt = nil
     }
 
     func collect(redemptionID: Int) async {
