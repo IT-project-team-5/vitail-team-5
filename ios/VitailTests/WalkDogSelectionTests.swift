@@ -234,7 +234,7 @@ final class WalkDogSelectionTests: XCTestCase {
         model.toggleDog(id: 2)
 
         try await attachCardSnapshot(
-            name: "01 Ready - Start only",
+            name: "01 Ready - play symbol and slogan",
             selection: model,
             session: tracker,
             location: location(),
@@ -243,7 +243,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         model.selectAll()
         try await attachCardSnapshot(
-            name: "02 Compact phone - Start only",
+            name: "02 Compact phone - play symbol and slogan",
             selection: model,
             session: tracker,
             location: location(),
@@ -253,7 +253,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         tracker.start(from: location(), dogs: model.selectedDogs)
         try await attachCardSnapshot(
-            name: "03 Walking - Pause only",
+            name: "03 Walking - pause symbol and slogan",
             selection: model,
             session: tracker,
             location: location(),
@@ -262,7 +262,7 @@ final class WalkDogSelectionTests: XCTestCase {
 
         tracker.pause()
         try await attachCardSnapshot(
-            name: "04 Paused - Resume and Finish",
+            name: "04 Paused - resume symbol and explicit Finish",
             selection: model,
             session: tracker,
             location: location(),
@@ -276,7 +276,7 @@ final class WalkDogSelectionTests: XCTestCase {
         )
         await emptyModel.load()
         try await attachCardSnapshot(
-            name: "05 Empty dog list - Start remains available",
+            name: "05 Empty dog list - play symbol remains available",
             selection: emptyModel,
             session: emptyTracker,
             location: location(),
@@ -296,7 +296,7 @@ final class WalkDogSelectionTests: XCTestCase {
         narrowModel.toggleDog(id: 1)
         narrowModel.toggleDog(id: 2)
         try await attachCardSnapshot(
-            name: "06 Narrow - accessible large text controls",
+            name: "06 Narrow - accessible symbols and slogan",
             selection: narrowModel,
             session: narrowTracker,
             location: location(),
@@ -305,7 +305,7 @@ final class WalkDogSelectionTests: XCTestCase {
         )
     }
 
-    func testOnlyTheActionsForTheCurrentWalkStateAreVisible() {
+    func testSymbolControlsKeepTheActionsForTheCurrentWalkState() {
         XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .idle), ["Start"])
         XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .walking), ["Pause"])
         XCTAssertEqual(WalkDogSelectionCard.controlTitles(status: .paused), ["Resume", "Finish"])

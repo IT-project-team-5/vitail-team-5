@@ -10,6 +10,7 @@ struct WalkDogSelectionCard: View {
     let onManageDogs: () -> Void
     var onReviewFinish: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .title2) private var controlDiameter: CGFloat = 72
 
     init(
         selection: WalkDogSelectionViewModel,
@@ -50,51 +51,92 @@ struct WalkDogSelectionCard: View {
                         Spacer()
                         Text(Self.durationText(session.elapsedActiveDuration(at: timeline.date)))
                             .font(.title3).monospacedDigit()
-                            .accessibilityLabel("Active walking time")
+                            .accessibilityLabel("Active walking time, \(Self.durationText(session.elapsedActiveDuration(at: timeline.date)))")
                     }
                 }
             }
 
-            let layout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(spacing: AppSpacing.small))
-                : AnyLayout(HStackLayout(spacing: AppSpacing.small))
-            layout {
-                switch session.status {
-                case .idle, .finished:
-                    if canStartNewWalk {
-                        PrimaryButton(title: titles[0], isDisabled: !WalkSessionTracker.isFresh(location)) {
-                            guard canStartNewWalk, WalkSessionTracker.isFresh(location) else { return }
-                            selection.resetForNewWalk()
-                            session.start(from: location, dogs: [])
+            VStack(spacing: AppSpacing.medium) {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(spacing: AppSpacing.medium))
+                    : AnyLayout(HStackLayout(spacing: AppSpacing.large))
+                layout {
+                    switch session.status {
+                    case .idle, .finished:
+                        if canStartNewWalk {
+                            symbolControl(
+                                title: titles[0], systemImage: "play.fill",
+                                isDisabled: !WalkSessionTracker.isFresh(location)
+                            ) {
+                                guard canStartNewWalk, WalkSessionTracker.isFresh(location) else { return }
+                                selection.resetForNewWalk()
+                                session.start(from: location, dogs: [])
+                            }
+                        } else {
+                            PrimaryButton(title: titles[0], action: onReviewFinish)
                         }
-                    } else {
-                        PrimaryButton(title: titles[0], action: onReviewFinish)
+                    case .walking:
+                        symbolControl(title: titles[0], systemImage: "pause.fill") { session.pause() }
+                    case .paused:
+                        symbolControl(
+                            title: titles[0], systemImage: "play.fill",
+                            isDisabled: !WalkSessionTracker.isFresh(location)
+                        ) {
+                            guard WalkSessionTracker.isFresh(location) else { return }
+                            session.resume(from: location)
+                        }
+                        Button(titles[1]) { session.finish() }
+                            .font(.headline)
+                            .foregroundStyle(AppColors.brand)
+                            .padding(.horizontal, AppSpacing.large)
+                            .padding(.vertical, AppSpacing.medium)
+                            .frame(minWidth: 112, minHeight: 64)
+                            .background(AppColors.brand.opacity(0.10), in: Capsule())
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Finish walk")
+                            .accessibilityHint("Review your walk and choose the dogs who came along.")
                     }
-                case .walking:
-                    PrimaryButton(title: titles[0]) { session.pause() }
-                case .paused:
-                    PrimaryButton(title: titles[0], isDisabled: !WalkSessionTracker.isFresh(location)) {
-                        guard WalkSessionTracker.isFresh(location) else { return }
-                        session.resume(from: location)
-                    }
-                    Button(titles[1]) { session.finish() }
-                        .font(.headline)
-                        .foregroundStyle(AppColors.brand)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .background(AppColors.brand.opacity(0.10), in: RoundedRectangle(cornerRadius: AppRadius.field))
-                        .buttonStyle(.plain)
                 }
+                .frame(maxWidth: .infinity)
+
+                Text("Every walk, a little closer.")
+                    .font(.footnote)
+                    .foregroundStyle(AppColors.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
             }
+            .padding(.vertical, AppSpacing.medium)
             if canStartNewWalk && (session.canStart || session.status == .paused)
                 && !WalkSessionTracker.isFresh(location) {
                 Text("Finding an accurate location…")
                     .font(.caption).foregroundStyle(AppColors.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
         }
         .foregroundStyle(AppColors.primaryText)
         .tint(AppColors.brand)
         .padding(.horizontal, AppSpacing.medium)
-        .padding(.bottom, AppSpacing.medium)
+        .padding(.top, AppSpacing.small)
+        .padding(.bottom, AppSpacing.large)
+    }
+
+    private func symbolControl(
+        title: String, systemImage: String, isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(isDisabled ? AppColors.secondaryText : AppColors.brandForeground)
+                .frame(width: min(controlDiameter, 104), height: min(controlDiameter, 104))
+                .background(isDisabled ? AppColors.border.opacity(0.45) : AppColors.brand, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel("\(title) walk")
     }
 
     static func durationText(_ duration: TimeInterval) -> String {
