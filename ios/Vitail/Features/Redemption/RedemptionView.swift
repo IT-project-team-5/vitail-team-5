@@ -223,23 +223,40 @@ struct RedemptionDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    AvatarView(url: current.cafePhoto, name: current.cafeNameSnapshot ?? "Café", systemImage: "storefront.fill", size: 80)
+                    NavigationLink {
+                        ReceiptCafeDetailsView(order: current)
+                    } label: {
+                        CafeCoverPhoto(url: current.cafePhoto, name: current.cafeNameSnapshot ?? "Café")
+                            .frame(height: 220)
+                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                            .overlay(alignment: .bottomTrailing) {
+                                Label("Café details", systemImage: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.primaryText)
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(.regularMaterial, in: Capsule())
+                                    .padding(12)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View \(current.cafeNameSnapshot ?? "café") details")
                     VStack(alignment: .leading, spacing: 8) {
                         Text(current.rewardNameSnapshot).font(.title2.weight(.semibold))
-                        Text(current.cafeNameSnapshot ?? "Café").font(.subheadline)
-                        Text("\(current.pointCostSnapshot) points").foregroundStyle(AppColors.secondaryText)
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Order \(current.referenceNumber)").font(.subheadline.monospaced())
-                        if let address = current.cafeAddress, !address.isEmpty { Text(address).font(.subheadline) }
-                        if let hours = current.cafeOpeningHours, !hours.isEmpty {
-                            Label(hours, systemImage: "clock").font(.caption)
+                        NavigationLink {
+                            ReceiptCafeDetailsView(order: current)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(current.cafeNameSnapshot ?? "Café")
+                                Image(systemName: "chevron.right").font(.caption)
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(AppColors.secondaryText)
                         }
-                        if let url = mapsURL(current.cafeGoogleMapsURL) {
-                            Link(destination: url) { Label("Google Maps", systemImage: "arrow.up.right") }
-                        }
+                        .buttonStyle(.plain)
+                        Text("Order \(current.referenceNumber)")
+                            .font(.subheadline.monospaced())
+                            .foregroundStyle(AppColors.secondaryText)
                     }
-                    .foregroundStyle(AppColors.secondaryText)
                     if let message = viewModel.errorMessage {
                         Text(message).font(.subheadline).foregroundStyle(AppColors.error)
                     }
@@ -274,6 +291,49 @@ struct RedemptionDetailView: View {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+}
+
+/// Uses the receipt's own café fields so details remain available when its menu is no longer listed.
+struct ReceiptCafeDetailsView: View {
+    let order: Redemption
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                CafeCoverPhoto(url: order.cafePhoto, name: order.cafeNameSnapshot ?? "Café")
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                Text(order.cafeNameSnapshot ?? "Café")
+                    .font(.title2.weight(.semibold))
+                if let address = order.cafeAddress, !address.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Address").font(.caption).foregroundStyle(AppColors.secondaryText)
+                        Text(address).font(.subheadline)
+                    }
+                }
+                if let hours = order.cafeOpeningHours, !hours.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Opening hours").font(.caption).foregroundStyle(AppColors.secondaryText)
+                        Text(hours).font(.subheadline)
+                    }
+                }
+                if let url = mapsURL(order.cafeGoogleMapsURL) {
+                    Link(destination: url) { Label("Google Maps", systemImage: "arrow.up.right") }
+                        .font(.subheadline.weight(.medium))
+                }
+                if (order.cafeAddress ?? "").isEmpty && (order.cafeOpeningHours ?? "").isEmpty
+                    && mapsURL(order.cafeGoogleMapsURL) == nil {
+                    Text("Contact details are not available for this receipt.")
+                        .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                }
+            }
+            .padding(AppSpacing.large)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(AppColors.background)
+        .navigationTitle("Café details")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

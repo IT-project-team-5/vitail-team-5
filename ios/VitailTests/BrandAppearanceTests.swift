@@ -128,9 +128,20 @@ final class BrandAppearanceTests: XCTestCase {
                                name: "Clean-Cafe-Menu-\(mode)", dark: dark)
             try await snapshot(RedemptionDetailView(order: try XCTUnwrap(model.pendingRedemptions.first), viewModel: model),
                                name: "Clean-Order-\(mode)", dark: dark)
+            try await snapshot(NavigationStack {
+                ReceiptCafeDetailsView(order: model.pendingRedemptions[0])
+            }, name: "Receipt-Cafe-Details-\(mode)", dark: dark)
         }
         try await snapshot(RedemptionDetailView(order: try XCTUnwrap(model.pendingRedemptions.first), viewModel: model)
             .environment(\.dynamicTypeSize, .accessibility2), name: "Clean-Order-Large-Text", dark: false)
+        let historical = Redemption(id: 99, referenceNumber: "VIT-PAST", rewardNameSnapshot: "Long Black",
+                                    pointCostSnapshot: 60, status: .collected, cafeNameSnapshot: "Old Corner Café",
+                                    cafeID: 99, cafeAddress: "4 Corner Street, Melbourne")
+        XCTAssertFalse(model.cafes.contains { $0.id == "cafe-99" })
+        try await snapshot(RedemptionDetailView(order: historical, viewModel: model),
+                           name: "Receipt-Historical-Cafe-Not-Listed", dark: false)
+        try await snapshot(NavigationStack { ReceiptCafeDetailsView(order: historical) },
+                           name: "Receipt-Historical-Cafe-Details", dark: false)
     }
 
     func testExpandedLoginAndAppearanceSettingsSnapshots() async throws {
@@ -249,7 +260,8 @@ private actor BrandRedemptionFixture: RedemptionServing {
         [Redemption(id: 1, referenceNumber: "VIT-0123", rewardNameSnapshot: "Flat White", pointCostSnapshot: 60,
                     status: .pending, cafeNameSnapshot: "Riverside Paws Café", cafeID: 1,
                     cafeAddress: "12 River Walk, Southbank", cafeOpeningHours: "Mon–Fri 7 am–3 pm",
-                    cafeGoogleMapsURL: "https://www.google.com/maps/search/?api=1&query=Southbank")]
+                    cafeGoogleMapsURL: "https://www.google.com/maps/search/?api=1&query=Southbank",
+                    expiresAt: "2026-09-25T14:00:00Z")]
     }
     func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption { throw APIError.network("Read-only fixture") }
     func collectRedemption(id: Int) async throws -> Redemption { throw APIError.network("Read-only fixture") }

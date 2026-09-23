@@ -1,3 +1,5 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Vitail
 
@@ -60,16 +62,56 @@ final class RedemptionTests: XCTestCase {
     func testCollectionRequiresCompleteEnabledSlideAndCannotConfirmTwice() {
         var slide = SlideConfirmationState()
         slide.offset = 100
+        XCTAssertEqual(slide.progress(travel: 250), 0.4, accuracy: 0.001)
         XCTAssertFalse(slide.finish(travel: 250, isEnabled: true))
         XCTAssertEqual(slide.offset, 0)
+        XCTAssertEqual(slide.progress(travel: 250), 0)
         slide.offset = 250
         XCTAssertFalse(slide.finish(travel: 250, isEnabled: false))
         slide.offset = 250
         XCTAssertTrue(slide.finish(travel: 250, isEnabled: true))
+        XCTAssertEqual(slide.progress(travel: 250), 1)
         XCTAssertFalse(slide.finish(travel: 250, isEnabled: true))
+        XCTAssertEqual(slide.progress(travel: 250), 1, "Repeated gestures must not empty the fill while collection is pending.")
         slide.reset()
+        XCTAssertEqual(slide.progress(travel: 250), 0)
         slide.offset = 250
         XCTAssertTrue(slide.finish(travel: 250, isEnabled: true))
+    }
+
+    func testCollectionSlideFillSnapshots() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        for dark in [false, true] {
+            let page = VStack(spacing: 24) {
+                ForEach([0.0, 0.5, 1.0], id: \.self) { progress in
+                    CollectionSlideBackground(progress: progress, isLoading: progress == 1)
+                        .frame(height: 64)
+                }
+            }
+            .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .vitailAppearance().preferredColorScheme(dark ? .dark : .light)
+            let host = UIHostingController(rootView: page)
+            let window = UIWindow(windowScene: scene)
+            window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            defer {
+                window.isHidden = true
+                window.rootViewController = nil
+                previous?.makeKeyAndVisible()
+            }
+            host.view.frame = window.bounds
+            host.view.layoutIfNeeded()
+            try await Task.sleep(nanoseconds: 350_000_000)
+            let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                XCTAssertTrue(window.drawHierarchy(in: window.bounds, afterScreenUpdates: true))
+            }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "Collection fill - \(dark ? "dark" : "light")"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     func testAmbiguousRetryUsesSameIDAndDoesNotSubtractPointsTwice() async {
