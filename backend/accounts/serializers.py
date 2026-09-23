@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, connection, transaction
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
@@ -100,6 +101,18 @@ class LoginSerializer(serializers.Serializer):
             raise AuthenticationFailed("Invalid email or password.")
         attrs["user"] = user
         return attrs
+
+
+class AccountTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except User.DoesNotExist as exc:
+            # A deleted account's signed token must end the session, not cause
+            # a retryable server error. Keep upstream validation and rotation.
+            raise AuthenticationFailed(
+                self.error_messages["no_active_account"], code="no_active_account"
+            ) from exc
 
 
 def token_response(user: User, request=None) -> dict:

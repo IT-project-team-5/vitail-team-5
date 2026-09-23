@@ -4,7 +4,7 @@ from unittest import skipUnless
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, close_old_connections, connection
+from django.db import IntegrityError, OperationalError, close_old_connections, connection
 from django.test import TransactionTestCase
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -219,6 +219,48 @@ class AuthApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
+
+    def test_refresh_for_deleted_account_requires_login_even_if_email_is_reused(self):
+        registered = self.register_owner()
+        User.objects.get(pk=registered.data["user"]["id"]).delete()
+        self.register_owner()
+
+        response = self.client.post(
+            self.refresh_url, {"refresh": registered.data["refresh"]}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["detail"].code, "no_active_account")
+        self.assertNotIn("access", response.data)
+
+    def test_refresh_for_disabled_account_requires_login(self):
+        registered = self.register_owner()
+        User.objects.filter(pk=registered.data["user"]["id"]).update(is_active=False)
+
+        response = self.client.post(
+            self.refresh_url, {"refresh": registered.data["refresh"]}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertNotIn("access", response.data)
+
+    def test_refresh_rejects_invalid_token(self):
+        response = self.client.post(
+            self.refresh_url, {"refresh": "invalid-token"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertNotIn("access", response.data)
+
+    def test_refresh_does_not_treat_database_failure_as_revoked_credentials(self):
+        registered = self.register_owner()
+        with patch.object(User.objects, "get", side_effect=OperationalError("unavailable")):
+            with self.assertRaises(OperationalError):
+                self.client.post(
+                    self.refresh_url,
+                    {"refresh": registered.data["refresh"]},
+                    format="json",
+                )
 
     def test_authenticated_user_can_update_own_display_name(self):
         user = User.objects.create_user(
