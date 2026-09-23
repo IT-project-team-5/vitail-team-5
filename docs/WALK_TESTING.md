@@ -30,6 +30,13 @@ full map, finish summaries, café menus and collection; large-text snapshots cov
 the main confirmation flows. Photo selection and real GPS/background behaviour
 still require physical-iPhone acceptance.
 
+The subsequent 2026-09-24 UI refinements run completed 212 simulator tests:
+211 passed and the same device-only check was skipped. All 145 backend tests
+passed on disposable MySQL, and the unsigned Release device build passed.
+The final receipt-dismissal safeguard also passed 13 focused purchase and
+presentation tests. Visual checks cover inline login, appearance settings,
+play/pause controls, café menus and the automatically presented receipt.
+
 The following counts are **historical verification records**, not results for
 the current UI and finish-confirmation flow.
 

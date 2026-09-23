@@ -61,6 +61,7 @@ behaviour for them, raise them instead.
 | R46 | Walk completion | Start without preselecting dogs; map fills the page above a draggable menu; controls are Start, Pause, or Resume/Finish. Finish persists a summary, then the owner chooses dogs and confirms before upload/awards. No dogs saves a local zero-point record. Automatic stops and logout never confirm participants |
 | R47 | Café-first redemption | Rewards lists café photo/name/hours, opens a menu with point price on Purchase, and shows order detail before slide-to-collect. Existing atomic deductions, refunds and retry IDs remain authoritative |
 | R48 | Coffee estimate | Temporarily use 60 points ≈ 1 cup for the wallet display. This is an estimate only; actual product prices and walking earn rates are unchanged |
+| R49 | UI refinements | Confirmed on 2026-09-24: login forms expand beneath their role row; Walk uses play/pause symbols with more spacing and a slogan; product-titled centred purchase alerts show café/deadline and open the receipt on success; café menus omit the Vitail title and stale purchase notices; café order cards show item/customer/profile dogs with details on tap; users can persist System/Light/Dark appearance |
 
 ### Connected MVP implementation notes (2026-09-09)
 

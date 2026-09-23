@@ -40,16 +40,25 @@ and crop a photo from the system photo picker; uploads persist on the server.
 Personalised-goal inputs are stored, but no duration is displayed until the
 open numeric welfare and heat-adjustment rules are resolved.
 
+Both login choices stay on the same page and expand their form underneath.
+Owner profile settings and Café Account offer System, Light and Dark appearance;
+the choice persists on the device and applies to login, pages and sheets.
+
 The role choice does not grant a role: the backend account is authoritative.
 Owners can edit their name and dogs, see their real wallet balance, browse
-cafés by photo/name/hours, open a café menu, confirm one reward per order, and
-slide to collect from the order detail page. Café staff see those **same orders**, scoped to their own
+cafés by photo/name/hours, open a café menu and confirm one reward in a centred
+alert titled with the product, café and Melbourne collection deadline. A confirmed
+purchase opens its receipt immediately; owners slide there to collect.
+Café staff see those **same orders**, scoped to their own
 café, with a read-only feed that refreshes while open. Owner logout is inside
 the profile editor. The top owner title is Vitail; points appear only in Redeem
 with an approximate coffee count (60 points per cup; actual menu prices vary).
 Café Account also lets staff edit the café photo, name, address, description,
 opening hours and Google Maps link. A blank link uses a Maps address search. Login email is read-only. Products lets each café create and edit its own
 menu items, point prices and availability; existing order snapshots stay unchanged.
+Café order cards show the product, customer and current profile dog names; tap
+for reference, time and collection details. Dog names describe the customer's
+profile, not a claim that those dogs accompanied an order or walk.
 
 Points deduct once at order creation. Retrying the same confirmation does not
 create another order. Uncollected orders expire at the next Melbourne midnight
@@ -61,8 +70,9 @@ one item (quantity 1) per `Redemption`. There is no cart or separate venue/order
 database. Names, price and café ownership are snapshotted at order time.
 
 Walk uses a full-height map with a bottom menu that expands to show history.
-Start begins recording; walking shows Pause, and paused walks show Resume and
-Finish. Finish saves a protected pending summary. The owner chooses dogs and
+Play begins recording; walking shows a pause symbol, and paused walks show play
+to resume and an explicit Finish action. Controls have accessible labels and a
+short slogan below. Finish saves a protected pending summary. The owner chooses dogs and
 confirms completion before an eligible record uploads measured GPS and segment
 boundaries for points. No dogs means local history with zero points. Pending
 summaries survive relaunch; lock-screen recording and recovery remain supported. Server receipts, not
@@ -326,13 +336,15 @@ a separate, backed-up operation; it never runs automatically on startup.
 2. Open `http://127.0.0.1:8000/admin/`. Create a user with role **CAFE**, then
    create an available **Reward** for that café (for example, Coffee for 40 points).
 3. Run `make ios`, choose a simulator or connected iPhone in Xcode, and press Run.
-   Choose **I'm a dog owner** and register a test owner.
+   Expand **Dog Owner** and register a test owner.
 4. In Admin → **Point entries** → Add, grant that owner 100 points with a future
    expiry. This is an optional test shortcut, not a second wallet.
 5. In the owner app, refresh Redeem, confirm the Coffee order and check the
-   balance is 60 with a reference number in history.
+   receipt opens automatically. Close it and check the balance is 60; the order
+   remains in Ready to collect until collected or expired.
 6. In a second simulator/iPhone, sign in as the café. Orders should show the same
-   reference. Only the owner can tap Redeem/collect; it then disappears from the
+   product, customer and dog names; open it to check the matching reference.
+   Only the owner can slide to collect; it then disappears from the
    café feed. Café Account can save the venue name/address/description/hours.
    In Products, create or edit an item and toggle availability; refresh the
    owner catalogue to see the change. Another café must not be able to edit it.
