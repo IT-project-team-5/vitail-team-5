@@ -66,8 +66,8 @@ class QuestApiTests(APITestCase):
         self.assertEqual(set(QuestDefinition.objects.values_list("code", flat=True)), {"DAILY_GOAL", "STREAK", "BIRTHDAY", "CHECK_IN", "DOCUMENTS"})
         self.assertFalse(QuestDefinition.objects.filter(code="WALK").exists())
 
-    def test_owner_auth_required_for_both_read_endpoints_and_collect(self):
-        paths = ("/api/quests", "/api/quests/", "/api/leaderboard", "/api/leaderboard/")
+    def test_owner_auth_required_for_dashboard_and_collect(self):
+        paths = ("/api/quests", "/api/quests/")
         public = APIClient()
         for path in paths:
             with self.subTest(path=path):
@@ -76,7 +76,6 @@ class QuestApiTests(APITestCase):
         for role in (self.cafe, self.admin):
             self.client.force_authenticate(role)
             self.assertEqual(self.client.get("/api/quests/").status_code, 403)
-            self.assertEqual(self.client.get("/api/leaderboard/").status_code, 403)
             self.assertEqual(self.collect().status_code, 403)
 
     def test_goal_uses_each_dogs_verified_distance_without_inventing_a_target_or_duration(self):
@@ -160,14 +159,12 @@ class QuestApiTests(APITestCase):
         reset = datetime.fromisoformat(data["next_reset_at"].replace("Z", "+00:00"))
         self.assertEqual(reset, datetime(2026, 10, 4, 13, tzinfo=dt_timezone.utc))
 
-    def test_future_walks_do_not_contribute_to_goal_streak_or_leaderboard(self):
+    def test_future_walks_do_not_contribute_to_goal_or_streak(self):
         self.walk(ended_at=self.now + timedelta(hours=1))
         self.walk(day=self.now.date() + timedelta(days=1))
         data = self.dashboard()
         self.assertEqual(data["daily_goal"]["dogs"][0]["distance_m"], "0.00")
         self.assertEqual(data["streak"]["current_days"], 0)
-        board = self.client.get("/api/leaderboard/?period=all_time").data
-        self.assertEqual(board["entries"][0]["walk_count"], 0)
 
     def test_birthday_states_and_date_only_leap_anniversary(self):
         data = self.dashboard()["birthdays"]
@@ -331,50 +328,6 @@ class QuestApiTests(APITestCase):
         self.assertEqual(award.dog_id_snapshot, original_id)
         self.assertEqual(award.point_entry.amount, 60)
 
-    def test_leaderboard_is_self_only_without_double_counting_multi_dog_walks_or_wallet_credits(self):
-        self.walk(distance="750.25", points=6, dogs=[self.dog, self.second_dog])
-        self.walk(distance="500.00", points=4)
-        self.walk(owner=self.other_owner, distance="9999.00", points=40)
-        credit_points(user=self.owner, amount=10000, source_reference="test:admin")
-        self.collect()
-        response = self.client.get(f"/api/leaderboard/?period=week&user_id={self.other_owner.pk}")
-        self.assertEqual(response.status_code, 200)
-        data = response.data
-        self.assertEqual(data["scope"], "SELF_ONLY")
-        self.assertFalse(data["friends_available"])
-        self.assertEqual(len(data["entries"]), 1)
-        entry = data["entries"][0]
-        self.assertEqual(entry["user_id"], self.owner.pk)
-        self.assertEqual(entry["distance_m"], "1250.25")
-        self.assertEqual(entry["walk_count"], 2)
-        self.assertEqual(entry["walking_points"], 10)
-        self.assertNotIn("Private Walker", str(data))
-
-    def test_leaderboard_week_boundary_is_monday_in_melbourne(self):
-        self.now = datetime(2026, 9, 28, 12, tzinfo=MELBOURNE)
-        start = self.now.replace(hour=0)
-        self.walk(ended_at=start - timedelta(seconds=1), distance="1000.00", points=8)
-        self.walk(ended_at=start, distance="500.00", points=4)
-        response = self.client.get("/api/leaderboard/")
-        self.assertEqual(response.status_code, 200)
-        data = response.data
-        self.assertEqual(data["period"], "week")
-        self.assertEqual(datetime.fromisoformat(data["starts_at"]), start)
-        self.assertEqual(data["entries"][0]["distance_m"], "500.00")
-        all_time = self.client.get("/api/leaderboard/?period=all_time").data
-        self.assertIsNone(all_time["starts_at"])
-        self.assertEqual(all_time["entries"][0]["distance_m"], "1500.00")
-
-    def test_leaderboard_week_end_reflects_dst_and_rejects_unknown_period(self):
-        self.now = datetime(2026, 10, 4, 12, tzinfo=MELBOURNE)
-        data = self.client.get("/api/leaderboard/?period=week").data
-        start = datetime.fromisoformat(data["starts_at"])
-        end = datetime.fromisoformat(data["ends_at"])
-        self.assertEqual(start.utcoffset(), timedelta(hours=10))
-        self.assertEqual(end.utcoffset(), timedelta(hours=11))
-        self.assertEqual((end - start).total_seconds(), 167 * 3600)
-        self.assertEqual(self.client.get("/api/leaderboard/?period=month").status_code, 400)
-
     def test_dog_photos_prefer_uploaded_files_and_make_relative_urls_absolute(self):
         self.dog.photo = "https://example.com/legacy.jpg"
         self.dog.uploaded_photo = "avatars/dogs/milo.jpg"
@@ -383,6 +336,90 @@ class QuestApiTests(APITestCase):
         expected = "http://testserver/media/avatars/dogs/milo.jpg"
         self.assertEqual(data["daily_goal"]["dogs"][0]["photo"], expected)
         self.assertEqual(data["birthdays"]["dogs"][0]["photo"], expected)
+
+    def test_tasks_show_only_today_birthday_and_omit_unavailable_goal_and_streak_actions(self):
+        tasks = self.dashboard()["tasks"]
+        birthday = [task for task in tasks if task["kind"] == "BIRTHDAY"]
+        self.assertEqual(len(birthday), 1)
+        self.assertEqual(birthday[0]["id"], f"birthday:{self.dog.pk}:2026")
+        self.assertEqual(birthday[0]["status"], "READY")
+        self.assertEqual(birthday[0]["subject_name"], "Milo")
+        self.assertEqual(birthday[0]["reward_points"], 60)
+        self.assertIsNone(birthday[0]["progress"])
+        self.assertIsNone(birthday[0]["collected_at"])
+        self.assertNotIn("DAILY_GOAL", {task["kind"] for task in tasks})
+        self.assertNotIn("STREAK", {task["kind"] for task in tasks})
+        self.assertNotIn(self.other_dog.pk, {task["dog_id"] for task in tasks})
+        self.assertEqual(len({task["id"] for task in tasks}), len(tasks))
+        Dog.objects.filter(pk=self.dog.pk).update(date_of_birth=date(2020, 9, 26))
+        self.assertFalse(any(task["kind"] == "BIRTHDAY" for task in self.dashboard()["tasks"]))
+
+    def test_today_collected_task_keeps_identity_at_bottom_then_disappears_next_day(self):
+        self.collect()
+        tasks = self.dashboard()["tasks"]
+        collected = [task for task in tasks if task["kind"] == "BIRTHDAY"]
+        self.assertEqual(len(collected), 1)
+        self.assertEqual(collected[0]["id"], f"birthday:{self.dog.pk}:2026")
+        self.assertEqual(collected[0]["status"], "COLLECTED")
+        self.assertEqual(datetime.fromisoformat(collected[0]["collected_at"]), self.now)
+        self.assertEqual(tasks[-1]["id"], collected[0]["id"])
+        self.now += timedelta(days=1)
+        self.assertFalse(any(task["kind"] == "BIRTHDAY" for task in self.dashboard()["tasks"]))
+
+    def test_collected_birthday_stays_for_original_recipient_after_dog_transfer_or_deletion(self):
+        self.collect()
+        self.dog.owner = self.other_owner
+        self.dog.save(update_fields=["owner"])
+        own_tasks = [task for task in self.dashboard()["tasks"] if task["kind"] == "BIRTHDAY"]
+        self.assertEqual(len(own_tasks), 1)
+        self.assertEqual(own_tasks[0]["subject_name"], "Milo")
+        self.assertEqual(own_tasks[0]["status"], "COLLECTED")
+        self.client.force_authenticate(self.other_owner)
+        self.assertFalse(any(task["kind"] == "BIRTHDAY" and task["dog_id"] == self.dog.pk for task in self.dashboard()["tasks"]))
+        self.client.force_authenticate(self.owner)
+        self.dog.delete()
+        after_delete = [task for task in self.dashboard()["tasks"] if task["kind"] == "BIRTHDAY"]
+        self.assertEqual(after_delete[0]["id"], own_tasks[0]["id"])
+
+    @override_settings(TIME_ZONE="UTC")
+    def test_collected_task_visibility_resets_at_melbourne_midnight_not_utc_midnight(self):
+        self.now = datetime(2026, 9, 25, 13, 59, tzinfo=dt_timezone.utc)  # 23:59 Melbourne
+        self.collect()
+        self.assertTrue(any(task["kind"] == "BIRTHDAY" for task in self.dashboard()["tasks"]))
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.dashboard()["local_date"], "2026-09-26")
+        self.assertFalse(any(task["kind"] == "BIRTHDAY" for task in self.dashboard()["tasks"]))
+
+    def test_disabled_capabilities_do_not_offer_actionable_task_rows(self):
+        QuestDefinition.objects.filter(code__in=["BIRTHDAY", "DOCUMENTS"]).update(is_enabled=False)
+        self.assertEqual(self.dashboard()["tasks"], [])
+
+    def test_document_submission_becomes_ready_until_explicit_collect_and_only_today_receipt_remains(self):
+        from evidence.models import DocumentEntitlement
+
+        submitted = self.client.post("/api/quests/documents", {
+            "request_id": str(uuid4()), "dog_id": self.dog.pk,
+            "kind": "COUNCIL_REGISTRATION", "registration_number": "TASK-123",
+        }, format="json")
+        self.assertEqual(submitted.status_code, 201)
+        entitlement = DocumentEntitlement.objects.get(dog_id_snapshot=self.dog.pk, kind="COUNCIL_REGISTRATION")
+        self.assertEqual(get_balance(self.owner), 0)
+        tasks = self.dashboard()["tasks"]
+        rows = [task for task in tasks if task["kind"] == "COUNCIL_REGISTRATION" and task["dog_id"] == self.dog.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "READY")
+        self.assertEqual(rows[0]["entitlement_id"], entitlement.pk)
+        collected = self.client.post(f"/api/quests/documents/entitlements/{entitlement.pk}/collect", {}, format="json")
+        self.assertEqual(collected.status_code, 200)
+        tasks = self.dashboard()["tasks"]
+        rows = [task for task in tasks if task["kind"] == "COUNCIL_REGISTRATION" and task["dog_id"] == self.dog.pk]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "COLLECTED")
+        self.assertEqual(get_balance(self.owner), 300)
+        priorities = {"READY": 0, "IN_PROGRESS": 1, "COLLECTED": 2}
+        self.assertEqual([priorities[task["status"]] for task in tasks], sorted(priorities[task["status"]] for task in tasks))
+        self.now += timedelta(days=1)
+        self.assertFalse(any(task["kind"] == "COUNCIL_REGISTRATION" and task["dog_id"] == self.dog.pk for task in self.dashboard()["tasks"]))
 
 
 @skipUnless(connection.vendor == "mysql", "Requires MySQL row-lock semantics")

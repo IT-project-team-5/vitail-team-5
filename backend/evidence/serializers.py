@@ -1,5 +1,6 @@
 import calendar
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from django.utils import timezone
 from rest_framework import serializers
@@ -25,7 +26,7 @@ class DocumentRequestSerializer(serializers.Serializer):
     file_base64 = serializers.CharField(required=False, trim_whitespace=False, max_length=4 * ((MAX_BYTES + 2) // 3))
 
     def validate(self, attrs):
-        today = timezone.localdate()
+        today = timezone.localdate(timezone=ZoneInfo("Australia/Melbourne"))
         kind = attrs["kind"]
         number = attrs.get("registration_number", "").strip()
         if any(not char.isprintable() for char in number):
@@ -65,11 +66,21 @@ class DocumentSubmissionSerializer(serializers.ModelSerializer):
     dog_id = serializers.IntegerField(source="dog_id_snapshot")
     dog_name = serializers.CharField(source="dog_name_snapshot")
     file_url = serializers.SerializerMethodField()
+    entitlement_id = serializers.IntegerField(read_only=True)
+    reward_status = serializers.SerializerMethodField()
+    reward_points = serializers.SerializerMethodField()
+    collected_at = serializers.DateTimeField(source="entitlement.collected_at", read_only=True)
 
     class Meta:
         model = DocumentSubmission
-        fields = ("id", "request_id", "dog_id", "dog_name", "kind", "status", "registration_number", "event_date", "valid_from", "valid_to", "filename", "file_url", "awarded_points", "submitted_at")
+        fields = ("id", "request_id", "dog_id", "dog_name", "kind", "status", "registration_number", "event_date", "valid_from", "valid_to", "filename", "file_url", "awarded_points", "submitted_at", "entitlement_id", "reward_status", "reward_points", "collected_at")
         read_only_fields = fields
 
     def get_file_url(self, submission):
         return f"/api/quests/documents/{submission.pk}/file" if submission.file else None
+
+    def get_reward_status(self, submission):
+        return "COLLECTED" if submission.entitlement.point_entry_id else "READY"
+
+    def get_reward_points(self, submission):
+        return 200 if submission.kind == DocumentKind.VET else 300

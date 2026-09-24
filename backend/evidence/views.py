@@ -11,7 +11,7 @@ from rewards.permissions import IsOwnerRole
 
 from .models import DocumentSubmission
 from .serializers import DocumentRequestSerializer, DocumentSubmissionSerializer
-from .services import eligibility_for, submit_document
+from .services import collect_document, eligibility_for, entitlements_for, submit_document
 from .uploads import DocumentJSONParser
 
 
@@ -24,8 +24,9 @@ class DocumentListCreateView(APIView):
         return Response({
             "dogs": [{"id": dog.pk, "name": dog.name,
                       "photo": photo_url(dog.uploaded_photo, request) if dog.uploaded_photo else dog.photo} for dog in dogs],
-            "submissions": DocumentSubmissionSerializer(DocumentSubmission.objects.filter(owner=request.user), many=True).data,
+            "submissions": DocumentSubmissionSerializer(DocumentSubmission.objects.filter(owner=request.user).select_related("entitlement"), many=True).data,
             "eligibility": eligibility_for(request.user, dogs),
+            "entitlements": entitlements_for(request.user),
         })
 
     def post(self, request):
@@ -33,6 +34,13 @@ class DocumentListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         receipt, created = submit_document(owner=request.user, data=serializer.validated_data)
         return Response(receipt, status=201 if created else 200)
+
+
+class DocumentCollectView(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def post(self, request, entitlement_id):
+        return Response(collect_document(owner=request.user, entitlement_id=entitlement_id))
 
 
 class DocumentFileView(APIView):

@@ -20,6 +20,7 @@ class DocumentEntitlement(models.Model):
     valid_from = models.DateField(null=True, blank=True)
     valid_to = models.DateField(null=True, blank=True)
     point_entry = models.OneToOneField("rewards.PointEntry", null=True, on_delete=models.PROTECT)
+    collected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

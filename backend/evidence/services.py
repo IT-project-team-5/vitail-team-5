@@ -1,13 +1,17 @@
 import hashlib
 import json
 import uuid
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Q
+from django.http import Http404
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 
+from accounts.photos import photo_url
 from dogs.models import Dog
 from quests.models import QuestDefinition
 from rewards.models import PointEntry
@@ -52,7 +56,7 @@ def _entitlement(owner, dog, data):
             if item.valid_from < first_anniversary(start) and start < first_anniversary(item.valid_from):
                 # Small changes to a submitted annual window never create another reward.
                 return item, False
-        if not start <= timezone.localdate() <= end:
+        if not start <= timezone.localdate(timezone=MELBOURNE) <= end:
             raise ValidationError("The annual registration period must cover today.")
         key = f"period:{start.isoformat()}"
     else:
@@ -90,7 +94,7 @@ def submit_document(*, owner, data):
                 raise ValidationError({"dog_id": "Choose one of your dogs."})
             if data["kind"] == DocumentKind.VET and dog.date_of_birth and data["event_date"] < dog.date_of_birth:
                 raise ValidationError({"event_date": "The check-up date cannot be before your dog's birthday."})
-            entitlement, is_new = _entitlement(owner, dog, data)
+            entitlement, _is_new = _entitlement(owner, dog, data)
             upload = data.get("upload")
             fingerprints = []
             if data["registration_number"]:
@@ -106,13 +110,7 @@ def submit_document(*, owner, data):
                 if not created:
                     if is_file and proof.entitlement_id != entitlement.pk:
                         raise ValidationError("This file already supported an earlier reward. Add evidence for the new registration period or visit.")
-            awarded = POINTS[data["kind"]] if is_new else 0
-            if awarded:
-                entitlement.point_entry = credit_points(
-                    user=owner, amount=awarded, type=PointEntry.Type.EARN,
-                    source_reference=f"document-entitlement:{entitlement.pk}",
-                )
-                entitlement.save(update_fields=["point_entry"])
+            awarded = 0
             if upload:
                 stored_name = private_storage.save(
                     f"documents/{owner.pk}/{uuid.uuid4().hex}{upload['extension']}", ContentFile(upload["bytes"])
@@ -127,7 +125,9 @@ def submit_document(*, owner, data):
                 file_sha256=upload["sha256"] if upload else "", awarded_points=awarded,
             )
             receipt = {"submission": dict(DocumentSubmissionSerializer(submission).data),
-                       "balance": get_balance(owner), "awarded_points": awarded, "created": True}
+                       "balance": get_balance(owner), "awarded_points": awarded, "created": True,
+                       "entitlement_id": entitlement.pk, "reward_status": "COLLECTED" if entitlement.point_entry_id else "READY",
+                       "reward_points": POINTS[entitlement.kind], "collected_at": _iso(entitlement.collected_at)}
             submission.response_snapshot = receipt
             submission.save(update_fields=["response_snapshot"])
             return receipt, True
@@ -138,23 +138,144 @@ def submit_document(*, owner, data):
         raise
 
 
+MELBOURNE = ZoneInfo("Australia/Melbourne")
+
+
+def _iso(value):
+    return value.isoformat() if value else None
+
+
+def _local_today(now=None):
+    return (now or timezone.now()).astimezone(MELBOURNE).date()
+
+
+def _collection_receipt(entitlement, owner, created):
+    return {"entitlement_id": entitlement.pk, "kind": entitlement.kind,
+            "dog_id": entitlement.dog_id_snapshot, "points": entitlement.point_entry.amount,
+            "balance": get_balance(owner), "collected_at": _iso(entitlement.collected_at), "created": created}
+
+
+@transaction.atomic
+def collect_document(*, owner, entitlement_id, now=None):
+    owner = get_user_model().objects.select_for_update().get(pk=owner.pk)
+    candidate = DocumentEntitlement.objects.filter(pk=entitlement_id).first()
+    if candidate is None:
+        raise Http404
+    # Shared dog lock serializes current and former owners across a profile transfer.
+    dog = Dog.objects.select_for_update().filter(pk=candidate.dog_id_snapshot).first()
+    entitlement = DocumentEntitlement.objects.select_for_update().get(pk=entitlement_id)
+    if entitlement.point_entry_id:
+        if entitlement.point_entry.user_id != owner.pk:
+            raise Http404
+        return _collection_receipt(entitlement, owner, False)
+    if dog is None or dog.owner_id != owner.pk or not DocumentSubmission.objects.filter(entitlement=entitlement, owner=owner).exists():
+        raise Http404
+    if not QuestDefinition.objects.filter(code=QuestDefinition.Code.DOCUMENTS, is_enabled=True).exists():
+        raise DocumentsUnavailable()
+    entitlement.point_entry = credit_points(
+        user=owner, amount=POINTS[entitlement.kind], type=PointEntry.Type.EARN,
+        source_reference=f"document-entitlement:{entitlement.pk}",
+    )
+    entitlement.owner = owner
+    entitlement.collected_at = now or timezone.now()
+    entitlement.save(update_fields=["point_entry", "owner", "collected_at"])
+    return _collection_receipt(entitlement, owner, True)
+
+
+def _has_submission(row, owner):
+    return any(submission.owner_id == owner.pk for submission in row.documentsubmission_set.all())
+
+
+def _name(row, owner):
+    if row.dog_id and row.dog.owner_id == owner.pk:
+        return row.dog.name
+    submission = next((item for item in row.documentsubmission_set.all() if item.owner_id == owner.pk), None)
+    return submission.dog_name_snapshot if submission else "Dog"
+
+
+def entitlements_for(owner):
+    rows = DocumentEntitlement.objects.filter(documentsubmission__owner=owner).distinct().select_related("dog", "point_entry").prefetch_related("documentsubmission_set")
+    enabled = QuestDefinition.objects.filter(code="DOCUMENTS", is_enabled=True).exists()
+    return [{"id": row.pk, "dog_id": row.dog_id_snapshot, "dog_name": _name(row, owner), "kind": row.kind,
+             "reward_status": "COLLECTED" if row.point_entry_id else "READY", "reward_points": POINTS[row.kind],
+             "collected_at": _iso(row.collected_at),
+             "can_collect": bool(enabled and not row.point_entry_id and row.dog_id and row.dog.owner_id == owner.pk)}
+            for row in rows]
+
+
 def eligibility_for(owner, dogs):
-    today = timezone.localdate()
+    today = _local_today()
     rows = list(DocumentEntitlement.objects.filter(dog_id_snapshot__in=[dog.pk for dog in dogs]))
     result = []
     for dog in dogs:
         for kind in DocumentKind.values:
-            earned = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            reserved = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            earned = [row for row in reserved if row.point_entry_id]
+            pending = len(reserved) - len(earned)
             remaining = None
             can_earn = None
             if kind == DocumentKind.COUNCIL:
-                can_earn = not earned
-                message = "300 points once per dog." if can_earn else "Reward already received. You can add updated evidence for 0 points."
+                can_earn = not reserved
+                message = "300 points once per dog. Submit evidence, then collect." if not reserved else (
+                    "Ready to collect. Updated evidence will use the same reward." if pending else "Reward already collected. Updated evidence earns no extra points.")
             elif kind == DocumentKind.MICROCHIP:
-                message = "300 points per annual registration period. Re-uploading or overlapping a rewarded period adds no points."
+                message = "300 points per annual registration period. Submit evidence, then collect. Overlapping periods use the same reward."
             else:
-                remaining = max(0, 2 - sum(row.event_date.year == today.year for row in earned))
-                message = f"{remaining} of 2 rewards remaining for {today.year}. Visits must be at least 60 days apart."
-            result.append({"dog_id": dog.pk, "kind": kind, "awards_count": len(earned),
+                remaining = max(0, 2 - sum(row.event_date.year == today.year for row in reserved))
+                message = f"{remaining} of 2 slots remaining for {today.year}, including pending rewards. Visits must be at least 60 days apart."
+            result.append({"dog_id": dog.pk, "kind": kind, "awards_count": len(earned), "pending_count": pending,
                            "remaining_this_year": remaining, "can_earn": can_earn, "message": message})
     return result
+
+
+def quest_tasks(*, owner, dogs, request=None, now=None):
+    if not QuestDefinition.objects.filter(code="DOCUMENTS", is_enabled=True).exists():
+        return []
+    today = _local_today(now)
+    dogs = list(dogs)
+    dog_by_id = {dog.pk: dog for dog in dogs}
+    rows = list(DocumentEntitlement.objects.filter(
+        Q(dog_id_snapshot__in=dog_by_id) | Q(owner=owner, point_entry__isnull=False)
+    ).select_related("dog", "point_entry").prefetch_related("documentsubmission_set"))
+    details = {
+        DocumentKind.COUNCIL: "Submit your dog's council registration number or PDF, then collect 300 points once per dog.",
+        DocumentKind.MICROCHIP: "Submit the registration number or PDF and its full annual period, then collect 300 points. Overlapping periods share one reward.",
+        DocumentKind.VET: "Submit a photo and the check-up date, then collect 200 points. Up to two visits per calendar year, at least 60 days apart.",
+    }
+
+    def task(dog, kind, status, row=None):
+        photo = photo_url(dog.uploaded_photo, request) if dog and dog.uploaded_photo else (dog.photo if dog else None)
+        name = dog.name if dog else _name(row, owner)
+        return {"id": f"entitlement:{row.pk}" if row else f"document:{dog.pk}:{kind}",
+                "kind": kind, "status": status, "title": DocumentKind(kind).label,
+                "subtitle": name, "subject_name": name, "photo": photo, "icon": "doc.text",
+                "detail": details[kind], "reward_points": POINTS[kind], "progress": None,
+                "dog_id": row.dog_id_snapshot if row else dog.pk,
+                "entitlement_id": row.pk if row else None, "collected_at": _iso(row.collected_at) if row else None}
+
+    tasks = []
+    for row in rows:
+        dog = dog_by_id.get(row.dog_id_snapshot)
+        if row.point_entry_id:
+            if row.point_entry.user_id == owner.pk and row.collected_at and row.collected_at.astimezone(MELBOURNE).date() == today:
+                tasks.append(task(dog, row.kind, "COLLECTED", row))
+        elif dog and _has_submission(row, owner):
+            tasks.append(task(dog, row.kind, "READY", row))
+    for dog in dogs:
+        for kind in DocumentKind.values:
+            reserved = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            if any(not row.point_entry_id and _has_submission(row, owner) for row in reserved):
+                continue
+            # A current owner can resubmit after a transfer to make an existing
+            # unclaimed entitlement collectible without creating a second reward.
+            transferred_pending = any(not row.point_entry_id for row in reserved)
+            if kind == DocumentKind.COUNCIL:
+                eligible = not reserved or transferred_pending
+            elif kind == DocumentKind.MICROCHIP:
+                eligible = transferred_pending or not any(row.valid_from <= today < first_anniversary(row.valid_from) for row in reserved)
+            else:
+                eligible = transferred_pending or (sum(row.event_date.year == today.year for row in reserved) < 2
+                            and all(abs((today - row.event_date).days) >= 60 for row in reserved))
+            if eligible:
+                tasks.append(task(dog, kind, "IN_PROGRESS"))
+    return tasks

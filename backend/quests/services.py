@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Sum
 from django.utils import timezone
 
 from accounts.photos import photo_url
@@ -90,6 +90,40 @@ def _streak(days, today):
     }
 
 
+def _birthday_tasks(*, owner, dogs, claimed_dog_ids, now, request=None):
+    today = now.astimezone(MELBOURNE).date()
+    by_id = {dog.pk: dog for dog in dogs}
+    tasks = []
+    for dog in dogs:
+        if dog.pk in claimed_dog_ids or not _is_birthday_today(dog.date_of_birth, today):
+            continue
+        tasks.append({
+            "id": f"birthday:{dog.pk}:{today.year}", "kind": "BIRTHDAY", "status": "READY",
+            "title": "Birthday bonus", "subtitle": "Birthday today", "subject_name": dog.name,
+            "photo": _dog_photo(dog, request), "icon": "gift.fill",
+            "detail": f"Celebrate {dog.name}'s birthday. Collect {BIRTHDAY_POINTS} points once per dog each year.",
+            "reward_points": BIRTHDAY_POINTS, "progress": None, "dog_id": dog.pk,
+            "entitlement_id": None, "collected_at": None,
+        })
+    # Today's receipts remain visible even after a profile edit, transfer or
+    # deletion. Only their recipient sees them, never the next dog's owner.
+    collected = QuestAward.objects.filter(
+        owner=owner, kind=QuestAward.Kind.BIRTHDAY,
+        awarded_at__gte=local_midnight(today), awarded_at__lte=now,
+    ).select_related("point_entry")
+    for award in collected:
+        dog = by_id.get(award.dog_id_snapshot)
+        tasks.append({
+            "id": f"birthday:{award.dog_id_snapshot}:{award.year}", "kind": "BIRTHDAY", "status": "COLLECTED",
+            "title": "Birthday bonus", "subtitle": "Collected today", "subject_name": award.dog_name_snapshot,
+            "photo": _dog_photo(dog, request) if dog else None, "icon": "gift.fill",
+            "detail": "This year's birthday reward has been collected.",
+            "reward_points": award.point_entry.amount, "progress": None,
+            "dog_id": award.dog_id_snapshot, "entitlement_id": None, "collected_at": award.awarded_at,
+        })
+    return tasks
+
+
 def quest_dashboard(*, owner, request=None, now=None):
     now = now or timezone.now()
     today = now.astimezone(MELBOURNE).date()
@@ -111,11 +145,20 @@ def quest_dashboard(*, owner, request=None, now=None):
         .values("dogs").annotate(distance=Sum("distance_m"))
     }
     active_dates = set(accepted.filter(distance_m__gt=0).values_list("point_date", flat=True))
+    tasks = []
+    if availability(QuestDefinition.Code.BIRTHDAY, "AVAILABLE") == "AVAILABLE":
+        tasks.extend(_birthday_tasks(owner=owner, dogs=dogs, claimed_dog_ids=claimed_birthdays, now=now, request=request))
+    if availability(QuestDefinition.Code.DOCUMENTS, "AVAILABLE") == "AVAILABLE":
+        from evidence.services import quest_tasks as document_quest_tasks
+        tasks.extend(document_quest_tasks(owner=owner, dogs=dogs, request=request, now=now))
+    status_order = {"READY": 0, "IN_PROGRESS": 1, "COLLECTED": 2}
+    tasks.sort(key=lambda task: (status_order[task["status"]], task["kind"], task["dog_id"] or 0, task["id"]))
     return {
         "server_time": now,
         "timezone": MELBOURNE.key,
         "local_date": today,
         "next_reset_at": local_midnight(today + timedelta(days=1)),
+        "tasks": tasks,
         "daily_goal": {
             "status": availability(QuestDefinition.Code.DAILY_GOAL, "RULES_PENDING"),
             "dogs": [
@@ -169,7 +212,7 @@ def quest_dashboard(*, owner, request=None, now=None):
                 {"kind": "MICROCHIP_REGISTRATION", "title": "Microchip registration", "reward_points": 300},
                 {"kind": "VET_CHECKUP", "title": "Vet check-up", "reward_points": 200},
             ],
-            "message": "Submit your dog's documents to receive eligible points. Submissions may be checked later.",
+            "message": "Submit your dog's documents, then collect eligible points. Submissions may be checked later.",
         },
     }
 
@@ -213,37 +256,3 @@ def collect_birthday(*, owner, dog_id, now=None):
         year=today.year, point_entry=entry, rules_version=BIRTHDAY_RULES_VERSION,
     )
     return {"award": award, "balance": get_balance(owner), "created": True}
-
-
-def leaderboard(*, owner, period, request=None, now=None):
-    now = now or timezone.now()
-    today = now.astimezone(MELBOURNE).date()
-    walks = Walk.objects.filter(owner=owner, ended_at__lte=now)
-    starts_at = None
-    ends_at = now
-    if period == "week":
-        monday = today - timedelta(days=today.weekday())
-        starts_at = local_midnight(monday)
-        ends_at = local_midnight(monday + timedelta(days=7))
-        walks = walks.filter(ended_at__gte=starts_at, ended_at__lt=ends_at)
-    totals = walks.aggregate(distance=Sum("distance_m"), walk_count=Count("id"), walking_points=Sum("points_awarded"))
-    return {
-        "server_time": now,
-        "timezone": MELBOURNE.key,
-        "period": period,
-        "starts_at": starts_at,
-        "ends_at": ends_at,
-        "scope": "SELF_ONLY",
-        "friends_available": False,
-        "message": "Only your activity is shown. Friend comparisons will be available after the friend system is connected.",
-        "entries": [{
-            "rank": 1,
-            "user_id": owner.pk,
-            "display_name": owner.display_name,
-            "photo": photo_url(owner.photo, request) if owner.photo else None,
-            "is_current_user": True,
-            "distance_m": totals["distance"] or Decimal("0.00"),
-            "walk_count": totals["walk_count"],
-            "walking_points": totals["walking_points"] or 0,
-        }],
-    }

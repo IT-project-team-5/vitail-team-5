@@ -3,8 +3,8 @@ from rest_framework.views import APIView
 
 from rewards.permissions import IsOwnerRole
 
-from .serializers import BirthdayCollectionSerializer, LeaderboardQuerySerializer, LeaderboardSerializer, QuestDashboardSerializer
-from .services import BirthdayClaimError, collect_birthday, leaderboard, quest_dashboard
+from .serializers import BirthdayCollectionSerializer, QuestDashboardSerializer
+from .services import BirthdayClaimError, collect_birthday, quest_dashboard
 
 
 class QuestDashboardView(APIView):
@@ -12,17 +12,6 @@ class QuestDashboardView(APIView):
 
     def get(self, request):
         return Response(QuestDashboardSerializer(quest_dashboard(owner=request.user, request=request)).data)
-
-
-class LeaderboardView(APIView):
-    permission_classes = [IsOwnerRole]
-
-    def get(self, request):
-        query = LeaderboardQuerySerializer(data=request.query_params)
-        query.is_valid(raise_exception=True)
-        return Response(LeaderboardSerializer(leaderboard(
-            owner=request.user, request=request, period=query.validated_data["period"],
-        )).data)
 
 
 class BirthdayCollectionView(APIView):

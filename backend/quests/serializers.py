@@ -57,11 +57,29 @@ class UnavailableTasksSerializer(serializers.Serializer):
     message = serializers.CharField()
 
 
+class QuestTaskSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    kind = serializers.ChoiceField(choices=("BIRTHDAY", "COUNCIL_REGISTRATION", "MICROCHIP_REGISTRATION", "VET_CHECKUP", "DAILY_GOAL", "STREAK"))
+    status = serializers.ChoiceField(choices=("IN_PROGRESS", "READY", "COLLECTED"))
+    title = serializers.CharField()
+    subtitle = serializers.CharField()
+    subject_name = serializers.CharField()
+    photo = serializers.CharField(allow_null=True)
+    icon = serializers.CharField()
+    detail = serializers.CharField()
+    reward_points = serializers.IntegerField()
+    progress = serializers.FloatField(allow_null=True)
+    dog_id = serializers.IntegerField(allow_null=True)
+    entitlement_id = serializers.IntegerField(allow_null=True)
+    collected_at = serializers.DateTimeField(allow_null=True)
+
+
 class QuestDashboardSerializer(serializers.Serializer):
     server_time = serializers.DateTimeField()
     timezone = serializers.CharField()
     local_date = serializers.DateField()
     next_reset_at = serializers.DateTimeField()
+    tasks = QuestTaskSerializer(many=True)
     daily_goal = DailyGoalSerializer()
     streak = StreakSerializer()
     birthdays = BirthdaySerializer()
@@ -82,30 +100,3 @@ class BirthdayCollectionSerializer(serializers.Serializer):
     award = BirthdayAwardSerializer()
     balance = serializers.IntegerField()
     created = serializers.BooleanField()
-
-
-class LeaderboardQuerySerializer(serializers.Serializer):
-    period = serializers.ChoiceField(choices=("week", "all_time"), default="week")
-
-
-class LeaderboardEntrySerializer(serializers.Serializer):
-    rank = serializers.IntegerField()
-    user_id = serializers.IntegerField()
-    display_name = serializers.CharField()
-    photo = serializers.CharField(allow_null=True)
-    is_current_user = serializers.BooleanField()
-    distance_m = serializers.DecimalField(max_digits=16, decimal_places=2, coerce_to_string=True)
-    walk_count = serializers.IntegerField()
-    walking_points = serializers.IntegerField()
-
-
-class LeaderboardSerializer(serializers.Serializer):
-    server_time = serializers.DateTimeField()
-    timezone = serializers.CharField()
-    period = serializers.CharField()
-    starts_at = serializers.DateTimeField(allow_null=True)
-    ends_at = serializers.DateTimeField()
-    scope = serializers.CharField()
-    friends_available = serializers.BooleanField()
-    message = serializers.CharField()
-    entries = LeaderboardEntrySerializer(many=True)
