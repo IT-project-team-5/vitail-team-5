@@ -1,0 +1,599 @@
+// Vitail proposed logical schema · 2026-09-25 · NOT an executable migration.
+// 22 core + 6 deferred domain tables, including WalkDog. Django infrastructure omitted.
+// Dates use Melbourne; timestamps use UTC. See README for transactions and policy gaps.
+
+Project Vitail {
+  database_type: 'MySQL'
+  Note: 'Design proposal against all 37 visible SCRUM issues and latest point policy v3. Nullable legacy fields must not be fabricated during migration.'
+}
+
+Table User {
+  id bigint [pk, increment]
+  email varchar(254) [not null, unique]
+  password varchar(128) [not null, note: 'Django password hash; unusable hash for external-only login']
+  display_name varchar(100) [not null]
+  photo varchar(255) [note: 'Storage key']
+  role varchar(10) [not null, note: 'OWNER / CAFE / ADMIN']
+  is_staff boolean [not null]
+  is_superuser boolean [not null]
+  is_active boolean [not null]
+  last_login datetime
+  date_joined datetime [not null]
+  public_id varchar(32) [unique, note: 'Random lookup identifier; never expose email as public ID']
+  virtual_avatar_key varchar(80)
+  location_visibility varchar(10) [not null, note: 'OFF default / FRIENDS']
+  net_matching_enabled boolean [not null, default: false]
+  leaderboard_visible boolean [not null, default: false]
+  notification_preferences json [note: 'Fixed schema: types, quiet hours, timezone, cooldown']
+  active_walk_session_id bigint [unique, ref: - WalkSession.id]
+  auth_version int [not null, default: 1]
+  deleted_at datetime
+  Note: 'EXISTING + extend. Retain Django permissions/group joins. owner lock serialises all points and active session changes. Active session owner must match user; cross-row service check. Anonymised tombstone preserves financial FKs on deletion, policy required.'
+}
+
+Table ExternalIdentity {
+  id bigint [pk, increment]
+  user_id bigint [not null, ref: > User.id]
+  provider varchar(16) [not null, note: 'APPLE initially; Google not current delivery scope']
+  subject varchar(255) [not null, note: 'Case-sensitive provider subject; not email']
+  created_at datetime [not null]
+  indexes {
+    (provider, subject) [unique]
+    (user_id, provider) [unique]
+  }
+  Note: 'DEFERRED: Apple sign-in. No provider access tokens needed for login-only linking. Do not merge accounts by unverified email.'
+}
+
+Table Breed {
+  id bigint [pk, increment]
+  name varchar(100) [not null, unique]
+  energy_level varchar(10) [not null, note: 'LOW / MODERATE / HIGH']
+  default_size varchar(10) [not null]
+  is_brachycephalic boolean [not null]
+  Note: 'EXISTING. Numerical goal formula belongs to versioned code/config after client approval, not guessed breed targets.'
+}
+
+Table Dog {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  breed_id bigint [not null, ref: > Breed.id]
+  name varchar(100) [not null]
+  photo varchar(2048) [note: 'Legacy external URL; uploaded_photo takes precedence']
+  uploaded_photo varchar(255)
+  date_of_birth date [note: 'Actual known birthday only; never future']
+  age_months int [not null, note: 'Legacy fallback; derive age from DOB when present']
+  size varchar(10) [not null]
+  is_brachycephalic boolean [not null]
+  microchip_number varchar(100) [note: 'Private self-reported identity, format pending; not automatic verification']
+  microchip_recorded_at datetime
+  created_at datetime [not null]
+  archived_at datetime
+  Note: 'EXISTING + extend. At most 10 active dogs per owner enforced under owner lock. Do not add uniqueness on unverified microchip numbers without confirmed format/transfer policy. Archive rather than lose dog-scoped entitlement identity.'
+}
+
+Table Venue {
+  id bigint [pk, increment]
+  manager_user_id bigint [unique, ref: - User.id, note: 'Nullable; managed venue requires active CAFE role']
+  kind varchar(16) [not null, note: 'CAFE / RESTAURANT / PARK / VET']
+  name varchar(100) [not null]
+  description text
+  photo varchar(255)
+  address varchar(255)
+  latitude decimal(9,6)
+  longitude decimal(9,6)
+  opening_hours varchar(500)
+  google_maps_url varchar(2048)
+  is_partner boolean [not null]
+  is_active boolean [not null]
+  checkin_enabled boolean [not null]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+  indexes {
+    (is_active, kind)
+    (latitude, longitude)
+  }
+  Note: 'NEW replaces CafeProfile. Coordinates must be paired and in range; enabled check-in requires coordinates. Default radius/dwell derived from versioned category rules and frozen in CheckIn. No invented demo coordinates. Opening-hours text is display-only.'
+}
+
+Table Reward {
+  id bigint [pk, increment]
+  venue_id bigint [not null, ref: > Venue.id]
+  name varchar(100) [not null]
+  description text
+  photo varchar(255)
+  point_cost int [not null]
+  is_available boolean [not null]
+  starts_at datetime
+  ends_at datetime
+  daily_quantity_limit int
+  terms text
+  requires_store_purchase boolean [not null, default: false]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+  indexes { (venue_id, is_available) }
+  Note: 'EXISTING + venue migration. Cost > 0; daily limit null or > 0; ends > starts when both set. Merchant-managed active partner venue required. Retain legacy cafe_user only during migration; no two permanent ownership sources. Lock reward to enforce daily supply.'
+}
+
+Table Redemption {
+  id bigint [pk, increment]
+  owner_user_id bigint [not null, ref: > User.id]
+  cafe_user_id bigint [not null, ref: > User.id, note: 'Responsible account at purchase; immutable']
+  reward_id bigint [not null, ref: > Reward.id]
+  venue_id bigint [not null, ref: > Venue.id]
+  reference_number varchar(20) [not null, unique]
+  request_id uuid [note: 'Required on new purchases; nullable only for legacy rows']
+  request_fingerprint char(64)
+  reward_name_snapshot varchar(100) [not null]
+  owner_name_snapshot varchar(100) [not null]
+  cafe_name_snapshot varchar(100) [not null]
+  point_cost_snapshot int [not null]
+  terms_snapshot text
+  eligibility_snapshot json [note: 'Minimal dog IDs/completion result; not private microchip numbers']
+  status varchar(10) [not null, note: 'PENDING / COLLECTED / EXPIRED / CANCELLED']
+  order_date date [not null]
+  created_at datetime [not null]
+  collected_at datetime
+  expires_at datetime [not null]
+  spend_entry_id bigint [unique, ref: - PointEntry.id]
+  refund_entry_id bigint [unique, ref: - PointEntry.id]
+  feed_cursor bigint [not null]
+  indexes {
+    (owner_user_id, request_id) [unique]
+    (cafe_user_id, feed_cursor)
+    (owner_user_id, created_at)
+    (reward_id, order_date, status)
+    (status, expires_at)
+  }
+  Note: 'EXISTING + extend. One item/order; no cart. Price > 0. COLLECTED iff collected_at non-null. New order spend required; refund only for expired/cancelled. Ledger owner/amount/type checked atomically. Existing order snapshots/reference never recomputed from product.'
+}
+
+Table PointEntry {
+  id bigint [pk, increment]
+  user_id bigint [not null, ref: > User.id]
+  amount int [not null]
+  remaining_points int [not null, default: 0]
+  type varchar(16) [not null, note: 'EARN / SPEND / REFUND / EXPIRE / ADMIN / ADMIN_DEBIT; last one is proposed extension']
+  source_reference varchar(120) [unique, note: 'Stable event key required for new automated operations']
+  earn_category varchar(20) [note: 'WALK / NET_WALK / DAILY_GOAL / CHECK_IN / STREAK / BIRTHDAY / DOCUMENT; EARN only']
+  earned_on date
+  rules_version varchar(40)
+  expires_at datetime
+  created_at datetime [not null]
+  indexes {
+    (user_id, expires_at)
+    (user_id, earned_on, earn_category)
+    (user_id, created_at)
+  }
+  Note: 'EXISTING canonical ledger. No zero entry. Credit > 0 with expiry and 0 <= remaining <= amount; debit < 0 with remaining=0 and no expiry. Credits consumed earliest-expiry first. Amount/source immutable. Do not delete ledger to undo a transaction. No independent balance or rank table.'
+}
+
+Table CafeOrderFeedState {
+  cafe_user_id bigint [pk, ref: - User.id]
+  cursor bigint [not null]
+  Note: 'EXISTING technical cursor, not order history. Advance in same transaction as every order mutation, preserve legacy account ownership.'
+}
+
+Table Walk {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  request_id uuid [not null]
+  request_fingerprint char(64) [not null]
+  started_at datetime [not null]
+  ended_at datetime [not null]
+  point_date date [not null]
+  distance_m decimal(10,2) [not null]
+  active_seconds int [note: 'Validated, excludes pauses; unknown historical values stay null']
+  points_awarded smallint [not null, note: 'Legacy base-point receipt; agree with base entry when linked']
+  base_point_entry_id bigint [unique, ref: - PointEntry.id]
+  net_distance_m decimal(10,2)
+  net_point_entry_id bigint [unique, ref: - PointEntry.id]
+  net_settled_at datetime
+  rules_version varchar(40)
+  validation_summary json [note: 'Bounded reasons/counts, not a permanent GPS route']
+  created_at datetime [not null]
+  indexes {
+    (owner_id, request_id) [unique]
+    (owner_id, point_date)
+    (owner_id, ended_at)
+  }
+  Note: 'EXISTING + extend. Completed validated summary; end > start; distances/seconds >= 0; active_seconds <= elapsed seconds. Base <= 40 and net <= 10 per owner/day via locked service. Zero/capped awards have no ledger FK. Keep legacy walks without invented location or net evidence.'
+}
+
+Table WalkDog {
+  id bigint [pk, increment]
+  walk_id bigint [not null, ref: > Walk.id]
+  dog_id bigint [ref: > Dog.id]
+  dog_id_snapshot bigint [not null]
+  dog_name_snapshot varchar(100) [note: 'Required for new walks; unknown historical name stays null']
+  active_seconds int
+  distance_m decimal(10,2)
+  indexes {
+    (walk_id, dog_id_snapshot) [unique]
+    (dog_id_snapshot, walk_id)
+  }
+  Note: 'EXISTING implicit join promoted to explicit through model. Current UX dogs confirmed at Finish and treated as present for full walk; no invented partial joins. Snapshot survives deletion/transfer. Unknown historical duration remains null. Do not sum owner walk points through this M2M.'
+}
+
+Table WalkSession {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  request_id uuid [not null]
+  walk_id bigint [unique, ref: - Walk.id]
+  state varchar(12) [not null, note: 'RECORDING / PAUSED / FINISHED / TIMED_OUT / CANCELLED']
+  started_at datetime [not null]
+  ended_at datetime
+  heartbeat_at datetime [not null]
+  last_latitude decimal(9,6)
+  last_longitude decimal(9,6)
+  last_accuracy_m decimal(7,2)
+  location_recorded_at datetime
+  location_expires_at datetime
+  verified_active_seconds int [not null, default: 0]
+  verified_distance_m decimal(10,2) [not null, default: 0]
+  net_consent_at datetime
+  net_consent_withdrawn_at datetime
+  validation_version varchar(40) [not null]
+  indexes {
+    (owner_id, request_id) [unique]
+    (state, heartbeat_at)
+    (location_expires_at)
+  }
+  Note: 'NEW. One active session enforced by User.active_walk_session pointer under lock. Latest location is expiring display projection. Permission rechecked on reads. Paused time excluded. Stop/logout clears presence; retained completion/control evidence distinct from raw route. Session may finish without qualifying Walk.'
+}
+
+Table LocationSample {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  session_id bigint [ref: > WalkSession.id]
+  checkin_id bigint [ref: > CheckIn.id]
+  checkin_attempt_id uuid
+  stream_id uuid [not null]
+  sequence bigint [not null]
+  segment_id int [not null, note: 'Increment on start/resume/GPS discontinuity; never bridge pause segments']
+  recorded_at datetime [not null]
+  received_at datetime [not null]
+  latitude decimal(9,6) [not null]
+  longitude decimal(9,6) [not null]
+  accuracy_m decimal(7,2) [not null]
+  speed_mps decimal(7,2)
+  source_flags json [note: 'Small fixed schema including simulated/source flags; never blindly trusted']
+  accepted boolean [not null]
+  rejection_reason varchar(80)
+  indexes {
+    (owner_id, stream_id, sequence) [unique]
+    (owner_id, recorded_at)
+    (session_id, recorded_at)
+    (checkin_id, recorded_at)
+    (received_at)
+  }
+  Note: 'NEW short-lived evidence. Require authorised active session and/or check-in purpose; both can consume same sample once. All linked owners must match. Reject old attempt IDs. Validate time skew/gaps/range/accuracy/speed/server receipt. Purge only after consumer summaries settled; TTL/consent required before collection.'
+}
+
+Table NetWalkInterval {
+  id bigint [pk, increment]
+  session_low_id bigint [not null, ref: > WalkSession.id]
+  session_high_id bigint [not null, ref: > WalkSession.id]
+  started_at datetime [not null]
+  ended_at datetime [not null]
+  low_distance_m decimal(10,2) [not null]
+  high_distance_m decimal(10,2) [not null]
+  rules_version varchar(40) [not null]
+  validation_summary json [note: 'Sample counts/accuracy/proximity aggregates/consent, no precise permanent route']
+  verified_at datetime [not null]
+  indexes {
+    (session_low_id, session_high_id, started_at, ended_at) [unique]
+    (session_high_id, started_at)
+  }
+  Note: 'NEW. low < high, different owners, end > start, consent valid throughout. Pair intervals non-overlapping via service. Individual union distance is calculated before samples purged and frozen on Walk; NEVER sum intervals across companions for awards. No friendship requirement. Inputs freeze before net settlement.'
+}
+
+Table DogDailyGoal {
+  id bigint [pk, increment]
+  dog_id bigint [ref: > Dog.id]
+  dog_id_snapshot bigint [not null]
+  owner_id bigint [not null, ref: > User.id]
+  local_date date [not null]
+  target_active_seconds int [not null]
+  inputs_snapshot json [not null, note: 'Fixed schema: breed/energy/age/size/brachycephalic/approved seasonal inputs']
+  rules_version varchar(40) [not null]
+  created_at datetime [not null]
+  finalised_at datetime
+  final_active_seconds int
+  final_goal_met boolean
+  indexes {
+    (dog_id_snapshot, local_date) [unique]
+    (owner_id, local_date)
+  }
+  Note: 'NEW goal target snapshot, only after formula approval. Target > 0. Live progress derived from validated WalkDog; final fields freeze at agreed late-upload cutoff and must agree atomically. Preserve outcome for 7-day stats; do not recalculate historic targets from edited dog/breed. Owner snapshot immutable; dog transfer mid-day policy pending.'
+}
+
+Table QuestDefinition {
+  id bigint [pk, increment]
+  code varchar(20) [not null, unique]
+  title varchar(100) [not null]
+  description varchar(500) [not null]
+  is_enabled boolean [not null]
+  sort_order smallint [not null]
+  rules_version varchar(40) [not null]
+  updated_at datetime [not null]
+  Note: 'EXISTING typed catalogue DAILY_GOAL/STREAK/BIRTHDAY/CHECK_IN/DOCUMENTS. UI catalogue only; enabled cannot bypass missing qualification rules. No arbitrary scripts/rules engine or per-user copied task templates.'
+}
+
+Table QuestAward {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  kind varchar(20) [not null, note: 'BIRTHDAY / DAILY_GOAL / STREAK']
+  qualification_key varchar(120) [not null, unique]
+  dog_id bigint [ref: > Dog.id]
+  dog_id_snapshot bigint
+  dog_name_snapshot varchar(100)
+  year smallint [note: 'Birthday only, preserve existing column']
+  qualified_on date [not null]
+  qualified_at datetime [not null]
+  run_start_date date
+  milestone_days int
+  promised_points int [not null]
+  eligibility_snapshot json [not null]
+  claim_expires_at datetime
+  point_entry_id bigint [unique, ref: - PointEntry.id]
+  collected_at datetime
+  awarded_at datetime [note: 'Legacy collected timestamp retained during migration']
+  rules_version varchar(40) [not null]
+  indexes { (owner_id, collected_at) }
+  Note: 'EXISTING birthday model extended. Unique key encodes dog/year OR owner/day OR owner/run/milestone, not rule version. READY before ledger/collected. Collected amount from PointEntry; no mutable second balance. Kind-shape checks require relevant fields and forbid irrelevant ones. Never duplicate document/check-in qualifications here.'
+}
+
+Table CheckIn {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  venue_id bigint [ref: > Venue.id]
+  venue_name_snapshot varchar(100)
+  local_date date [not null]
+  category_slot varchar(16) [not null, note: 'CAFE / RESTAURANT / PARK / VET; four-slot interpretation proposed']
+  attempt_id uuid [not null]
+  radius_m int [not null]
+  center_latitude decimal(9,6)
+  center_longitude decimal(9,6)
+  required_seconds int [not null]
+  verified_seconds int [not null, default: 0]
+  last_recorded_at datetime
+  last_latitude decimal(9,6)
+  last_longitude decimal(9,6)
+  last_verified_at datetime
+  started_at datetime
+  ready_at datetime
+  expires_at datetime [not null]
+  promised_points int [not null, default: 12]
+  point_entry_id bigint [unique, ref: - PointEntry.id]
+  collected_at datetime
+  rules_version varchar(40) [not null]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+  indexes {
+    (owner_id, local_date, category_slot) [unique]
+    (owner_id, collected_at)
+  }
+  Note: 'NEW one daily opportunity/category. No venue means unavailable slot, hidden. Start fixes venue/center/category/rules. Center coordinates required on started rows and immutable for attempt. Same-day resume retains verified seconds, not GPS-gap time. Collected iff ledger+timestamp present; ready requires threshold met. Cap checked at Collect. Changing incomplete venue resets progress/attempt; collected slot never resets. State derived, not a second progress table.'
+}
+
+Table DocumentEntitlement {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  dog_id bigint [ref: > Dog.id]
+  dog_id_snapshot bigint [not null]
+  kind varchar(30) [not null]
+  entitlement_key varchar(80) [not null]
+  event_date date
+  valid_from date
+  valid_to date
+  promised_points int [not null]
+  rules_version varchar(40) [not null]
+  eligibility_status varchar(12) [not null, note: 'ELIGIBLE / ON_HOLD / REJECTED; not a review-approval gate by default']
+  eligibility_reason varchar(500)
+  point_entry_id bigint [unique, ref: - PointEntry.id]
+  collected_at datetime
+  created_at datetime [not null]
+  indexes {
+    (dog_id_snapshot, kind, entitlement_key) [unique]
+    (dog_id_snapshot, kind, event_date)
+    (owner_id, collected_at)
+  }
+  Note: 'EXISTING + future audit metadata. Submission reserves quota; ledger only on Collect. Council lifetime, microchip period non-overlap, vet two/event-year and >=60 days including adjacent years. Owner/dog locks protect non-unique cross-row rules. Dog identity uniqueness survives transfers and deletion.'
+}
+
+Table DocumentSubmission {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  dog_id bigint [ref: > Dog.id]
+  dog_id_snapshot bigint [not null]
+  dog_name_snapshot varchar(100) [not null]
+  kind varchar(30) [not null]
+  status varchar(20) [not null, note: 'SELF_REPORTED; not verification']
+  request_id uuid [not null]
+  request_fingerprint char(64) [not null]
+  entitlement_id bigint [not null, ref: > DocumentEntitlement.id]
+  registration_number varchar(100)
+  event_date date
+  valid_from date
+  valid_to date
+  file varchar(255) [note: 'Private storage key']
+  filename varchar(150)
+  file_content_type varchar(40)
+  file_sha256 char(64)
+  file_size_bytes bigint
+  awarded_points int [not null, note: 'Legacy original response receipt; new submission=0, not current wallet total']
+  response_snapshot json [not null]
+  submitted_at datetime [not null]
+  audit_status varchar(16) [not null, note: 'NOT_REVIEWED / VERIFIED / REJECTED; later spot-audit']
+  reviewed_by_id bigint [ref: > User.id]
+  reviewed_at datetime
+  review_reason varchar(500)
+  indexes {
+    (owner_id, request_id) [unique]
+    (owner_id, submitted_at)
+    (entitlement_id, submitted_at)
+  }
+  Note: 'EXISTING immutable submission version; only audit fields may change with log. Resubmit creates new version linked same entitlement. File upload/parse/date checks precede READY; filename is not trusted MIME. Review rejection requires reason. Owner/admin access; merchant never sees this file.'
+}
+
+Table EvidenceFingerprint {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  kind varchar(30) [not null]
+  fingerprint char(64) [not null]
+  dog_id_snapshot bigint [not null]
+  entitlement_id bigint [not null, ref: > DocumentEntitlement.id]
+  is_file boolean [not null]
+  indexes { (owner_id, dog_id_snapshot, kind, fingerprint) [unique] }
+  Note: 'EXISTING evidence reuse guard. Same family proof may cover multiple dogs. Keep qualification unique across owners in entitlement; this guard is owner-scoped as currently implemented, not a verified global identity registry.'
+}
+
+Table Friendship {
+  id bigint [pk, increment]
+  user_low_id bigint [not null, ref: > User.id]
+  user_high_id bigint [not null, ref: > User.id]
+  requested_by_id bigint [not null, ref: > User.id]
+  status varchar(10) [not null, note: 'PENDING / ACCEPTED / DECLINED']
+  created_at datetime [not null]
+  responded_at datetime
+  indexes {
+    (user_low_id, user_high_id) [unique]
+    (user_high_id, status)
+  }
+  Note: 'NEW. low < high, requester in pair, only recipient accepts. Reciprocal pending requests reuse pair. Delete for unfriend or limited re-request; never treat PENDING as friends. All access additionally checks directional blocks and per-user consent.'
+}
+
+Table UserBlock {
+  id bigint [pk, increment]
+  blocker_id bigint [not null, ref: > User.id]
+  blocked_id bigint [not null, ref: > User.id]
+  created_at datetime [not null]
+  indexes {
+    (blocker_id, blocked_id) [unique]
+    (blocked_id, blocker_id)
+  }
+  Note: 'NEW minimal social privacy control (proposed). No self-block. Any direction suppresses visibility/invitations/messages/matching immediately and revokes cached presence; unblock does not automatically restore friendship.'
+}
+
+Table ChatMessage {
+  id bigint [pk, increment]
+  sender_id bigint [not null, ref: > User.id]
+  recipient_id bigint [not null, ref: > User.id]
+  client_message_id uuid [not null]
+  kind varchar(10) [not null, note: 'TEXT / NUDGE']
+  body varchar(2000)
+  sent_at datetime [not null]
+  read_at datetime
+  indexes {
+    (sender_id, client_message_id) [unique]
+    (sender_id, recipient_id, sent_at)
+    (recipient_id, sender_id, sent_at)
+  }
+  Note: 'DEFERRED explicit simple-chat/nudge team-plan scope, not specified acceptance. Different users; TEXT requires bounded body; NUDGE uses fixed copy. Friend+block check both send/read; no group/thread/attachment tables. Deletion/history/abuse rate limits require agreed policy.'
+}
+
+Table Charity {
+  id bigint [pk, increment]
+  name varchar(150) [not null]
+  description text
+  website_url varchar(2048)
+  photo varchar(255)
+  is_approved boolean [not null]
+  is_active boolean [not null]
+  created_at datetime [not null]
+  Note: 'DEFERRED User Story 8. Admin-approved list; no inferred cash settlement or payment integration.'
+}
+
+Table Donation {
+  id bigint [pk, increment]
+  owner_id bigint [not null, ref: > User.id]
+  charity_id bigint [not null, ref: > Charity.id]
+  charity_name_snapshot varchar(150) [not null]
+  points int [not null]
+  request_id uuid [not null]
+  request_fingerprint char(64) [not null]
+  reference_number varchar(20) [not null, unique]
+  spend_entry_id bigint [not null, unique, ref: - PointEntry.id]
+  confirmed_at datetime [not null]
+  indexes {
+    (owner_id, request_id) [unique]
+    (owner_id, confirmed_at)
+  }
+  Note: 'DEFERRED. Positive points; only committed donations persisted. Explicit confirmation + eligible charity + spend in one transaction. History status is COMPLETED point donation, not external money transfer. Refund/cancel workflow not assumed.'
+}
+
+Table PushDevice {
+  id bigint [pk, increment]
+  user_id bigint [not null, ref: > User.id]
+  installation_id uuid [not null, unique]
+  provider varchar(16) [not null]
+  environment varchar(12) [not null, note: 'SANDBOX / PRODUCTION; APNs tokens separated by environment']
+  token varchar(512) [not null]
+  is_enabled boolean [not null]
+  updated_at datetime [not null]
+  indexes { (provider, environment, token) [unique] }
+  Note: 'DEFERRED remote push; token case-sensitive. Re-login atomically reassigns installation and detaches old owner; logout disables token. No private lock-screen content.'
+}
+
+Table NotificationDelivery {
+  id bigint [pk, increment]
+  user_id bigint [not null, ref: > User.id]
+  kind varchar(30) [not null]
+  dedupe_key varchar(120) [not null]
+  scheduled_for datetime [not null]
+  expires_at datetime [not null]
+  status varchar(12) [not null, note: 'PENDING / SENDING / SENT / FAILED / CANCELLED']
+  payload json [not null, note: 'Fixed minimal deep-link data, no document/GPS/health details']
+  attempt_count int [not null, default: 0]
+  lease_until datetime
+  sent_at datetime
+  last_error_code varchar(80)
+  created_at datetime [not null]
+  indexes {
+    (user_id, dedupe_key) [unique]
+    (status, scheduled_for)
+    (user_id, kind, sent_at)
+  }
+  Note: 'DEFERRED small DB outbox; no broker requirement. Lock/lease claim, per-user preferences/cooldown at enqueue and send. One logical notification may fan out to devices. Provider uncertainty may repeat; SENT means attempted provider acceptance, not human read or all-device exactly-once.'
+}
+
+TableGroup Identity {
+  User
+  ExternalIdentity
+  Breed
+  Dog
+}
+TableGroup PlacesAndCommerce {
+  Venue
+  Reward
+  Redemption
+  CafeOrderFeedState
+  PointEntry
+}
+TableGroup Activity {
+  Walk
+  WalkDog
+  WalkSession
+  LocationSample
+  NetWalkInterval
+}
+TableGroup Quests {
+  DogDailyGoal
+  QuestDefinition
+  QuestAward
+  CheckIn
+  DocumentEntitlement
+  DocumentSubmission
+  EvidenceFingerprint
+}
+TableGroup Social {
+  Friendship
+  UserBlock
+  ChatMessage
+}
+TableGroup LaterCapabilities {
+  Charity
+  Donation
+  PushDevice
+  NotificationDelivery
+}

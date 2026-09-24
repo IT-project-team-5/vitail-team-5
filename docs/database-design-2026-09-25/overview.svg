@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1080" viewBox="0 0 1360 1080" role="img" aria-labelledby="title desc">
+<title id="title">Vitail database design overview</title><desc id="desc">28 domain tables in six groups. 22 core tables and six deferred tables. Exact foreign keys are in schema.mmd and schema.dbml. Proposed design, not deployed.</desc>
+<rect width="100%" height="100%" fill="#f6f5f1"/>
+<g font-family="Arial,Helvetica,sans-serif">
+<text x="56" y="53" font-size="14" fill="#64726b" letter-spacing="2">VITAIL / DATA DESIGN</text>
+<text x="56" y="105" font-size="36" fill="#263833" font-weight="700">Complete coverage. Small, explicit models.</text>
+<text x="56" y="141" font-size="18" fill="#64726b" >22 core tables + 6 deferred  /  37 Jira items reviewed  /  25 September 2026</text>
+<rect x="56" y="186" width="390" height="342" rx="16" fill="white" stroke="#d9ddd5"/>
+<rect x="56" y="186" width="390" height="8" rx="4" fill="#256b68"/>
+<text x="78" y="222" font-size="12" fill="#256b68" letter-spacing="1.7" font-weight="700">IDENTITY</text>
+<text x="78" y="254" font-size="24" fill="#263833" font-weight="700">People &amp; dogs</text>
+<text x="78" y="290" font-size="17" fill="#263833" >User</text>
+<text x="78" y="317" font-size="17" fill="#263833" >Breed</text>
+<text x="78" y="344" font-size="17" fill="#263833" >Dog</text>
+<text x="78" y="371" font-size="17" fill="#263833" >ExternalIdentity</text>
+<text x="424" y="371" font-size="10" fill="#777" text-anchor="end" letter-spacing="1">LATER</text>
+<text x="78" y="506" font-size="13" fill="#6f786f" >Photos / birthday / microchip / consent</text>
+<rect x="486" y="186" width="390" height="342" rx="16" fill="white" stroke="#d9ddd5"/>
+<rect x="486" y="186" width="390" height="8" rx="4" fill="#956122"/>
+<text x="508" y="222" font-size="12" fill="#956122" letter-spacing="1.7" font-weight="700">COMMERCE</text>
+<text x="508" y="254" font-size="24" fill="#263833" font-weight="700">Places &amp; points</text>
+<text x="508" y="290" font-size="17" fill="#263833" >Venue</text>
+<text x="508" y="317" font-size="17" fill="#263833" >Reward</text>
+<text x="508" y="344" font-size="17" fill="#263833" >Redemption</text>
+<text x="508" y="371" font-size="17" fill="#263833" >PointEntry</text>
+<text x="508" y="398" font-size="17" fill="#263833" >CafeOrderFeedState</text>
+<text x="508" y="506" font-size="13" fill="#6f786f" >One wallet ledger. One order model.</text>
+<rect x="916" y="186" width="390" height="342" rx="16" fill="white" stroke="#d9ddd5"/>
+<rect x="916" y="186" width="390" height="8" rx="4" fill="#3c659b"/>
+<text x="938" y="222" font-size="12" fill="#3c659b" letter-spacing="1.7" font-weight="700">ACTIVITY</text>
+<text x="938" y="254" font-size="24" fill="#263833" font-weight="700">Walks &amp; verification</text>
+<text x="938" y="290" font-size="17" fill="#263833" >Walk</text>
+<text x="938" y="317" font-size="17" fill="#263833" >WalkDog</text>
+<text x="938" y="344" font-size="17" fill="#263833" >WalkSession</text>
+<text x="938" y="371" font-size="17" fill="#263833" >LocationSample</text>
+<text x="938" y="398" font-size="17" fill="#263833" >NetWalkInterval</text>
+<text x="938" y="506" font-size="13" fill="#6f786f" >Summary history + short-lived GPS evidence</text>
+<rect x="56" y="568" width="390" height="342" rx="16" fill="white" stroke="#d9ddd5"/>
+<rect x="56" y="568" width="390" height="8" rx="4" fill="#795f92"/>
+<text x="78" y="604" font-size="12" fill="#795f92" letter-spacing="1.7" font-weight="700">QUESTS</text>
+<text x="78" y="636" font-size="24" fill="#263833" font-weight="700">Goals &amp; collection</text>
+<text x="78" y="672" font-size="17" fill="#263833" >DogDailyGoal</text>
+<text x="78" y="699" font-size="17" fill="#263833" >QuestDefinition</text>
+<text x="78" y="726" font-size="17" fill="#263833" >QuestAward</text>
+<text x="78" y="753" font-size="17" fill="#263833" >CheckIn</text>
+<text x="78" y="780" font-size="17" fill="#263833" >DocumentEntitlement</text>
+<text x="78" y="807" font-size="17" fill="#263833" >DocumentSubmission</text>
+<text x="78" y="834" font-size="17" fill="#263833" >EvidenceFingerprint</text>
+<text x="78" y="888" font-size="13" fill="#6f786f" >Eligibility and collection are distinct.</text>
+<rect x="486" y="568" width="390" height="342" rx="16" fill="white" stroke="#d9ddd5"/>
+<rect x="486" y="568" width="390" height="8" rx="4" fill="#477c53"/>
+<text x="508" y="604" font-size="12" fill="#477c53" letter-spacing="1.7" font-weight="700">SOCIAL</text>
+<text x="508" y="636" font-size="24" fill="#263833" font-weight="700">Friends &amp; live map</text>
+<text x="508" y="672" font-size="17" fill="#263833" >Friendship</text>
+<text x="508" y="699" font-size="17" fill="#263833" >UserBlock</text>
+<text x="508" y="726" font-size="17" fill="#263833" >ChatMessage</text>
+<text x="854" y="726" font-size="10" fill="#777" text-anchor="end" letter-spacing="1">LATER</text>
+<text x="508" y="888" font-size="13" fill="#6f786f" >Leaderboard is a query, not a table.</text>
+<rect x="916" y="568" width="390" height="342" rx="16" fill="white" stroke="#d9ddd5"/>
+<rect x="916" y="568" width="390" height="8" rx="4" fill="#74747c"/>
+<text x="938" y="604" font-size="12" fill="#74747c" letter-spacing="1.7" font-weight="700">LATER</text>
+<text x="938" y="636" font-size="24" fill="#263833" font-weight="700">Donations &amp; notifications</text>
+<text x="938" y="672" font-size="17" fill="#263833" >Charity</text>
+<text x="1284" y="672" font-size="10" fill="#777" text-anchor="end" letter-spacing="1">LATER</text>
+<text x="938" y="699" font-size="17" fill="#263833" >Donation</text>
+<text x="1284" y="699" font-size="10" fill="#777" text-anchor="end" letter-spacing="1">LATER</text>
+<text x="938" y="726" font-size="17" fill="#263833" >PushDevice</text>
+<text x="1284" y="726" font-size="10" fill="#777" text-anchor="end" letter-spacing="1">LATER</text>
+<text x="938" y="753" font-size="17" fill="#263833" >NotificationDelivery</text>
+<text x="1284" y="753" font-size="10" fill="#777" text-anchor="end" letter-spacing="1">LATER</text>
+<text x="938" y="888" font-size="13" fill="#6f786f" >Add with their feature. No payments.</text>
+<text x="56" y="967" font-size="16" fill="#263833" font-weight="700">Key relationships</text>
+<text x="56" y="997" font-size="16" fill="#263833" >User → Dog / Walk / Friendship     Venue → Reward → Redemption     Qualification → PointEntry</text>
+<text x="56" y="1038" font-size="14" fill="#69786f" >Overview only · Exact FK cardinalities and constraints: schema.mmd / schema.dbml · Design proposal, not a migration</text>
+</g></svg>
