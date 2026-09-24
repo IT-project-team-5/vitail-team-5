@@ -6,6 +6,19 @@ import XCTest
 
 @MainActor
 final class QuestTests: XCTestCase {
+    func testTaskListDecodesWithoutLegacyDashboardProjectionsOrUnusedPresentationFields() throws {
+        let data = Data(QuestFixture.json.utf8)
+        var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        payload.removeValue(forKey: "next_reset_at")
+        var tasks = try XCTUnwrap(payload["tasks"] as? [[String: Any]])
+        for index in tasks.indices { tasks[index].removeValue(forKey: "subtitle") }
+        payload["tasks"] = tasks
+        let snapshot = try JSONDecoder().decode(QuestSnapshot.self, from: JSONSerialization.data(withJSONObject: payload))
+        XCTAssertEqual(snapshot.tasks.count, 4)
+        XCTAssertEqual(snapshot.tasks.first?.subjectName, "Milo")
+        XCTAssertEqual(snapshot.localDate, "2026-09-25")
+    }
+
     func testTaskDecodingPreservesUnknownStatusWithoutShowingUnavailableRows() async throws {
         let session = await makeSession()
         let unknown = try JSONDecoder().decode(QuestTaskStatus.self, from: Data(#""FUTURE_STATE""#.utf8))
@@ -30,7 +43,7 @@ final class QuestTests: XCTestCase {
         let store = QuestStore(ownerID: 1, session: session, service: service, now: { clock })
         await store.refresh()
         XCTAssertEqual(store.collectedTodayTasks.count, 1)
-        await store.collectBirthday(dogID: 7)
+        await store.collect(taskID: "birthday:7:2026")
         XCTAssertEqual(store.collectedTodayTasks.count, 2)
         clock = clock.addingTimeInterval(61)
         XCTAssertTrue(store.collectedTodayTasks.isEmpty)
@@ -68,7 +81,7 @@ final class QuestTests: XCTestCase {
         await service.failNextFetch()
         var balances: [Int] = []
         store.onAward = { balances.append($0.balance) }
-        let first = Task { await store.collectBirthday(dogID: 7) }
+        let first = Task { await store.collect(taskID: "birthday:7:2026") }
         await service.waitForClaim()
         await store.collect(taskID: "birthday:7:2026")
         await store.collect(taskID: "document:10")
@@ -80,7 +93,7 @@ final class QuestTests: XCTestCase {
         XCTAssertNotNil(store.errorMessage)
         let calls = await service.calls
         XCTAssertEqual(calls, ["birthday:7"])
-        await store.collectBirthday(dogID: 7)
+        await store.collect(taskID: "birthday:7:2026")
         let laterCalls = await service.calls
         XCTAssertEqual(laterCalls, calls)
     }
@@ -91,11 +104,12 @@ final class QuestTests: XCTestCase {
         let store = QuestStore(ownerID: 1, session: session, service: service)
         await store.refresh()
         await service.failNextFetch()
-        var balance: Int?
-        store.onAward = { balance = $0.balance }
+        var awards: [QuestAwardReceipt] = []
+        store.onAward = { awards.append($0) }
         await store.collect(taskID: "document:10")
-        XCTAssertEqual(store.lastAward?.points, 300)
-        XCTAssertEqual(balance, 420)
+        XCTAssertEqual(awards.count, 1)
+        XCTAssertEqual(awards.first?.points, 300)
+        XCTAssertEqual(awards.first?.balance, 420)
         XCTAssertEqual(store.task(id: "document:10")?.status, .collected)
         await store.refresh()
         XCTAssertEqual(store.task(id: "document:10")?.status, .collected)
@@ -110,7 +124,7 @@ final class QuestTests: XCTestCase {
     func testConfirmedEntitlementSuppressesStaleUploadRowWithoutSuppressingOtherReadyEntitlements() async {
         let session = await makeSession()
         let staleUpload = QuestTask(id: "document:7:COUNCIL_REGISTRATION", kind: "COUNCIL_REGISTRATION", status: .inProgress,
-                                   title: "Council registration", subtitle: "Milo", subjectName: "Milo", photo: nil,
+                                   title: "Council registration", subjectName: "Milo", photo: nil,
                                    icon: "doc.text", detail: "Add evidence", rewardPoints: 300, progress: nil,
                                    dogID: 7, entitlementID: nil, collectedAt: nil)
         let service = QuestFixture(tasks: QuestFixture.tasks + [staleUpload])
@@ -127,39 +141,41 @@ final class QuestTests: XCTestCase {
         let service = QuestFixture()
         let store = QuestStore(ownerID: 1, session: session, service: service)
         await store.refresh()
+        var awards: [QuestAwardReceipt] = []
+        store.onAward = { awards.append($0) }
         await service.failNextClaim()
         await store.collect(taskID: "document:10")
-        XCTAssertNil(store.lastAward)
+        XCTAssertTrue(awards.isEmpty)
         XCTAssertNil(store.confirmedCollections["document:10"])
         XCTAssertEqual(store.task(id: "document:10")?.status, .ready)
         await store.collect(taskID: "document:10")
-        XCTAssertEqual(store.lastAward?.created, false)
-        XCTAssertEqual(store.lastAward?.balance, 420)
+        XCTAssertEqual(awards.count, 1)
+        XCTAssertEqual(awards.first?.created, false)
+        XCTAssertEqual(awards.first?.balance, 420)
         let calls = await service.calls
         XCTAssertEqual(calls, ["document:10", "document:10"])
     }
 
     func testInvalidDocumentReceiptDoesNotConfirmOrRefreshWallet() async {
-        let cases: [(Int, String, Int, Int, Int, String)] = [
-            (99, "COUNCIL_REGISTRATION", 7, 300, 420, QuestFixture.timestamp),
-            (10, "VET_CHECKUP", 7, 300, 420, QuestFixture.timestamp),
-            (10, "COUNCIL_REGISTRATION", 8, 300, 420, QuestFixture.timestamp),
-            (10, "COUNCIL_REGISTRATION", 7, 0, 420, QuestFixture.timestamp),
-            (10, "COUNCIL_REGISTRATION", 7, 300, -1, QuestFixture.timestamp),
-            (10, "COUNCIL_REGISTRATION", 7, 300, 420, "invalid date")
+        let cases: [(Int, DocumentKind, Int, Int, Int, String)] = [
+            (99, .council, 7, 300, 420, QuestFixture.timestamp),
+            (10, .vet, 7, 300, 420, QuestFixture.timestamp),
+            (10, .council, 8, 300, 420, QuestFixture.timestamp),
+            (10, .council, 7, 0, 420, QuestFixture.timestamp),
+            (10, .council, 7, 300, -1, QuestFixture.timestamp),
+            (10, .council, 7, 300, 420, "invalid date")
         ]
         for (id, kind, dog, points, balance, collectedAt) in cases {
             let session = await makeSession()
             let service = QuestFixture()
             let store = QuestStore(ownerID: 1, session: session, service: service)
             await store.refresh()
-            await service.overrideDocument(QuestDocumentCollection(entitlementID: id, kind: kind, dogID: dog, points: points,
+            await service.overrideDocument(DocumentCollectionReceipt(entitlementID: id, kind: kind, dogID: dog, points: points,
                                                                    balance: balance, collectedAt: collectedAt, created: true))
             var callbacks = 0
             store.onAward = { _ in callbacks += 1 }
             await store.collect(taskID: "document:10")
             XCTAssertEqual(callbacks, 0)
-            XCTAssertNil(store.lastAward)
             XCTAssertNil(store.confirmedCollections["document:10"])
             XCTAssertNotNil(store.errorMessage)
         }
@@ -175,8 +191,10 @@ final class QuestTests: XCTestCase {
             await service.overrideBirthday(BirthdayCollectResponse(
                 award: BirthdayAward(id: 4, kind: kind, dogID: dog, year: year, points: points, awardedAt: QuestFixture.timestamp),
                 balance: 180, created: true))
-            await store.collectBirthday(dogID: 7)
-            XCTAssertNil(store.lastAward)
+            var callbacks = 0
+            store.onAward = { _ in callbacks += 1 }
+            await store.collect(taskID: "birthday:7:2026")
+            XCTAssertEqual(callbacks, 0)
             XCTAssertNil(store.confirmedCollections["birthday:7:2026"])
             XCTAssertNotNil(store.errorMessage)
         }
@@ -196,7 +214,7 @@ final class QuestTests: XCTestCase {
         await service.releaseClaim()
         await claim.value
         XCTAssertNil(store.snapshot)
-        XCTAssertNil(store.lastAward)
+        XCTAssertTrue(store.confirmedCollections.isEmpty)
         XCTAssertTrue(store.visibleTasks.isEmpty)
         XCTAssertEqual(callbacks, 0)
     }
@@ -249,6 +267,7 @@ final class QuestTests: XCTestCase {
         XCTAssertEqual(dashboard.tasks.count, 4)
         XCTAssertEqual(birthday.balance, 180)
         XCTAssertEqual(document.balance, 420)
+        XCTAssertEqual(document.kind, .council)
     }
 
     func testCompactRowsAndDetailsAppearanceSnapshots() async throws {
@@ -308,7 +327,7 @@ private actor QuestFixture: QuestServing {
     private var serverTime: String
     private var failFetch = false, failClaim = false, pauseFetch = false, pauseClaim = false
     private var birthdayOverride: BirthdayCollectResponse?
-    private var documentOverride: QuestDocumentCollection?
+    private var documentOverride: DocumentCollectionReceipt?
     private var fetchContinuation: CheckedContinuation<Void, Never>?, claimContinuation: CheckedContinuation<Void, Never>?
     private var fetchStarted: CheckedContinuation<Void, Never>?, claimStarted: CheckedContinuation<Void, Never>?
     init(tasks: [QuestTask] = QuestFixture.tasks, serverTime: String = QuestFixture.timestamp) {
@@ -319,7 +338,7 @@ private actor QuestFixture: QuestServing {
         if pauseFetch { await withCheckedContinuation { fetchContinuation = $0; fetchStarted?.resume(); fetchStarted = nil } }
         if failFetch { failFetch = false; throw APIError.network("Connection interrupted") }
         return QuestSnapshot(serverTime: serverTime, timezone: "Australia/Melbourne", localDate: QuestCalendar.dateString(QuestCalendar.parse(serverTime)!),
-                             nextResetAt: "2026-09-25T14:00:00Z", tasks: tasksValue)
+                             tasks: tasksValue)
     }
     func collectBirthday(dogID: Int) async throws -> BirthdayCollectResponse {
         calls.append("birthday:\(dogID)"); try await claimGate()
@@ -327,10 +346,10 @@ private actor QuestFixture: QuestServing {
         return BirthdayCollectResponse(award: BirthdayAward(id: 4, kind: "BIRTHDAY", dogID: dogID, year: 2026, points: 60, awardedAt: Self.timestamp),
                                        balance: 180, created: calls.count == 1)
     }
-    func collectDocument(entitlementID: Int) async throws -> QuestDocumentCollection {
+    func collectDocument(entitlementID: Int) async throws -> DocumentCollectionReceipt {
         calls.append("document:\(entitlementID)"); try await claimGate()
         if let documentOverride { return documentOverride }
-        return QuestDocumentCollection(entitlementID: entitlementID, kind: "COUNCIL_REGISTRATION", dogID: 7, points: 300,
+        return DocumentCollectionReceipt(entitlementID: entitlementID, kind: .council, dogID: 7, points: 300,
                                        balance: 420, collectedAt: Self.timestamp, created: calls.count == 1)
     }
     private func claimGate() async throws {
@@ -342,7 +361,7 @@ private actor QuestFixture: QuestServing {
     func failNextFetch() { failFetch = true }
     func failNextClaim() { failClaim = true }
     func overrideBirthday(_ value: BirthdayCollectResponse) { birthdayOverride = value }
-    func overrideDocument(_ value: QuestDocumentCollection) { documentOverride = value }
+    func overrideDocument(_ value: DocumentCollectionReceipt) { documentOverride = value }
     func suspendFetch() { pauseFetch = true }
     func suspendClaim() { pauseClaim = true }
     func waitForFetch() async { if fetchContinuation != nil { return }; await withCheckedContinuation { fetchStarted = $0 } }
@@ -351,7 +370,7 @@ private actor QuestFixture: QuestServing {
     func releaseClaim() { pauseClaim = false; claimContinuation?.resume(); claimContinuation = nil }
     nonisolated static let timestamp = "2026-09-25T01:00:00Z"
     nonisolated static func task(id: String, kind: String = "VET_CHECKUP", status: QuestTaskStatus = .inProgress, collectedAt: String? = nil) -> QuestTask {
-        QuestTask(id: id, kind: kind, status: status, title: "Vet check-up", subtitle: "Add a document", subjectName: "Luna",
+        QuestTask(id: id, kind: kind, status: status, title: "Vet check-up", subjectName: "Luna",
                   photo: nil, icon: "doc.text", detail: "Add a photo of the visit evidence.", rewardPoints: 200, progress: nil,
                   dogID: 8, entitlementID: nil, collectedAt: collectedAt)
     }

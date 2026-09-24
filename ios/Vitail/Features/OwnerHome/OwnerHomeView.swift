@@ -41,7 +41,6 @@ struct OwnerHomeView: View {
     let user: User
     @ObservedObject var session: SessionStore
     let dogService: any DogServicing
-    let walkService: any WalkServing
     let documentService: (any DocumentServing)?
     @StateObject private var redemptionViewModel: RedemptionViewModel
     @StateObject private var walkCoordinator: WalkSessionCoordinator
@@ -72,7 +71,6 @@ struct OwnerHomeView: View {
         self.user = user
         self.session = session
         self.dogService = dogService
-        self.walkService = walkService
         self.documentService = documentService
         _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
         _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
@@ -92,9 +90,7 @@ struct OwnerHomeView: View {
                     OwnerProfileView(user: user, session: session, dogService: dogService)
                         .id(accountRefreshID)
                         .tag(Page.account)
-                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns) {
-                        selection = .account
-                    }
+                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns)
                     .tag(Page.walk)
                     QuestView(store: questStore, checkIns: checkIns,
                               onOpenDocuments: documentService != nil

@@ -69,10 +69,6 @@ final class WalkSessionTracker: ObservableObject {
         status == .idle || status == .finished
     }
 
-    var canPauseOrResume: Bool {
-        status == .walking || status == .paused
-    }
-
     var isInProgress: Bool {
         status == .walking || status == .paused
     }
@@ -382,7 +378,6 @@ private struct WalkDrawerControlsHeightKey: PreferenceKey {
 
 struct WalkMapView: View {
     let isActive: Bool
-    let onManageDogs: () -> Void
 
     @ObservedObject private var coordinator: WalkSessionCoordinator
     @ObservedObject private var locationManager: WalkLocationManager
@@ -406,12 +401,10 @@ struct WalkMapView: View {
     init(
         coordinator: WalkSessionCoordinator, isActive: Bool,
         initialDrawerDetent: WalkDrawerDetent = .collapsed,
-        checkIns: CheckInProgressStore? = nil,
-        onManageDogs: @escaping () -> Void
+        checkIns: CheckInProgressStore? = nil
     ) {
         _drawerDetent = State(initialValue: initialDrawerDetent)
         self.isActive = isActive
-        self.onManageDogs = onManageDogs
         self.coordinator = coordinator
         locationManager = coordinator.locationManager
         walkTracker = coordinator.tracker
@@ -551,7 +544,7 @@ struct WalkMapView: View {
         VStack(spacing: 0) {
             WalkDogSelectionCard(
                 selection: dogSelection, session: walkTracker, location: locationManager.location,
-                canStartNewWalk: coordinator.canStartNewWalk, onManageDogs: onManageDogs,
+                canStartNewWalk: coordinator.canStartNewWalk,
                 onReviewFinish: {
                     if coordinator.finishSummary != nil { coordinator.isFinishPresented = true }
                     else { coordinator.retryStorage(); drawerDetent = .expanded }

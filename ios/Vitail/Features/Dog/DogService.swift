@@ -7,7 +7,6 @@ protocol DogServicing: Sendable {
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog
     func uploadPhoto(dogID: Int, data: Data) async throws -> Dog
     func deleteDog(id: Int) async throws
-    func getGoal(dogID: Int) async throws -> DogGoal
 }
 
 extension DogServicing {
@@ -43,9 +42,5 @@ actor DogService: DogServicing {
 
     func deleteDog(id: Int) async throws {
         try await apiClient.delete("/api/dogs/\(id)")
-    }
-
-    func getGoal(dogID: Int) async throws -> DogGoal {
-        try await apiClient.get("/api/dogs/\(dogID)/goal")
     }
 }

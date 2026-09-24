@@ -72,7 +72,7 @@ final class BrandAppearanceTests: XCTestCase {
                         Spacer()
                         Text("40 pts").foregroundStyle(AppColors.brand)
                     }
-                    WalkDogSelectionCard(selection: selection, session: tracker, location: first, onManageDogs: {})
+                    WalkDogSelectionCard(selection: selection, session: tracker, location: first)
                     Text("Walk History").font(.headline)
                     WalkHistoryCard(walk: history)
                     PrimaryButton(title: "Continue") {}

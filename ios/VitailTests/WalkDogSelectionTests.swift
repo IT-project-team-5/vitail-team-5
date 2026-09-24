@@ -570,8 +570,7 @@ final class WalkDogSelectionTests: XCTestCase {
         let content = WalkDogSelectionCard(
             selection: selection,
             session: session,
-            location: location,
-            onManageDogs: {}
+            location: location
         )
         .padding(16)
         .frame(width: width)
@@ -699,5 +698,4 @@ private actor WalkDogServiceStub: DogServicing {
     func createDog(_ request: DogWriteRequest) async throws -> Dog { throw StubError.unexpectedRequest }
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw StubError.unexpectedRequest }
     func deleteDog(id: Int) async throws { throw StubError.unexpectedRequest }
-    func getGoal(dogID: Int) async throws -> DogGoal { throw StubError.unexpectedRequest }
 }

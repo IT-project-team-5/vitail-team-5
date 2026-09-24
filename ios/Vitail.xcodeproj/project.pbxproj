@@ -47,9 +47,6 @@
 		000000000000000000000024 /* APIIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* APIIntegrationTests.swift */; };
 		000000000000000000000025 /* WalkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000025 /* WalkModels.swift */; };
 		000000000000000000000026 /* WalkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000026 /* WalkService.swift */; };
-		000000000000000000000027 /* WalkRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000027 /* WalkRecorder.swift */; };
-		000000000000000000000028 /* WalkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000028 /* WalkViewModel.swift */; };
-		000000000000000000000029 /* WalkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000029 /* WalkView.swift */; };
 		00000000000000000000002A /* WalkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002A /* WalkTests.swift */; };
 		00000000000000000000002B /* CafeProfileModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002B /* CafeProfileModels.swift */; };
 		00000000000000000000002C /* CafeProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002C /* CafeProfileService.swift */; };
@@ -157,9 +154,6 @@
 		100000000000000000000024 /* APIIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIIntegrationTests.swift; sourceTree = "<group>"; };
 		100000000000000000000025 /* WalkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkModels.swift; sourceTree = "<group>"; };
 		100000000000000000000026 /* WalkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkService.swift; sourceTree = "<group>"; };
-		100000000000000000000027 /* WalkRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkRecorder.swift; sourceTree = "<group>"; };
-		100000000000000000000028 /* WalkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkViewModel.swift; sourceTree = "<group>"; };
-		100000000000000000000029 /* WalkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkView.swift; sourceTree = "<group>"; };
 		10000000000000000000002A /* WalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTests.swift; sourceTree = "<group>"; };
 		10000000000000000000002B /* CafeProfileModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileModels.swift; sourceTree = "<group>"; };
 		10000000000000000000002C /* CafeProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileService.swift; sourceTree = "<group>"; };
@@ -451,9 +445,6 @@
 		212000000000000000000001 /* Walk */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000029 /* WalkView.swift */,
-				100000000000000000000028 /* WalkViewModel.swift */,
-				100000000000000000000027 /* WalkRecorder.swift */,
 				100000000000000000000026 /* WalkService.swift */,
 				100000000000000000000025 /* WalkModels.swift */,
 			);
@@ -641,9 +632,6 @@
 				00000000000000000000002D /* CafeProfileViewModel.swift in Sources */,
 				00000000000000000000002C /* CafeProfileService.swift in Sources */,
 				00000000000000000000002B /* CafeProfileModels.swift in Sources */,
-				000000000000000000000029 /* WalkView.swift in Sources */,
-				000000000000000000000028 /* WalkViewModel.swift in Sources */,
-				000000000000000000000027 /* WalkRecorder.swift in Sources */,
 				000000000000000000000026 /* WalkService.swift in Sources */,
 				000000000000000000000025 /* WalkModels.swift in Sources */,
 				000000000000000000000020 /* RedemptionView.swift in Sources */,

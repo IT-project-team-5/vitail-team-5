@@ -17,7 +17,7 @@ struct RedemptionView: View {
                     if let balance = viewModel.balance {
                         Text(CoffeeEstimate.text(for: balance))
                             .font(.caption).foregroundStyle(AppColors.secondaryText)
-                            .accessibilityHint("Estimate based on 60 points per cup. Menu prices vary.")
+                            .accessibilityHint(CoffeeEstimate.accessibilityHint)
                     }
                 }
                 .padding(.vertical, 12)

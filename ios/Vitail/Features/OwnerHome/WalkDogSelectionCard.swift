@@ -7,7 +7,6 @@ struct WalkDogSelectionCard: View {
     @ObservedObject var session: WalkSessionTracker
     let location: CLLocation?
     let canStartNewWalk: Bool
-    let onManageDogs: () -> Void
     var onReviewFinish: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .title2) private var controlDiameter: CGFloat = 72
@@ -17,14 +16,12 @@ struct WalkDogSelectionCard: View {
         session: WalkSessionTracker,
         location: CLLocation? = nil,
         canStartNewWalk: Bool = true,
-        onManageDogs: @escaping () -> Void,
         onReviewFinish: @escaping () -> Void = {}
     ) {
         self.selection = selection
         self.session = session
         self.location = location
         self.canStartNewWalk = canStartNewWalk
-        self.onManageDogs = onManageDogs
         self.onReviewFinish = onReviewFinish
     }
 

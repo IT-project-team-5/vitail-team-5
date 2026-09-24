@@ -3,7 +3,7 @@ import Foundation
 protocol QuestServing: Sendable {
     func fetchQuests() async throws -> QuestSnapshot
     func collectBirthday(dogID: Int) async throws -> BirthdayCollectResponse
-    func collectDocument(entitlementID: Int) async throws -> QuestDocumentCollection
+    func collectDocument(entitlementID: Int) async throws -> DocumentCollectionReceipt
 }
 
 actor QuestService: QuestServing {
@@ -21,7 +21,7 @@ actor QuestService: QuestServing {
         try await apiClient.get("/api/quests/")
     }
 
-    func collectDocument(entitlementID: Int) async throws -> QuestDocumentCollection {
+    func collectDocument(entitlementID: Int) async throws -> DocumentCollectionReceipt {
         try await apiClient.post("/api/quests/documents/entitlements/\(entitlementID)/collect/", body: EmptyRequestBody())
     }
 }

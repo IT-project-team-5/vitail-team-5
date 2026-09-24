@@ -537,7 +537,7 @@ final class WalkSessionCoordinatorTests: XCTestCase {
         detent: WalkDrawerDetent = .collapsed, scrollDown: Bool = false, largeText: Bool = false
     ) async throws {
         let content = NavigationStack {
-            WalkMapView(coordinator: coordinator, isActive: false, initialDrawerDetent: detent, onManageDogs: {})
+            WalkMapView(coordinator: coordinator, isActive: false, initialDrawerDetent: detent)
                 .navigationTitle("Vitail")
                 .navigationBarTitleDisplayMode(.inline)
         }
@@ -789,5 +789,4 @@ private actor CoordinatorDogServiceStub: DogServicing {
     func createDog(_ request: DogWriteRequest) async throws -> Dog { throw CoordinatorStorageFailure.unavailable }
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw CoordinatorStorageFailure.unavailable }
     func deleteDog(id: Int) async throws { throw CoordinatorStorageFailure.unavailable }
-    func getGoal(dogID: Int) async throws -> DogGoal { throw CoordinatorStorageFailure.unavailable }
 }

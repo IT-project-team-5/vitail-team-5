@@ -17,11 +17,10 @@ struct QuestSnapshot: Decodable, Equatable, Sendable {
     let serverTime: String
     let timezone: String
     let localDate: String
-    let nextResetAt: String
     let tasks: [QuestTask]
     enum CodingKeys: String, CodingKey {
         case timezone, tasks
-        case serverTime = "server_time", localDate = "local_date", nextResetAt = "next_reset_at"
+        case serverTime = "server_time", localDate = "local_date"
     }
 }
 
@@ -30,7 +29,6 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
     let kind: String
     var status: QuestTaskStatus
     let title: String
-    let subtitle: String
     let subjectName: String
     let photo: String?
     let icon: String
@@ -64,7 +62,7 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
         return copy
     }
     enum CodingKeys: String, CodingKey {
-        case id, kind, status, title, subtitle, photo, icon, detail, progress
+        case id, kind, status, title, photo, icon, detail, progress
         case subjectName = "subject_name", rewardPoints = "reward_points"
         case dogID = "dog_id", entitlementID = "entitlement_id", collectedAt = "collected_at"
     }
@@ -87,20 +85,6 @@ struct BirthdayCollectResponse: Decodable, Equatable, Sendable {
     let award: BirthdayAward
     let balance: Int
     let created: Bool
-}
-
-struct QuestDocumentCollection: Decodable, Equatable, Sendable {
-    let entitlementID: Int
-    let kind: String
-    let dogID: Int
-    let points: Int
-    let balance: Int
-    let collectedAt: String
-    let created: Bool
-    enum CodingKeys: String, CodingKey {
-        case kind, points, balance, created
-        case entitlementID = "entitlement_id", dogID = "dog_id", collectedAt = "collected_at"
-    }
 }
 
 struct QuestAwardReceipt: Equatable, Sendable {

@@ -102,49 +102,6 @@ final class DogModelsTests: XCTestCase {
         XCTAssertNil(DogBirthday.ageMonths(birthday: "2026-09-26", on: today))
     }
 
-    func testPendingGoalDecodesWithoutInventedDuration() throws {
-        let json = #"""
-        {
-          "dog_id": 7,
-          "status": "RULES_PENDING",
-          "recommended_duration_minutes": null,
-          "factors": {
-            "breed_energy_level": "HIGH",
-            "age_months": 24,
-            "size": "MEDIUM",
-            "is_brachycephalic": false
-          },
-          "unresolved_requirements": ["Base duration by breed energy level"]
-        }
-        """#.data(using: .utf8)!
-
-        let goal = try JSONDecoder().decode(DogGoal.self, from: json)
-        XCTAssertEqual(goal.status, "RULES_PENDING")
-        XCTAssertNil(goal.recommendedDurationMinutes)
-    }
-
-    func testDogAgeInputUsesZeroThroughElevenMonths() {
-        XCTAssertEqual(DogAgeInput.monthOptions, Array(0...11))
-    }
-
-    func testDogAgeInputRoundTripsBackendValuesIncludingZero() throws {
-        for storedAge in [0, 1, 11, 12, 13, 36, 38, 119] {
-            let age = DogAgeInput.formValues(forAgeMonths: storedAge)
-            let reconstructedAge = try XCTUnwrap(
-                DogAgeInput.totalMonths(years: age.years, months: age.months)
-            )
-
-            XCTAssertEqual(reconstructedAge, storedAge)
-        }
-    }
-
-    func testDogAgeInputRejectsInvalidAndOverflowingValues() {
-        XCTAssertNil(DogAgeInput.totalMonths(years: -1, months: 0))
-        XCTAssertNil(DogAgeInput.totalMonths(years: 0, months: -1))
-        XCTAssertNil(DogAgeInput.totalMonths(years: 0, months: 12))
-        XCTAssertNil(DogAgeInput.totalMonths(years: Int.max, months: 0))
-    }
-
     @MainActor
     func testTenDogLimitIsPreservedAfterServiceIntegration() async {
         let service = DogLimitService()
@@ -186,5 +143,4 @@ private actor DogLimitService: DogServicing {
     }
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
     func deleteDog(id: Int) async throws {}
-    func getGoal(dogID: Int) async throws -> DogGoal { throw APIError.invalidResponse }
 }

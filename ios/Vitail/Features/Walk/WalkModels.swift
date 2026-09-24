@@ -1,5 +1,4 @@
 import Foundation
-import CoreLocation
 
 struct WalkSample: Codable, Equatable, Sendable {
     let latitude: Double
@@ -15,10 +14,6 @@ struct WalkSample: Codable, Equatable, Sendable {
         case accuracyM = "accuracy_m"
         case isSimulated = "is_simulated"
         case segmentID = "segment_id"
-    }
-
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }
 
@@ -66,10 +61,4 @@ enum WalkTimestamp {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
     }
-}
-
-struct WalkCapture {
-    let startedAt: Date
-    let endedAt: Date
-    let samples: [WalkSample]
 }

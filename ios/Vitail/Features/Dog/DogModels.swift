@@ -15,25 +15,6 @@ enum DogSize: String, Codable, CaseIterable, Identifiable, Sendable {
     var label: String { rawValue.capitalized }
 }
 
-enum DogAgeInput {
-    static let monthOptions = Array(0...11)
-
-    static func formValues(forAgeMonths ageMonths: Int) -> (years: Int, months: Int) {
-        let normalizedAge = max(ageMonths, 0)
-        return (
-            years: normalizedAge / 12,
-            months: normalizedAge % 12
-        )
-    }
-
-    static func totalMonths(years: Int, months: Int) -> Int? {
-        guard years >= 0, monthOptions.contains(months) else { return nil }
-        let (yearMonths, yearOverflow) = years.multipliedReportingOverflow(by: 12)
-        let (totalMonths, totalOverflow) = yearMonths.addingReportingOverflow(months)
-        return yearOverflow || totalOverflow ? nil : totalMonths
-    }
-}
-
 enum DogBirthday {
     // Date-only values use the product's calendar, not the device's time zone.
     static let timeZone = TimeZone(identifier: "Australia/Melbourne")!
@@ -153,34 +134,5 @@ struct DogWriteRequest: Encodable, Sendable {
         case ageMonths = "age_months"
         case dateOfBirth = "date_of_birth"
         case isBrachycephalic = "is_brachycephalic"
-    }
-}
-
-struct DogGoal: Decodable, Sendable {
-    struct Factors: Decodable, Sendable {
-        let breedEnergyLevel: BreedEnergyLevel
-        let ageMonths: Int
-        let size: DogSize
-        let isBrachycephalic: Bool
-
-        enum CodingKeys: String, CodingKey {
-            case size
-            case breedEnergyLevel = "breed_energy_level"
-            case ageMonths = "age_months"
-            case isBrachycephalic = "is_brachycephalic"
-        }
-    }
-
-    let dogID: Int
-    let status: String
-    let recommendedDurationMinutes: Int?
-    let factors: Factors
-    let unresolvedRequirements: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case status, factors
-        case dogID = "dog_id"
-        case recommendedDurationMinutes = "recommended_duration_minutes"
-        case unresolvedRequirements = "unresolved_requirements"
     }
 }

@@ -142,7 +142,6 @@ private actor AvatarDogStub: DogServicing {
     func createDog(_ request: DogWriteRequest) async throws -> Dog { creates += 1; return dog() }
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { dog() }
     func deleteDog(id: Int) async throws {}
-    func getGoal(dogID: Int) async throws -> DogGoal { throw APIError.invalidResponse }
     func uploadPhoto(dogID: Int, data: Data) async throws -> Dog {
         uploads += 1
         if uploads == 1 { throw APIError.network("Upload interrupted") }
@@ -169,7 +168,6 @@ private actor ProfileDogFixture: DogServicing {
     func createDog(_ request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
     func deleteDog(id: Int) async throws { throw APIError.invalidResponse }
-    func getGoal(dogID: Int) async throws -> DogGoal { throw APIError.invalidResponse }
 }
 
 private actor ProfileCafeFixture: CafeProfileServing {

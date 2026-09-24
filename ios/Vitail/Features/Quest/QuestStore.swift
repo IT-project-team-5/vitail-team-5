@@ -8,7 +8,6 @@ final class QuestStore: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var collectingTaskID: String?
     @Published private(set) var errorMessage: String?
-    @Published private(set) var lastAward: QuestAwardReceipt?
     @Published private(set) var confirmedCollections: [String: QuestTask] = [:]
     var onAward: (@MainActor (QuestAwardReceipt) async -> Void)?
 
@@ -98,11 +97,6 @@ final class QuestStore: ObservableObject {
         if requestGeneration == generation { isRefreshing = false; refreshTask = nil }
     }
 
-    func collectBirthday(dogID: Int) async {
-        guard let task = readyTasks.first(where: { $0.isBirthday && $0.dogID == dogID }) else { return }
-        await collect(taskID: task.id)
-    }
-
     func collect(taskID: String) async {
         guard let selected = task(id: taskID), canCollect(selected), let dogID = selected.dogID else { return }
         let requestGeneration = generation
@@ -124,15 +118,14 @@ final class QuestStore: ObservableObject {
                     guard let entitlementID = selected.entitlementID else { throw APIError.invalidResponse }
                     let result = try await service.collectDocument(entitlementID: entitlementID)
                     guard result.entitlementID == entitlementID, result.dogID == dogID,
-                          result.kind == selected.kind, result.points == selected.rewardPoints else { throw APIError.invalidResponse }
-                    receipt = QuestAwardReceipt(kind: result.kind, dogID: dogID, points: result.points,
+                          result.kind == selected.documentKind, result.points == selected.rewardPoints else { throw APIError.invalidResponse }
+                    receipt = QuestAwardReceipt(kind: result.kind.rawValue, dogID: dogID, points: result.points,
                                                 balance: result.balance, collectedAt: result.collectedAt, created: result.created)
                 }
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
                 guard receipt.balance >= 0, receipt.points > 0,
                       QuestCalendar.parse(receipt.collectedAt) != nil else { throw APIError.invalidResponse }
                 confirmedCollections[taskID] = selected.collected(at: receipt.collectedAt)
-                lastAward = receipt
                 await onAward?(receipt)
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
                 isRefreshing = true
@@ -155,7 +148,7 @@ final class QuestStore: ObservableObject {
         generation += 1
         refreshTask?.cancel(); collectionTask?.cancel()
         refreshTask = nil; collectionTask = nil
-        snapshot = nil; confirmedCollections = [:]; lastAward = nil
+        snapshot = nil; confirmedCollections = [:]
         errorMessage = nil; isRefreshing = false; collectingTaskID = nil
         receivedAt = nil; serverDate = nil; onAward = nil
         sessionSubscription?.cancel(); sessionSubscription = nil
