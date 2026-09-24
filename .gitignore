@@ -27,3 +27,4 @@ ios/Config/Local.xcconfig
 
 # Uploaded profile and dog photos
 backend/media/
+backend/private_uploads/

@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "dogs",
     "rewards",
     "walks",
+    "quests",
+    "evidence",
 ]
 
 MIDDLEWARE = [
@@ -101,6 +103,7 @@ STATIC_URL = "static/"
 # A production web server/storage backend must serve MEDIA_URL when DEBUG=False.
 MEDIA_ROOT = Path(os.getenv("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
 MEDIA_URL = os.getenv("DJANGO_MEDIA_URL", "/media/")
+PRIVATE_MEDIA_ROOT = BASE_DIR / "private_uploads"
 # 4 MiB images expand to ~5.4 MiB in the JSON upload payload.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 6 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

@@ -1,0 +1,416 @@
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone as dt_timezone
+from decimal import Decimal
+from threading import Barrier
+from unittest import skipUnless
+from unittest.mock import patch
+from uuid import uuid4
+from zoneinfo import ZoneInfo
+
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, close_old_connections, connection, transaction
+from django.test import TransactionTestCase, override_settings
+from rest_framework.test import APIClient, APITestCase
+
+from dogs.models import Breed, Dog
+from quests.models import QuestAward, QuestDefinition
+from rewards.models import PointEntry
+from rewards.services import credit_points, get_balance
+from walks.models import Walk
+
+
+MELBOURNE = ZoneInfo("Australia/Melbourne")
+User = get_user_model()
+
+
+class QuestApiTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user(email="quest-owner@example.com", password="QuestTest572!", display_name="Walker")
+        cls.other_owner = User.objects.create_user(email="quest-other@example.com", password="QuestTest572!", display_name="Private Walker")
+        cls.cafe = User.objects.create_user(email="quest-cafe@example.com", password="QuestTest572!", display_name="Cafe", role=User.Role.CAFE)
+        cls.admin = User.objects.create_user(email="quest-admin@example.com", password="QuestTest572!", display_name="Admin", role=User.Role.ADMIN)
+        breed = Breed.objects.create(name="Quest Breed", energy_level="MODERATE", default_size="SMALL")
+        cls.dog = Dog.objects.create(owner=cls.owner, breed=breed, name="Milo", date_of_birth=date(2020, 9, 25), age_months=72, size="SMALL", is_brachycephalic=False)
+        cls.second_dog = Dog.objects.create(owner=cls.owner, breed=breed, name="Pip", age_months=24, size="SMALL", is_brachycephalic=False)
+        cls.other_dog = Dog.objects.create(owner=cls.other_owner, breed=breed, name="Private Dog", date_of_birth=date(2021, 9, 25), age_months=60, size="SMALL", is_brachycephalic=False)
+
+    def setUp(self):
+        self.now = datetime(2026, 9, 25, 12, tzinfo=MELBOURNE)
+        clock = patch("quests.services.timezone.now", side_effect=lambda: self.now)
+        clock.start()
+        self.addCleanup(clock.stop)
+        self.client.force_authenticate(self.owner)
+
+    def walk(self, *, day=None, distance="1000.00", points=8, owner=None, dogs=None, ended_at=None):
+        owner = owner or self.owner
+        day = day or self.now.date()
+        ended_at = ended_at or datetime.combine(day, datetime.min.time().replace(hour=10), tzinfo=MELBOURNE)
+        walk = Walk.objects.create(
+            owner=owner, request_id=uuid4(), request_fingerprint="f" * 64,
+            started_at=ended_at - timedelta(minutes=20), ended_at=ended_at,
+            point_date=ended_at.astimezone(MELBOURNE).date(), distance_m=Decimal(distance), points_awarded=points,
+        )
+        walk.dogs.set(dogs if dogs is not None else [self.dog if owner == self.owner else self.other_dog])
+        return walk
+
+    def collect(self, dog=None):
+        return self.client.post(f"/api/quests/birthdays/{(dog or self.dog).pk}/collect/", {}, format="json")
+
+    def dashboard(self):
+        response = self.client.get("/api/quests/")
+        self.assertEqual(response.status_code, 200)
+        return response.data
+
+    def test_catalogue_is_typed_and_has_no_duplicate_base_walk_task(self):
+        self.assertEqual(set(QuestDefinition.objects.values_list("code", flat=True)), {"DAILY_GOAL", "STREAK", "BIRTHDAY", "CHECK_IN", "DOCUMENTS"})
+        self.assertFalse(QuestDefinition.objects.filter(code="WALK").exists())
+
+    def test_owner_auth_required_for_both_read_endpoints_and_collect(self):
+        paths = ("/api/quests", "/api/quests/", "/api/leaderboard", "/api/leaderboard/")
+        public = APIClient()
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertEqual(public.get(path).status_code, 401)
+        self.assertEqual(public.post(f"/api/quests/birthdays/{self.dog.pk}/collect/").status_code, 401)
+        for role in (self.cafe, self.admin):
+            self.client.force_authenticate(role)
+            self.assertEqual(self.client.get("/api/quests/").status_code, 403)
+            self.assertEqual(self.client.get("/api/leaderboard/").status_code, 403)
+            self.assertEqual(self.collect().status_code, 403)
+
+    def test_goal_uses_each_dogs_verified_distance_without_inventing_a_target_or_duration(self):
+        self.walk(distance="700.25", dogs=[self.dog, self.second_dog])
+        self.walk(distance="300.00", dogs=[self.dog])
+        self.walk(day=self.now.date() - timedelta(days=1), distance="9000.00")
+        self.walk(owner=self.other_owner, distance="4000.00")
+        data = self.dashboard()
+        goal = data["daily_goal"]
+        self.assertEqual(goal["status"], "RULES_PENDING")
+        self.assertIsNone(goal["reward_points"])
+        by_dog = {dog["dog_id"]: dog for dog in goal["dogs"]}
+        self.assertEqual(set(by_dog), {self.dog.pk, self.second_dog.pk})
+        self.assertEqual(by_dog[self.dog.pk]["distance_m"], "1000.25")
+        self.assertEqual(by_dog[self.second_dog.pk]["distance_m"], "700.25")
+        for dog in by_dog.values():
+            for field in ("target_distance_m", "active_seconds", "target_active_seconds", "progress"):
+                self.assertIsNone(dog[field])
+        self.assertFalse(PointEntry.objects.exists())
+
+    def test_new_owner_has_no_fake_progress_claims_or_other_owners_dogs(self):
+        fresh = User.objects.create_user(email="quest-new@example.com", password="QuestTest572!", display_name="New")
+        self.client.force_authenticate(fresh)
+        data = self.dashboard()
+        self.assertEqual(data["daily_goal"]["dogs"], [])
+        self.assertEqual(data["birthdays"]["dogs"], [])
+        self.assertEqual(data["streak"]["current_days"], 0)
+        self.assertEqual(data["streak"]["award_status"], "NOT_ENABLED")
+        self.assertEqual(data["check_ins"]["status"], "NOT_AVAILABLE")
+        self.assertEqual(data["check_ins"]["items"], [])
+        self.assertEqual(data["documents"]["status"], "AVAILABLE")
+        self.assertEqual({item["kind"] for item in data["documents"]["items"]}, {
+            "COUNCIL_REGISTRATION", "MICROCHIP_REGISTRATION", "VET_CHECKUP",
+        })
+        self.assertFalse(QuestAward.objects.exists())
+
+    def test_catalogue_can_disable_a_capability_without_changing_qualification_rules(self):
+        QuestDefinition.objects.filter(code__in=["DAILY_GOAL", "BIRTHDAY", "DOCUMENTS"]).update(is_enabled=False)
+        data = self.dashboard()
+        for key in ("daily_goal", "birthdays", "documents"):
+            self.assertEqual(data[key]["status"], "DISABLED")
+        self.assertIsNone(data["daily_goal"]["reward_points"])
+        self.assertEqual(self.collect().data["code"], "QUEST_DISABLED")
+        self.assertFalse(PointEntry.objects.exists())
+
+    def test_current_streak_can_end_yesterday_and_ignores_zero_distance_duplicates_and_other_owners(self):
+        for offset in (1, 2, 3, 8, 9, 10, 11):
+            self.walk(day=self.now.date() - timedelta(days=offset))
+        self.walk(day=self.now.date() - timedelta(days=1))
+        self.walk(distance="0.00", points=0)
+        self.walk(owner=self.other_owner)
+        data = self.dashboard()["streak"]
+        self.assertEqual(data["current_days"], 3)
+        self.assertEqual(data["longest_days"], 4)
+        self.assertFalse(data["active_today"])
+        self.assertEqual(data["next_milestone"], {"days": 7, "reward_points": 20})
+
+    def test_streak_breaks_after_an_entire_missing_day(self):
+        for offset in (2, 3, 4):
+            self.walk(day=self.now.date() - timedelta(days=offset))
+        data = self.dashboard()["streak"]
+        self.assertEqual(data["current_days"], 0)
+        self.assertEqual(data["longest_days"], 3)
+
+    def test_streak_milestone_repeats_at_sixty_without_minting_points(self):
+        for offset in range(30):
+            self.walk(day=self.now.date() - timedelta(days=offset))
+        data = self.dashboard()["streak"]
+        self.assertEqual(data["current_days"], 30)
+        self.assertTrue(data["active_today"])
+        self.assertEqual(data["next_milestone"], {"days": 60, "reward_points": 100})
+        self.assertEqual(data["award_status"], "NOT_ENABLED")
+        self.assertFalse(PointEntry.objects.exists())
+
+    @override_settings(TIME_ZONE="UTC")
+    def test_reset_boundary_uses_melbourne_across_daylight_saving(self):
+        self.now = datetime(2026, 10, 3, 14, 30, tzinfo=dt_timezone.utc)
+        data = self.dashboard()
+        self.assertEqual(data["timezone"], "Australia/Melbourne")
+        self.assertEqual(data["local_date"], "2026-10-04")
+        reset = datetime.fromisoformat(data["next_reset_at"].replace("Z", "+00:00"))
+        self.assertEqual(reset, datetime(2026, 10, 4, 13, tzinfo=dt_timezone.utc))
+
+    def test_future_walks_do_not_contribute_to_goal_streak_or_leaderboard(self):
+        self.walk(ended_at=self.now + timedelta(hours=1))
+        self.walk(day=self.now.date() + timedelta(days=1))
+        data = self.dashboard()
+        self.assertEqual(data["daily_goal"]["dogs"][0]["distance_m"], "0.00")
+        self.assertEqual(data["streak"]["current_days"], 0)
+        board = self.client.get("/api/leaderboard/?period=all_time").data
+        self.assertEqual(board["entries"][0]["walk_count"], 0)
+
+    def test_birthday_states_and_date_only_leap_anniversary(self):
+        data = self.dashboard()["birthdays"]
+        self.assertEqual(data["status"], "AVAILABLE")
+        self.assertEqual(data["reward_points"], 60)
+        by_dog = {dog["dog_id"]: dog for dog in data["dogs"]}
+        self.assertEqual(by_dog[self.dog.pk]["status"], "AVAILABLE")
+        self.assertEqual(by_dog[self.second_dog.pk]["status"], "MISSING_BIRTHDAY")
+        self.assertIsNone(by_dog[self.second_dog.pk]["next_birthday"])
+        self.dog.date_of_birth = date(2020, 2, 29)
+        self.dog.save(update_fields=["date_of_birth"])
+        self.now = datetime(2027, 2, 28, 12, tzinfo=MELBOURNE)
+        leap = self.dashboard()["birthdays"]["dogs"][0]
+        self.assertEqual(leap["next_birthday"], "2028-02-29")
+        self.assertEqual(leap["status"], "UPCOMING")
+        self.assertFalse(leap["is_birthday_today"])
+        self.assertEqual(self.collect().data["code"], "BIRTHDAY_NOT_TODAY")
+
+    def test_birthday_collection_credits_sixty_and_retries_return_one_canonical_award(self):
+        first = self.collect()
+        self.assertEqual(first.status_code, 201)
+        self.assertTrue(first.data["created"])
+        self.assertEqual(first.data["balance"], 60)
+        self.assertEqual(first.data["award"]["points"], 60)
+        self.assertEqual(first.data["award"]["year"], 2026)
+        repeated = self.collect()
+        self.assertEqual(repeated.status_code, 200)
+        self.assertFalse(repeated.data["created"])
+        self.assertEqual(repeated.data["award"], first.data["award"])
+        self.assertEqual(QuestAward.objects.count(), 1)
+        self.assertEqual(PointEntry.objects.count(), 1)
+        self.assertEqual(get_balance(self.owner), 60)
+        self.assertEqual(self.dashboard()["birthdays"]["dogs"][0]["status"], "CLAIMED")
+        entry = PointEntry.objects.get()
+        self.assertEqual(entry.type, PointEntry.Type.EARN)
+        self.assertEqual(entry.source_reference, f"birthday:{self.dog.pk}:2026")
+
+    def test_transferred_dog_keeps_annual_entitlement_without_exposing_prior_receipt(self):
+        original = self.collect()
+        self.dog.owner = self.other_owner
+        self.dog.save(update_fields=["owner"])
+        self.client.force_authenticate(self.other_owner)
+        dogs = {dog["dog_id"]: dog for dog in self.dashboard()["birthdays"]["dogs"]}
+        self.assertEqual(dogs[self.dog.pk]["status"], "CLAIMED")
+        blocked = self.collect()
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.data["code"], "BIRTHDAY_ALREADY_CLAIMED")
+        self.assertEqual(set(blocked.data), {"code", "message"})
+        self.assertEqual(get_balance(self.owner), 60)
+        self.assertEqual(get_balance(self.other_owner), 0)
+        self.assertEqual(QuestAward.objects.count(), 1)
+        # An original recipient can still recover their own successful receipt.
+        self.client.force_authenticate(self.owner)
+        replay = self.collect()
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(replay.data["award"], original.data["award"])
+        self.assertEqual(replay.data["balance"], 60)
+        self.assertFalse(replay.data["created"])
+        # The new owner can claim the next year's independent entitlement.
+        self.client.force_authenticate(self.other_owner)
+        self.now = self.now.replace(year=2027)
+        self.assertEqual(self.collect().status_code, 201)
+        self.assertEqual(get_balance(self.other_owner), 60)
+
+    def test_unrelated_owner_cannot_discover_another_dogs_claim(self):
+        self.collect()
+        self.client.force_authenticate(self.other_owner)
+        response = self.collect()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["code"], "DOG_NOT_FOUND")
+        self.assertEqual(set(response.data), {"code", "message"})
+
+    def test_original_award_replay_after_dog_deletion_keeps_original_dog_id(self):
+        original = self.collect()
+        dog_id = self.dog.pk
+        self.dog.delete()
+        repeated = self.client.post(f"/api/quests/birthdays/{dog_id}/collect/", {}, format="json")
+        self.assertEqual(repeated.status_code, 200)
+        self.assertFalse(repeated.data["created"])
+        self.assertEqual(repeated.data["award"], original.data["award"])
+        self.assertEqual(repeated.data["award"]["dog_id"], dog_id)
+        self.assertEqual(repeated.data["balance"], 60)
+
+    def test_changing_birth_date_cannot_collect_twice_in_one_year(self):
+        first = self.collect()
+        self.dog.date_of_birth = date(2020, 9, 26)
+        self.dog.save(update_fields=["date_of_birth"])
+        self.now += timedelta(days=1)
+        repeated = self.collect()
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(repeated.data["award"]["id"], first.data["award"]["id"])
+        self.assertEqual(get_balance(self.owner), 60)
+
+    def test_birthday_collect_uses_melbourne_date_and_new_year_can_receive_new_award(self):
+        self.now = datetime(2026, 9, 24, 14, tzinfo=dt_timezone.utc)
+        self.assertEqual(self.collect().status_code, 201)
+        self.now = datetime(2027, 9, 25, 12, tzinfo=MELBOURNE)
+        second = self.collect()
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(second.data["award"]["year"], 2027)
+        self.assertEqual(QuestAward.objects.count(), 2)
+
+    def test_collect_rejects_missing_birthdays_other_owners_and_non_birthday(self):
+        response = self.collect(self.second_dog)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "BIRTHDAY_REQUIRED")
+        other = self.collect(self.other_dog)
+        self.assertEqual(other.status_code, 404)
+        self.assertEqual(other.data["code"], "DOG_NOT_FOUND")
+        self.now += timedelta(days=1)
+        self.assertEqual(self.collect().status_code, 409)
+        self.assertFalse(PointEntry.objects.exists())
+
+    def test_directly_persisted_future_birthday_cannot_appear_eligible_or_award_points(self):
+        # Imports and direct ORM writes do not run the API's DOB validator.
+        Dog.objects.filter(pk=self.dog.pk).update(date_of_birth=date(2027, 9, 25))
+        birthday = self.dashboard()["birthdays"]["dogs"][0]
+        self.assertEqual(birthday["status"], "INVALID_BIRTHDAY")
+        self.assertFalse(birthday["is_birthday_today"])
+        self.assertIsNone(birthday["next_birthday"])
+        response = self.collect()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "BIRTHDAY_IN_FUTURE")
+        self.assertFalse(QuestAward.objects.exists())
+        self.assertFalse(PointEntry.objects.exists())
+
+    def test_successful_award_retry_remains_idempotent_after_invalid_birth_date_write(self):
+        original = self.collect()
+        Dog.objects.filter(pk=self.dog.pk).update(date_of_birth=date(2027, 9, 25))
+        repeated = self.collect()
+        self.assertEqual(repeated.status_code, 200)
+        self.assertFalse(repeated.data["created"])
+        self.assertEqual(repeated.data["award"], original.data["award"])
+        self.assertEqual(get_balance(self.owner), 60)
+        birthday = self.dashboard()["birthdays"]["dogs"][0]
+        self.assertEqual(birthday["status"], "CLAIMED")
+        self.assertFalse(birthday["is_birthday_today"])
+        self.assertIsNone(birthday["next_birthday"])
+
+    def test_award_failure_rolls_back_wallet_credit(self):
+        with patch("quests.services.QuestAward.objects.create", side_effect=RuntimeError("storage failure")):
+            with self.assertRaises(RuntimeError):
+                self.collect()
+        self.assertFalse(QuestAward.objects.exists())
+        self.assertFalse(PointEntry.objects.exists())
+
+    def test_award_survives_dog_deletion_and_database_rejects_duplicate_qualification(self):
+        self.collect()
+        award = QuestAward.objects.get()
+        new_entry = credit_points(user=self.other_owner, amount=60, source_reference="test:duplicate-qualification")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            QuestAward.objects.create(
+                owner=self.other_owner, kind="BIRTHDAY", dog=self.dog,
+                dog_id_snapshot=self.dog.pk, dog_name_snapshot=self.dog.name,
+                year=2026, point_entry=new_entry, rules_version="test",
+            )
+        original_id = self.dog.pk
+        self.dog.delete()
+        award.refresh_from_db()
+        self.assertIsNone(award.dog_id)
+        self.assertEqual(award.dog_id_snapshot, original_id)
+        self.assertEqual(award.point_entry.amount, 60)
+
+    def test_leaderboard_is_self_only_without_double_counting_multi_dog_walks_or_wallet_credits(self):
+        self.walk(distance="750.25", points=6, dogs=[self.dog, self.second_dog])
+        self.walk(distance="500.00", points=4)
+        self.walk(owner=self.other_owner, distance="9999.00", points=40)
+        credit_points(user=self.owner, amount=10000, source_reference="test:admin")
+        self.collect()
+        response = self.client.get(f"/api/leaderboard/?period=week&user_id={self.other_owner.pk}")
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        self.assertEqual(data["scope"], "SELF_ONLY")
+        self.assertFalse(data["friends_available"])
+        self.assertEqual(len(data["entries"]), 1)
+        entry = data["entries"][0]
+        self.assertEqual(entry["user_id"], self.owner.pk)
+        self.assertEqual(entry["distance_m"], "1250.25")
+        self.assertEqual(entry["walk_count"], 2)
+        self.assertEqual(entry["walking_points"], 10)
+        self.assertNotIn("Private Walker", str(data))
+
+    def test_leaderboard_week_boundary_is_monday_in_melbourne(self):
+        self.now = datetime(2026, 9, 28, 12, tzinfo=MELBOURNE)
+        start = self.now.replace(hour=0)
+        self.walk(ended_at=start - timedelta(seconds=1), distance="1000.00", points=8)
+        self.walk(ended_at=start, distance="500.00", points=4)
+        response = self.client.get("/api/leaderboard/")
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        self.assertEqual(data["period"], "week")
+        self.assertEqual(datetime.fromisoformat(data["starts_at"]), start)
+        self.assertEqual(data["entries"][0]["distance_m"], "500.00")
+        all_time = self.client.get("/api/leaderboard/?period=all_time").data
+        self.assertIsNone(all_time["starts_at"])
+        self.assertEqual(all_time["entries"][0]["distance_m"], "1500.00")
+
+    def test_leaderboard_week_end_reflects_dst_and_rejects_unknown_period(self):
+        self.now = datetime(2026, 10, 4, 12, tzinfo=MELBOURNE)
+        data = self.client.get("/api/leaderboard/?period=week").data
+        start = datetime.fromisoformat(data["starts_at"])
+        end = datetime.fromisoformat(data["ends_at"])
+        self.assertEqual(start.utcoffset(), timedelta(hours=10))
+        self.assertEqual(end.utcoffset(), timedelta(hours=11))
+        self.assertEqual((end - start).total_seconds(), 167 * 3600)
+        self.assertEqual(self.client.get("/api/leaderboard/?period=month").status_code, 400)
+
+    def test_dog_photos_prefer_uploaded_files_and_make_relative_urls_absolute(self):
+        self.dog.photo = "https://example.com/legacy.jpg"
+        self.dog.uploaded_photo = "avatars/dogs/milo.jpg"
+        self.dog.save(update_fields=["photo", "uploaded_photo"])
+        data = self.dashboard()
+        expected = "http://testserver/media/avatars/dogs/milo.jpg"
+        self.assertEqual(data["daily_goal"]["dogs"][0]["photo"], expected)
+        self.assertEqual(data["birthdays"]["dogs"][0]["photo"], expected)
+
+
+@skipUnless(connection.vendor == "mysql", "Requires MySQL row-lock semantics")
+class BirthdayConcurrencyTests(TransactionTestCase):
+    def test_parallel_birthday_collections_share_one_entitlement_and_wallet_credit(self):
+        # TransactionTestCase flushes catalogue seed rows between test classes.
+        QuestDefinition.objects.update_or_create(code="BIRTHDAY", defaults={"title": "Birthday bonus", "is_enabled": True})
+        owner = User.objects.create_user(email="birthday-concurrent@example.com", display_name="Walker")
+        breed = Breed.objects.create(name="Birthday concurrent breed", energy_level="LOW", default_size="SMALL")
+        dog = Dog.objects.create(owner=owner, breed=breed, name="Coco", date_of_birth=date(2020, 9, 25), age_months=72, size="SMALL", is_brachycephalic=False)
+        barrier = Barrier(2)
+
+        def collect():
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.force_authenticate(owner)
+                barrier.wait(timeout=10)
+                return client.post(f"/api/quests/birthdays/{dog.pk}/collect/", {}, format="json")
+            finally:
+                close_old_connections()
+
+        with patch("quests.services.timezone.now", return_value=datetime(2026, 9, 25, 12, tzinfo=MELBOURNE)):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(lambda _: collect(), range(2)))
+            balance = get_balance(owner)
+        self.assertEqual(sorted(result.status_code for result in results), [200, 201])
+        self.assertEqual(results[0].data["award"], results[1].data["award"])
+        self.assertEqual(QuestAward.objects.count(), 1)
+        self.assertEqual(PointEntry.objects.count(), 1)
+        self.assertEqual(balance, 60)

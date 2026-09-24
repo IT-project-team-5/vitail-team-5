@@ -1,0 +1,58 @@
+from django.http import FileResponse, Http404
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from accounts.photos import photo_url
+from dogs.models import Dog
+from rewards.permissions import IsOwnerRole
+
+from .models import DocumentSubmission
+from .serializers import DocumentRequestSerializer, DocumentSubmissionSerializer
+from .services import eligibility_for, submit_document
+from .uploads import DocumentJSONParser
+
+
+class DocumentListCreateView(APIView):
+    permission_classes = [IsOwnerRole]
+    parser_classes = [DocumentJSONParser]
+
+    def get(self, request):
+        dogs = list(Dog.objects.filter(owner=request.user))
+        return Response({
+            "dogs": [{"id": dog.pk, "name": dog.name,
+                      "photo": photo_url(dog.uploaded_photo, request) if dog.uploaded_photo else dog.photo} for dog in dogs],
+            "submissions": DocumentSubmissionSerializer(DocumentSubmission.objects.filter(owner=request.user), many=True).data,
+            "eligibility": eligibility_for(request.user, dogs),
+        })
+
+    def post(self, request):
+        serializer = DocumentRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        receipt, created = submit_document(owner=request.user, data=serializer.validated_data)
+        return Response(receipt, status=201 if created else 200)
+
+
+class DocumentFileView(APIView):
+    authentication_classes = [JWTAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, submission_id):
+        submissions = DocumentSubmission.objects.all()
+        if request.user.role != "ADMIN" and not request.user.is_superuser:
+            submissions = submissions.filter(owner=request.user)
+        submission = submissions.filter(pk=submission_id).first()
+        if submission is None or not submission.file:
+            raise Http404
+        try:
+            file = submission.file.open("rb")
+        except FileNotFoundError as exc:
+            raise Http404 from exc
+        response = FileResponse(file, as_attachment=True, filename=submission.filename,
+                                content_type=submission.file_content_type)
+        response["Cache-Control"] = "private, no-store"
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Content-Security-Policy"] = "sandbox; default-src 'none'"
+        return response
