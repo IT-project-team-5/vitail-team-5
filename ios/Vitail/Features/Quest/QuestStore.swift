@@ -6,92 +6,145 @@ final class QuestStore: ObservableObject {
     let ownerID: Int
     @Published private(set) var snapshot: QuestSnapshot?
     @Published private(set) var isRefreshing = false
-    @Published private(set) var collectingBirthdayID: Int?
+    @Published private(set) var collectingTaskID: String?
     @Published private(set) var errorMessage: String?
-    @Published private(set) var lastAward: BirthdayCollectResponse?
-    @Published private(set) var confirmedBirthdays: [Int: BirthdayAward] = [:]
-    var onAward: (@MainActor (BirthdayCollectResponse) async -> Void)?
+    @Published private(set) var lastAward: QuestAwardReceipt?
+    @Published private(set) var confirmedCollections: [String: QuestTask] = [:]
+    var onAward: (@MainActor (QuestAwardReceipt) async -> Void)?
 
     private weak var session: SessionStore?
     private let service: any QuestServing
+    private let now: () -> Date
+    private var receivedAt: Date?
+    private var serverDate: Date?
     private var generation = 0
     private var isActive = true
     private var refreshTask: Task<Void, Never>?
     private var collectionTask: Task<Void, Never>?
+    private var sessionSubscription: AnyCancellable?
 
-    init(ownerID: Int, session: SessionStore, service: any QuestServing = QuestService()) {
+    init(ownerID: Int, session: SessionStore, service: any QuestServing = QuestService(), now: @escaping () -> Date = Date.init) {
         self.ownerID = ownerID
         self.session = session
         self.service = service
+        self.now = now
+        sessionSubscription = session.$state.sink { [weak self] state in
+            if case let .signedIn(user) = state, user.id == ownerID, user.role == .owner { return }
+            self?.stop()
+        }
     }
 
-    deinit {
-        refreshTask?.cancel()
-        collectionTask?.cancel()
+    deinit { refreshTask?.cancel(); collectionTask?.cancel() }
+
+    var readyTasks: [QuestTask] { visibleTasks.filter { $0.status == .ready } }
+    var inProgressTasks: [QuestTask] { visibleTasks.filter { $0.status == .inProgress } }
+    var collectedTodayTasks: [QuestTask] { visibleTasks.filter { $0.status == .collected } }
+    var visibleTasks: [QuestTask] {
+        allTasks.filter { task in
+            guard task.isSupported else { return false }
+            if task.status == .collected {
+                guard let date = task.collectedAt.flatMap(QuestCalendar.parse) else { return false }
+                return QuestCalendar.dateString(date) == displayDate
+            }
+            // A cached birthday offer does not stay ready after Melbourne midnight.
+            return !task.isBirthday || snapshot?.localDate == displayDate
+        }
+        .sorted { left, right in
+            let lhs = sortOrder(left.status), rhs = sortOrder(right.status)
+            return lhs == rhs ? left.id < right.id : lhs < rhs
+        }
+    }
+    private var allTasks: [QuestTask] {
+        let serverTasks = snapshot?.tasks ?? []
+        let unacknowledged = confirmedCollections.values.filter { confirmed in
+            !serverTasks.contains { $0.id == confirmed.id && $0.status == .collected }
+        }
+        let filtered = serverTasks.filter { task in
+            // A delayed pre-submission row must not offer the same upload again
+            // while its entitlement collection is awaiting a fresh server view.
+            task.status != .inProgress || !unacknowledged.contains {
+                $0.documentKind != nil && $0.kind == task.kind && $0.dogID == task.dogID
+                    && $0.collectedAt.flatMap(QuestCalendar.parse).map(QuestCalendar.dateString) == displayDate
+            }
+        }
+        var tasks = Dictionary(filtered.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for (id, task) in confirmedCollections { tasks[id] = task }
+        return Array(tasks.values)
+    }
+    private var displayDate: String? {
+        guard let serverDate, let receivedAt else { return snapshot?.localDate }
+        return QuestCalendar.dateString(serverDate.addingTimeInterval(max(0, now().timeIntervalSince(receivedAt))))
+    }
+    func task(id: String) -> QuestTask? { visibleTasks.first { $0.id == id } }
+    func canCollect(_ task: QuestTask) -> Bool {
+        guard isActive, isCurrentOwner, !isRefreshing, collectingTaskID == nil,
+              self.task(id: task.id)?.status == .ready, task.isSupported,
+              let dogID = task.dogID, dogID > 0 else { return false }
+        return task.rewardPoints == (task.isBirthday ? 60 : task.documentKind?.points)
     }
 
     func refresh() async {
         guard isActive, isCurrentOwner else { stop(); return }
         if let refreshTask { await refreshTask.value; return }
-        guard collectingBirthdayID == nil, !isRefreshing else { return }
-        let currentGeneration = generation
+        guard collectingTaskID == nil, !isRefreshing else { return }
+        let requestGeneration = generation
         isRefreshing = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            await loadSnapshot(generation: currentGeneration)
+            await loadSnapshot(generation: requestGeneration)
         }
         refreshTask = task
         await task.value
-        if currentGeneration == generation {
-            isRefreshing = false
-            refreshTask = nil
-        }
-    }
-
-    func birthdayWasCollected(_ dog: BirthdayQuestDog) -> Bool {
-        if dog.status == .claimed { return true }
-        guard let award = confirmedBirthdays[dog.dogID], let date = snapshot?.localDate else { return false }
-        return String(award.year) == String(date.prefix(4))
-    }
-
-    func canCollectBirthday(_ dog: BirthdayQuestDog) -> Bool {
-        isActive && snapshot?.birthdays.status == .available && dog.status == .available && dog.isBirthdayToday
-            && !birthdayWasCollected(dog) && collectingBirthdayID == nil && !isRefreshing && isCurrentOwner
+        if requestGeneration == generation { isRefreshing = false; refreshTask = nil }
     }
 
     func collectBirthday(dogID: Int) async {
-        guard let dog = snapshot?.birthdays.dogs.first(where: { $0.dogID == dogID }),
-              canCollectBirthday(dog),
-              let expectedYear = snapshot.flatMap({ Int($0.localDate.prefix(4)) }) else { return }
-        let currentGeneration = generation
-        collectingBirthdayID = dogID
+        guard let task = readyTasks.first(where: { $0.isBirthday && $0.dogID == dogID }) else { return }
+        await collect(taskID: task.id)
+    }
+
+    func collect(taskID: String) async {
+        guard let selected = task(id: taskID), canCollect(selected), let dogID = selected.dogID else { return }
+        let requestGeneration = generation
+        let expectedYear = snapshot.flatMap { Int($0.localDate.prefix(4)) }
+        collectingTaskID = taskID
         errorMessage = nil
-        let task = Task { @MainActor [weak self] in
+        let operation = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let response = try await service.collectBirthday(dogID: dogID)
-                guard accepts(currentGeneration), !Task.isCancelled else { return }
-                guard response.award.id > 0, response.award.kind == "BIRTHDAY",
-                      response.award.dogID == dogID, response.award.year == expectedYear,
-                      response.award.points == 60, response.balance >= 0 else {
-                    throw APIError.invalidResponse
+                let receipt: QuestAwardReceipt
+                if selected.isBirthday {
+                    let result = try await service.collectBirthday(dogID: dogID)
+                    guard result.award.id > 0, result.award.dogID == dogID,
+                          result.award.year == expectedYear, result.award.kind == "BIRTHDAY",
+                          result.award.points == 60 else { throw APIError.invalidResponse }
+                    receipt = QuestAwardReceipt(kind: result.award.kind, dogID: dogID, points: result.award.points,
+                                                balance: result.balance, collectedAt: result.award.awardedAt, created: result.created)
+                } else {
+                    guard let entitlementID = selected.entitlementID else { throw APIError.invalidResponse }
+                    let result = try await service.collectDocument(entitlementID: entitlementID)
+                    guard result.entitlementID == entitlementID, result.dogID == dogID,
+                          result.kind == selected.kind, result.points == selected.rewardPoints else { throw APIError.invalidResponse }
+                    receipt = QuestAwardReceipt(kind: result.kind, dogID: dogID, points: result.points,
+                                                balance: result.balance, collectedAt: result.collectedAt, created: result.created)
                 }
-                confirmedBirthdays[response.award.dogID] = response.award
-                lastAward = response
-                await onAward?(response)
-                guard accepts(currentGeneration), !Task.isCancelled else { return }
+                guard accepts(requestGeneration), !Task.isCancelled else { return }
+                guard receipt.balance >= 0, receipt.points > 0,
+                      QuestCalendar.parse(receipt.collectedAt) != nil else { throw APIError.invalidResponse }
+                confirmedCollections[taskID] = selected.collected(at: receipt.collectedAt)
+                lastAward = receipt
+                await onAward?(receipt)
+                guard accepts(requestGeneration), !Task.isCancelled else { return }
                 isRefreshing = true
-                await loadSnapshot(generation: currentGeneration, afterAward: true)
+                await loadSnapshot(generation: requestGeneration, afterAward: true)
             } catch {
-                if accepts(currentGeneration), !Task.isCancelled {
-                    errorMessage = error.localizedDescription
-                }
+                if accepts(requestGeneration), !Task.isCancelled { errorMessage = error.localizedDescription }
             }
         }
-        collectionTask = task
-        await task.value
-        if currentGeneration == generation {
-            collectingBirthdayID = nil
+        collectionTask = operation
+        await operation.value
+        if requestGeneration == generation {
+            collectingTaskID = nil
             isRefreshing = false
             collectionTask = nil
         }
@@ -100,40 +153,40 @@ final class QuestStore: ObservableObject {
     func stop() {
         isActive = false
         generation += 1
-        refreshTask?.cancel()
-        collectionTask?.cancel()
-        refreshTask = nil
-        collectionTask = nil
-        snapshot = nil
-        confirmedBirthdays = [:]
-        lastAward = nil
-        errorMessage = nil
-        isRefreshing = false
-        collectingBirthdayID = nil
-        onAward = nil
+        refreshTask?.cancel(); collectionTask?.cancel()
+        refreshTask = nil; collectionTask = nil
+        snapshot = nil; confirmedCollections = [:]; lastAward = nil
+        errorMessage = nil; isRefreshing = false; collectingTaskID = nil
+        receivedAt = nil; serverDate = nil; onAward = nil
+        sessionSubscription?.cancel(); sessionSubscription = nil
     }
-
     private var isCurrentOwner: Bool {
         guard case let .signedIn(user) = session?.state else { return false }
         return user.id == ownerID && user.role == .owner
     }
-
-    private func accepts(_ requestGeneration: Int) -> Bool {
-        isActive && requestGeneration == generation && isCurrentOwner
+    private func accepts(_ requestGeneration: Int) -> Bool { isActive && requestGeneration == generation && isCurrentOwner }
+    private func sortOrder(_ status: QuestTaskStatus) -> Int {
+        switch status { case .ready: 0; case .inProgress: 1; case .collected: 2; case .unknown: 3 }
     }
-
     private func loadSnapshot(generation requestGeneration: Int, afterAward: Bool = false) async {
         do {
             let result = try await service.fetchQuests()
             guard accepts(requestGeneration), !Task.isCancelled else { return }
+            guard let timestamp = QuestCalendar.parse(result.serverTime), result.timezone == "Australia/Melbourne",
+                  QuestCalendar.dateString(timestamp) == result.localDate,
+                  Set(result.tasks.map(\.id)).count == result.tasks.count else { throw APIError.invalidResponse }
+            guard serverDate.map({ timestamp >= $0 }) ?? true,
+                  displayDate.map({ result.localDate >= $0 }) ?? true else { return }
+            for task in result.tasks where task.status == .collected && task.isSupported {
+                confirmedCollections[task.id] = task
+            }
             snapshot = result
-            confirmedBirthdays = confirmedBirthdays.filter { String($0.value.year) == String(result.localDate.prefix(4)) }
+            serverDate = timestamp
+            receivedAt = now()
             errorMessage = nil
         } catch {
             if accepts(requestGeneration), !Task.isCancelled {
-                errorMessage = afterAward
-                    ? "Your reward was collected. Refresh to update your quests."
-                    : error.localizedDescription
+                errorMessage = afterAward ? "Your reward was collected. Pull down to refresh." : error.localizedDescription
             }
         }
     }

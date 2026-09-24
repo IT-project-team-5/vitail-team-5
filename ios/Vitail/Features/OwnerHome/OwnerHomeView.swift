@@ -7,7 +7,6 @@ struct OwnerHomeView: View {
         case account = "Account"
         case walk = "Walk"
         case quest = "Quest"
-        case leaderboard = "Leaderboard"
         case redeem = "Redeem"
 
         var id: Self { self }
@@ -20,8 +19,6 @@ struct OwnerHomeView: View {
                 return "figure.walk"
             case .quest:
                 return "flag"
-            case .leaderboard:
-                return "chart.bar"
             case .redeem:
                 return "gift"
             }
@@ -35,8 +32,6 @@ struct OwnerHomeView: View {
                 return "figure.walk"
             case .quest:
                 return "flag.fill"
-            case .leaderboard:
-                return "chart.bar.fill"
             case .redeem:
                 return "gift.fill"
             }
@@ -52,13 +47,18 @@ struct OwnerHomeView: View {
     @StateObject private var walkCoordinator: WalkSessionCoordinator
     @StateObject private var onboardingDogs: DogViewModel
     @StateObject private var questStore: QuestStore
-    @StateObject private var leaderboardStore: LeaderboardStore
     @StateObject private var checkIns: CheckInProgressStore
     @State private var selection: Page = .walk
     @State private var hasCheckedOnboarding = false
     @State private var isAddingFirstDog = false
     @State private var accountRefreshID = 0
-    @State private var isShowingDocuments = false
+    @State private var documentSelection: DocumentSelection?
+
+    private struct DocumentSelection: Identifiable {
+        let dogID: Int
+        let kind: DocumentKind
+        var id: String { "\(dogID)-\(kind.rawValue)" }
+    }
 
     init(
         user: User, session: SessionStore,
@@ -66,7 +66,6 @@ struct OwnerHomeView: View {
         redemptionService: any RedemptionServing = RedemptionService(),
         walkService: any WalkServing = WalkService(),
         questService: any QuestServing = QuestService(),
-        leaderboardService: any LeaderboardServing = LeaderboardService(),
         checkInService: (any CheckInProgressServing)? = nil,
         documentService: (any DocumentServing)? = nil
     ) {
@@ -76,7 +75,6 @@ struct OwnerHomeView: View {
         self.walkService = walkService
         self.documentService = documentService
         _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
-        _leaderboardStore = StateObject(wrappedValue: LeaderboardStore(ownerID: user.id, session: session, service: leaderboardService))
         _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
         _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService))
         _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
@@ -99,12 +97,9 @@ struct OwnerHomeView: View {
                     }
                     .tag(Page.walk)
                     QuestView(store: questStore, checkIns: checkIns,
-                              onManageDogs: { selection = .account }, onOpenWalk: { selection = .walk },
-                              onOpenDocuments: documentService != nil && questStore.snapshot?.documents.status == .available
-                                ? { isShowingDocuments = true } : nil)
+                              onOpenDocuments: documentService != nil
+                                ? { dogID, kind in documentSelection = DocumentSelection(dogID: dogID, kind: kind) } : nil)
                         .tag(Page.quest)
-                    LeaderboardView(store: leaderboardStore)
-                        .tag(Page.leaderboard)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
                 }
@@ -124,17 +119,21 @@ struct OwnerHomeView: View {
             }) {
                 DogFormView(viewModel: onboardingDogs)
             }
-            .sheet(isPresented: $isShowingDocuments) {
+            .sheet(item: $documentSelection, onDismiss: {
+                Task { await questStore.refresh() }
+            }) { selectedDocument in
                 if let documentService {
                     NavigationStack {
-                        DocumentSubmissionView(service: documentService, session: session) {
-                            async let quests: Void = questStore.refresh()
-                            async let wallet: Void = redemptionViewModel.refresh()
-                            _ = await (quests, wallet)
-                        }
+                        DocumentSubmissionView(service: documentService, session: session,
+                                               initialDogID: selectedDocument.dogID, initialKind: selectedDocument.kind,
+                                               onSubmitted: {
+                                                   async let quests: Void = questStore.refresh()
+                                                   async let wallet: Void = redemptionViewModel.refresh()
+                                                   _ = await (quests, wallet)
+                                               }, onChanged: { await questStore.refresh() })
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { isShowingDocuments = false }
+                                Button("Done") { documentSelection = nil }
                             }
                         }
                     }
@@ -153,9 +152,8 @@ struct OwnerHomeView: View {
                 async let walks: Void = walkCoordinator.sync.refreshAndUpload()
                 async let wallet: Void = redemptionViewModel.refresh()
                 async let quests: Void = questStore.refresh()
-                async let leaderboard: Void = leaderboardStore.refresh()
                 async let venues: Void = checkIns.refresh()
-                _ = await (walks, wallet, quests, leaderboard, venues)
+                _ = await (walks, wallet, quests, venues)
                 // Both progress surfaces observe the same server-backed store.
                 // Tab changes/backgrounding cancel this task and its polling.
                 while !Task.isCancelled && (selection == .walk || selection == .quest) {
@@ -170,7 +168,6 @@ struct OwnerHomeView: View {
                 guard case let .signedIn(currentUser) = state,
                       currentUser.id == user.id, currentUser.role == .owner else {
                     questStore.stop()
-                    leaderboardStore.stop()
                     checkIns.stop()
                     return
                 }
@@ -179,26 +176,22 @@ struct OwnerHomeView: View {
     }
 
     private func configureCallbacks() {
-        walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel, weak questStore, weak leaderboardStore] in
+        walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel, weak questStore] in
             async let wallet: Void? = redemptionViewModel?.refresh()
             async let quests: Void? = questStore?.refresh()
-            async let leaderboard: Void? = leaderboardStore?.refresh()
-            _ = await (wallet, quests, leaderboard)
+            _ = await (wallet, quests)
         }
-        questStore.onAward = { [weak redemptionViewModel, weak leaderboardStore] _ in
+        questStore.onAward = { [weak redemptionViewModel] _ in
             async let wallet: Void? = redemptionViewModel?.refresh()
-            async let leaderboard: Void? = leaderboardStore?.refresh()
-            _ = await (wallet, leaderboard)
+            _ = await wallet
         }
-        checkIns.onCollection = { [weak redemptionViewModel, weak questStore, weak leaderboardStore] in
+        checkIns.onCollection = { [weak redemptionViewModel, weak questStore] in
             async let wallet: Void? = redemptionViewModel?.refresh()
             async let quests: Void? = questStore?.refresh()
-            async let leaderboard: Void? = leaderboardStore?.refresh()
-            _ = await (wallet, quests, leaderboard)
+            _ = await (wallet, quests)
         }
-        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak leaderboardStore, weak checkIns] in
+        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak checkIns] in
             questStore?.stop()
-            leaderboardStore?.stop()
             checkIns?.stop()
             await walkCoordinator?.prepareForLogout()
         }

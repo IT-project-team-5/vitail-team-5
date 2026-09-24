@@ -61,6 +61,10 @@ struct DocumentSubmission: Decodable, Identifiable, Sendable {
     let fileURL: String?
     let awardedPoints: Int
     let submittedAt: String
+    var entitlementID: Int? = nil
+    var rewardStatus: DocumentRewardStatus? = nil
+    var rewardPoints: Int? = nil
+    var collectedAt: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, kind, status, filename
@@ -74,6 +78,8 @@ struct DocumentSubmission: Decodable, Identifiable, Sendable {
         case fileURL = "file_url"
         case awardedPoints = "awarded_points"
         case submittedAt = "submitted_at"
+        case entitlementID = "entitlement_id", rewardStatus = "reward_status"
+        case rewardPoints = "reward_points", collectedAt = "collected_at"
     }
 }
 
@@ -81,6 +87,7 @@ struct DocumentDashboard: Decodable, Sendable {
     let dogs: [DocumentDog]
     let submissions: [DocumentSubmission]
     let eligibility: [DocumentEligibility]
+    var entitlements: [DocumentEntitlement]? = nil
 }
 
 struct DocumentReceipt: Decodable, Sendable {
@@ -88,10 +95,50 @@ struct DocumentReceipt: Decodable, Sendable {
     let balance: Int
     let awardedPoints: Int
     let created: Bool
+    var entitlementID: Int? = nil
+    var rewardStatus: DocumentRewardStatus? = nil
+    var rewardPoints: Int? = nil
+    var collectedAt: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case submission, balance, created
         case awardedPoints = "awarded_points"
+        case entitlementID = "entitlement_id", rewardStatus = "reward_status"
+        case rewardPoints = "reward_points", collectedAt = "collected_at"
+    }
+}
+
+enum DocumentRewardStatus: String, Decodable, Sendable { case ready = "READY", collected = "COLLECTED" }
+
+struct DocumentEntitlement: Decodable, Identifiable, Sendable {
+    let id: Int
+    let dogID: Int
+    let dogName: String
+    let kind: DocumentKind
+    let rewardStatus: DocumentRewardStatus
+    let rewardPoints: Int
+    let collectedAt: String?
+    let canCollect: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind
+        case dogID = "dog_id", dogName = "dog_name", rewardStatus = "reward_status"
+        case rewardPoints = "reward_points", collectedAt = "collected_at", canCollect = "can_collect"
+    }
+}
+
+struct DocumentCollectionReceipt: Decodable, Sendable {
+    let entitlementID: Int
+    let kind: DocumentKind
+    let dogID: Int
+    let points: Int
+    let balance: Int
+    let collectedAt: String
+    let created: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case kind, points, balance, created
+        case entitlementID = "entitlement_id", dogID = "dog_id", collectedAt = "collected_at"
     }
 }
 

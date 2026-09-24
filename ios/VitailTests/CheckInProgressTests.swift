@@ -146,13 +146,78 @@ final class CheckInProgressTests: XCTestCase {
         await store.collect(id: "visit-1")
         await service.setHidden(true)
         await store.refresh()
-        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertEqual(store.collectedTodayItems.count, 1)
         await service.setHidden(false)
         await store.refresh()
         XCTAssertEqual(store.items.first?.status, .collected)
         await store.collect(id: "visit-1")
         let requests = await service.requestIDs
         XCTAssertEqual(requests.count, 1)
+    }
+
+    func testFourVenueOpportunitiesRemainVisibleBelowCapAndHideAtCap() async {
+        let service = VenueBudgetFixture(points: 71)
+        let store = CheckInProgressStore(ownerID: 1, service: service)
+        await store.refresh()
+        XCTAssertEqual(store.activeItems.count, 4)
+        await service.setPoints(72)
+        await store.refresh()
+        XCTAssertTrue(store.activeItems.isEmpty)
+        await store.collect(id: "venue-1")
+        let calls = await service.claims
+        XCTAssertEqual(calls, 0)
+    }
+
+    func testPartialFinalRewardHidesRemainingVenuesAndKeepsCollectedAtBottom() async {
+        let service = VenueBudgetFixture(points: 70)
+        let store = CheckInProgressStore(ownerID: 1, service: service)
+        await store.refresh()
+        await store.collect(id: "venue-1")
+        XCTAssertEqual(store.earnedPointsToday, 72)
+        XCTAssertTrue(store.activeItems.isEmpty)
+        XCTAssertEqual(store.collectedTodayItems.map(\.id), ["venue-1"])
+        // Stale budget and READY data cannot re-enable further collection.
+        await service.setPoints(70)
+        await store.refresh()
+        XCTAssertEqual(store.visibleItems.map(\.id), ["venue-1"])
+        XCTAssertEqual(store.earnedPointsToday, 72)
+    }
+
+    func testCollectedMovesBelowOtherVenuesAndExpiresAtMelbourneMidnight() async {
+        let service = VenueBudgetFixture(points: 0)
+        var deviceTime = Date()
+        let store = CheckInProgressStore(ownerID: 1, service: service, now: { deviceTime })
+        await store.refresh()
+        await store.collect(id: "venue-1")
+        XCTAssertEqual(store.visibleItems.count, 4)
+        XCTAssertEqual(store.visibleItems.last?.status, .collected)
+        deviceTime = deviceTime.addingTimeInterval(120) // 23:59 Melbourne -> next day.
+        XCTAssertTrue(store.visibleItems.isEmpty)
+        await service.nextDay()
+        await store.refresh()
+        XCTAssertEqual(store.activeItems.count, 4)
+        XCTAssertTrue(store.collectedTodayItems.isEmpty)
+        XCTAssertEqual(store.earnedPointsToday, 0)
+    }
+
+    func testProviderCannotReturnMoreThanFourVenues() async {
+        let service = VenueBudgetFixture(points: 0, count: 5)
+        let store = CheckInProgressStore(ownerID: 1, service: service)
+        await store.refresh()
+        XCTAssertTrue(store.visibleItems.isEmpty)
+        XCTAssertNotNil(store.errorMessage)
+    }
+
+    func testPreviousDaySnapshotCannotResetCapOrResurrectCollectedVenues() async {
+        let service = VenueBudgetFixture(points: 70)
+        let store = CheckInProgressStore(ownerID: 1, service: service)
+        await store.refresh()
+        await store.collect(id: "venue-1")
+        await service.previousDay()
+        await store.refresh()
+        XCTAssertEqual(store.earnedPointsToday, 72)
+        XCTAssertTrue(store.activeItems.isEmpty)
+        XCTAssertEqual(store.collectedTodayItems.map(\.id), ["venue-1"])
     }
 
     func testProgressUsesVerifiedDwellAndUnavailableServiceCannotCollect() async {
@@ -192,10 +257,10 @@ private actor CheckInProgressFixture: CheckInProgressServing {
     nonisolated static func item(seconds: Int = 600, status: VenueCheckInProgress.Status = .ready) -> VenueCheckInProgress {
         VenueCheckInProgress(id: "visit-1", venueID: 1, venueName: "Garden Tails", photo: nil,
                              requiredSeconds: 600, verifiedSeconds: seconds, status: status,
-                             updatedAt: Date(timeIntervalSince1970: 1_789_000_000), rewardPoints: 12)
+                             updatedAt: Date(), rewardPoints: 12, collectedAt: status == .collected ? Date() : nil)
     }
 
-    func fetchProgress() async throws -> [VenueCheckInProgress] {
+    func fetchProgress() async throws -> CheckInProgressSnapshot {
         fetchCount += 1
         if shouldSuspendFetch {
             await withCheckedContinuation { continuation in
@@ -203,7 +268,9 @@ private actor CheckInProgressFixture: CheckInProgressServing {
                 fetchStarted?.resume(); fetchStarted = nil
             }
         }
-        return isHidden ? [] : [initial]
+        let now = Date()
+        return CheckInProgressSnapshot(items: isHidden ? [] : [initial], localDate: CheckInProgressSnapshot.day(now),
+                                       earnedPointsToday: 0, serverTime: now)
     }
 
     func collect(id: String, requestID: UUID) async throws -> CheckInCollectionReceipt {
@@ -218,7 +285,8 @@ private actor CheckInProgressFixture: CheckInProgressServing {
             shouldFailCollection = false
             throw APIError.network("Connection interrupted")
         }
-        return CheckInCollectionReceipt(checkIn: Self.item(status: .collected), awardedPoints: 12, walletBalance: 112)
+        return CheckInCollectionReceipt(checkIn: Self.item(status: .collected), awardedPoints: 12, walletBalance: 112,
+                                        dailyEarnedPoints: 12, localDate: CheckInProgressSnapshot.day(Date()))
     }
 
     func suspendCollection() { shouldSuspendCollection = true }
@@ -259,5 +327,35 @@ private actor CheckInAuthFixture: AuthServing {
     }
     private func user() -> User {
         User(id: ownerID, email: "owner\(ownerID)@example.com", displayName: "Owner \(ownerID)", role: .owner)
+    }
+}
+
+private actor VenueBudgetFixture: CheckInProgressServing {
+    private var serverTime = ISO8601DateFormatter().date(from: "2026-09-25T13:59:00Z")!
+    private var points: Int
+    private let count: Int
+    private(set) var claims = 0
+    init(points: Int, count: Int = 4) { self.points = points; self.count = count }
+    func setPoints(_ value: Int) { points = value }
+    func nextDay() { serverTime = serverTime.addingTimeInterval(120); points = 0 }
+    func previousDay() { serverTime = serverTime.addingTimeInterval(-86_400); points = 0 }
+    func item(_ index: Int, collected: Bool = false) -> VenueCheckInProgress {
+        VenueCheckInProgress(id: "venue-\(index)", venueID: index, venueName: "Venue \(index)", photo: nil,
+                             requiredSeconds: 600, verifiedSeconds: 600,
+                             status: collected ? .collected : .ready, updatedAt: serverTime, rewardPoints: 12,
+                             collectedAt: collected ? serverTime : nil)
+    }
+    func fetchProgress() async throws -> CheckInProgressSnapshot {
+        CheckInProgressSnapshot(items: (1...count).map { item($0) },
+                                localDate: CheckInProgressSnapshot.day(serverTime),
+                                earnedPointsToday: points, serverTime: serverTime)
+    }
+    func collect(id: String, requestID: UUID) async throws -> CheckInCollectionReceipt {
+        claims += 1
+        let award = min(12, 72 - points)
+        points += award
+        return CheckInCollectionReceipt(checkIn: item(1, collected: true), awardedPoints: award,
+                                        walletBalance: 10_000 + award, dailyEarnedPoints: points,
+                                        localDate: CheckInProgressSnapshot.day(serverTime))
     }
 }

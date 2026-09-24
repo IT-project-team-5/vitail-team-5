@@ -4,6 +4,11 @@ protocol DocumentServing: Sendable {
     func fetchDocuments() async throws -> DocumentDashboard
     func submit(_ request: DocumentRequest) async throws -> DocumentReceipt
     func download(submissionID: Int) async throws -> Data
+    func collect(entitlementID: Int) async throws -> DocumentCollectionReceipt
+}
+
+extension DocumentServing {
+    func collect(entitlementID: Int) async throws -> DocumentCollectionReceipt { throw APIError.invalidResponse }
 }
 
 actor DocumentService: DocumentServing {
@@ -23,5 +28,9 @@ actor DocumentService: DocumentServing {
 
     func download(submissionID: Int) async throws -> Data {
         try await apiClient.getData("/api/quests/documents/\(submissionID)/file")
+    }
+
+    func collect(entitlementID: Int) async throws -> DocumentCollectionReceipt {
+        try await apiClient.post("/api/quests/documents/entitlements/\(entitlementID)/collect", body: [String: String]())
     }
 }

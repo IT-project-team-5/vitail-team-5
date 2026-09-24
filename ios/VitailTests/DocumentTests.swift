@@ -183,6 +183,101 @@ final class DocumentTests: XCTestCase {
     }
 
     @MainActor
+    func testSubmissionIsReadyWithoutCreditUntilExplicitCollect() async throws {
+        let service = DocumentControlledService(readySubmission: true)
+        let model = DocumentViewModel(service: service)
+        let submitted = await model.submit(makeDraft(number: "ABC-42"))
+        XCTAssertTrue(submitted)
+        XCTAssertEqual(model.receipt?.awardedPoints, 0)
+        XCTAssertEqual(model.receipt?.rewardStatus, .ready)
+        XCTAssertNil(model.lastCollection)
+        let before = await service.collectionIDs
+        XCTAssertTrue(before.isEmpty)
+        let submission = try XCTUnwrap(model.receipt?.submission)
+        let entitlement = try XCTUnwrap(model.entitlement(for: submission))
+        let collected = await model.collect(entitlement)
+        XCTAssertTrue(collected)
+        XCTAssertEqual(model.lastCollection?.points, 300)
+        XCTAssertTrue(model.isCollected(entitlement))
+        XCTAssertFalse(model.canCollect(entitlement))
+        let second = await model.collect(entitlement)
+        XCTAssertFalse(second)
+        let ids = await service.collectionIDs
+        XCTAssertEqual(ids, [91])
+    }
+
+    @MainActor
+    func testCollectionRetryUsesSameEntitlementAfterAmbiguousFailure() async {
+        let service = DocumentControlledService()
+        await service.failNextCollection()
+        let model = DocumentViewModel(service: service)
+        let first = await model.collect(makeEntitlement())
+        let second = await model.collect(makeEntitlement())
+        XCTAssertFalse(first)
+        XCTAssertTrue(second)
+        let ids = await service.collectionIDs
+        XCTAssertEqual(ids, [91, 91])
+        XCTAssertEqual(model.lastCollection?.created, false)
+    }
+
+    @MainActor
+    func testStaleOwnerCollectionCannotPublishOrRefresh() async throws {
+        let session = await makeSession()
+        let service = DocumentControlledService()
+        await service.pause("collect")
+        let model = DocumentViewModel(service: service, session: session)
+        let task = Task { await model.collect(makeEntitlement()) }
+        await service.waitFor("collect")
+        await session.logout()
+        try await session.login(email: "other@example.com", password: "unused", expectedRole: .owner)
+        await service.release("collect")
+        let collected = await task.value
+        XCTAssertFalse(collected)
+        XCTAssertNil(model.lastCollection)
+        XCTAssertTrue(model.confirmedCollections.isEmpty)
+        XCTAssertNil(model.dashboard)
+        let fetchCount = await service.fetchCount
+        XCTAssertEqual(fetchCount, 0)
+    }
+
+    @MainActor
+    func testInvalidCollectionReceiptsNeverConfirmOrRefresh() async {
+        for fault in DocumentCollectionFault.allCases {
+            let service = DocumentControlledService(collectionFault: fault)
+            let model = DocumentViewModel(service: service)
+            let collected = await model.collect(makeEntitlement())
+            XCTAssertFalse(collected, "Accepted invalid collection \(fault)")
+            XCTAssertNil(model.lastCollection)
+            XCTAssertTrue(model.confirmedCollections.isEmpty)
+            let fetchCount = await service.fetchCount
+            XCTAssertEqual(fetchCount, 0)
+        }
+    }
+
+    @MainActor
+    func testConfirmedCollectionSurvivesHistoryFailureAndStopClearsIt() async {
+        let service = DocumentControlledService()
+        await service.failNextFetch()
+        let model = DocumentViewModel(service: service)
+        let collected = await model.collect(makeEntitlement())
+        XCTAssertTrue(collected)
+        XCTAssertEqual(model.lastCollection?.points, 300)
+        XCTAssertEqual(model.errorMessage, "Your points were collected. Refresh to update your documents.")
+        XCTAssertFalse(model.canCollect(makeEntitlement()))
+        await model.load()
+        XCTAssertNil(model.errorMessage)
+        XCTAssertTrue(model.isCollected(makeEntitlement()))
+        model.stop()
+        XCTAssertNil(model.lastCollection)
+        XCTAssertTrue(model.confirmedCollections.isEmpty)
+    }
+
+    private func makeEntitlement() -> DocumentEntitlement {
+        DocumentEntitlement(id: 91, dogID: 7, dogName: "Coco", kind: .council,
+            rewardStatus: .ready, rewardPoints: 300, collectedAt: nil, canCollect: true)
+    }
+
+    @MainActor
     private func makeSession() async -> SessionStore {
         let session = SessionStore(authService: DocumentAuthFixture())
         await session.restore()
@@ -217,19 +312,28 @@ private enum DocumentReceiptFault: CaseIterable, Sendable {
     case id, request, dog, kind, status, date, amount, submissionAmount, balance
 }
 
+private enum DocumentCollectionFault: CaseIterable, Sendable { case id, dog, kind, amount, balance, date }
+
 private actor DocumentControlledService: DocumentServing {
     private(set) var requests: [DocumentRequest] = []
     private(set) var fetchCount = 0
+    private(set) var collectionIDs: [Int] = []
     private let fault: DocumentReceiptFault?
+    private let collectionFault: DocumentCollectionFault?
     private let award: Int
+    private let readySubmission: Bool
     private var failFetch = false
+    private var failCollection = false
     private var paused: Set<String> = []
     private var continuations: [String: CheckedContinuation<Void, Never>] = [:]
     private var started: [String: CheckedContinuation<Void, Never>] = [:]
 
-    init(fault: DocumentReceiptFault? = nil, award: Int = 300) {
+    init(fault: DocumentReceiptFault? = nil, award: Int = 300, readySubmission: Bool = false,
+         collectionFault: DocumentCollectionFault? = nil) {
         self.fault = fault
         self.award = award
+        self.readySubmission = readySubmission
+        self.collectionFault = collectionFault
     }
     func fetchDocuments() async throws -> DocumentDashboard {
         fetchCount += 1
@@ -240,7 +344,7 @@ private actor DocumentControlledService: DocumentServing {
     func submit(_ request: DocumentRequest) async throws -> DocumentReceipt {
         requests.append(request)
         await suspendIfNeeded("submit")
-        let amount = fault == .amount ? 999 : award
+        let amount = fault == .amount ? 999 : (readySubmission ? 0 : award)
         return DocumentReceipt(submission: DocumentSubmission(
             id: fault == .id ? 0 : 1,
             requestID: fault == .request ? UUID() : request.requestID,
@@ -252,14 +356,28 @@ private actor DocumentControlledService: DocumentServing {
             validFrom: request.validFrom, validTo: request.validTo,
             filename: "", fileURL: nil,
             awardedPoints: fault == .submissionAmount ? 0 : amount,
-            submittedAt: "2026-09-25T01:00:00Z"
-        ), balance: fault == .balance ? -1 : 300, awardedPoints: amount, created: true)
+            submittedAt: "2026-09-25T01:00:00Z",
+            entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
+            rewardPoints: readySubmission ? 300 : nil
+        ), balance: fault == .balance ? -1 : 300, awardedPoints: amount, created: true,
+           entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
+           rewardPoints: readySubmission ? 300 : nil)
     }
     func download(submissionID: Int) async throws -> Data {
         await suspendIfNeeded("download")
         return Data("private evidence".utf8)
     }
     func failNextFetch() { failFetch = true }
+    func failNextCollection() { failCollection = true }
+    func collect(entitlementID: Int) async throws -> DocumentCollectionReceipt {
+        collectionIDs.append(entitlementID)
+        await suspendIfNeeded("collect")
+        if failCollection { failCollection = false; throw APIError.network("Connection lost") }
+        return DocumentCollectionReceipt(entitlementID: collectionFault == .id ? 92 : entitlementID,
+            kind: collectionFault == .kind ? .vet : .council, dogID: collectionFault == .dog ? 8 : 7,
+            points: collectionFault == .amount ? 999 : 300, balance: collectionFault == .balance ? -1 : 300,
+            collectedAt: collectionFault == .date ? "invalid" : "2026-09-25T01:00:00.123456Z", created: collectionIDs.count == 1)
+    }
     func pause(_ operation: String) { paused.insert(operation) }
     func waitFor(_ operation: String) async {
         if continuations[operation] != nil { return }

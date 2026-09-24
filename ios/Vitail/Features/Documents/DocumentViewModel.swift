@@ -8,6 +8,9 @@ final class DocumentViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isSubmitting = false
     @Published private(set) var isActive = true
+    @Published private(set) var collectingID: Int?
+    @Published private(set) var lastCollection: DocumentCollectionReceipt?
+    @Published private(set) var confirmedCollections: [Int: DocumentCollectionReceipt] = [:]
     @Published var errorMessage: String?
 
     private let service: any DocumentServing
@@ -20,6 +23,7 @@ final class DocumentViewModel: ObservableObject {
     private var loadTask: Task<Void, Never>?
     private var submissionTask: Task<Bool, Never>?
     private var downloadTask: Task<Data, Error>?
+    private var collectionTask: Task<Bool, Never>?
 
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil) {
         self.service = service
@@ -45,12 +49,13 @@ final class DocumentViewModel: ObservableObject {
         loadTask?.cancel()
         submissionTask?.cancel()
         downloadTask?.cancel()
+        collectionTask?.cancel()
     }
 
     func load() async {
         guard checkOwner(), !Task.isCancelled else { return }
         if let loadTask { await loadTask.value; return }
-        guard !isSubmitting else { return }
+        guard !isSubmitting, collectingID == nil else { return }
         let requestGeneration = generation
         isLoading = true
         errorMessage = nil
@@ -67,7 +72,7 @@ final class DocumentViewModel: ObservableObject {
     }
 
     func submit(_ draft: DocumentDraft) async -> Bool {
-        guard checkOwner(), !Task.isCancelled, !isSubmitting, !isLoading else { return false }
+        guard checkOwner(), !Task.isCancelled, !isSubmitting, !isLoading, collectingID == nil else { return false }
         let requestGeneration = generation
         isSubmitting = true
         errorMessage = nil
@@ -124,6 +129,60 @@ final class DocumentViewModel: ObservableObject {
         }
     }
 
+    func entitlement(for submission: DocumentSubmission) -> DocumentEntitlement? {
+        guard let id = submission.entitlementID else { return nil }
+        if let current = dashboard?.entitlements?.first(where: { $0.id == id }) { return current }
+        guard let status = submission.rewardStatus, let points = submission.rewardPoints else { return nil }
+        return DocumentEntitlement(id: id, dogID: submission.dogID, dogName: submission.dogName,
+            kind: submission.kind, rewardStatus: status, rewardPoints: points, collectedAt: submission.collectedAt,
+            canCollect: status == .ready && dashboard?.dogs.contains(where: { $0.id == submission.dogID }) == true)
+    }
+
+    func isCollected(_ entitlement: DocumentEntitlement) -> Bool {
+        entitlement.rewardStatus == .collected || confirmedCollections[entitlement.id] != nil
+    }
+
+    func canCollect(_ entitlement: DocumentEntitlement) -> Bool {
+        isActive && isCurrentOwner && entitlement.canCollect && !isCollected(entitlement)
+            && entitlement.id > 0 && entitlement.rewardPoints == entitlement.kind.points
+            && !isLoading && !isSubmitting && collectingID == nil
+    }
+
+    func collect(_ entitlement: DocumentEntitlement) async -> Bool {
+        guard checkOwner(), !Task.isCancelled, canCollect(entitlement) else { return false }
+        let requestGeneration = generation
+        collectingID = entitlement.id
+        errorMessage = nil
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            do {
+                let result = try await service.collect(entitlementID: entitlement.id)
+                guard accepts(requestGeneration), !Task.isCancelled else { return false }
+                guard result.entitlementID == entitlement.id, result.kind == entitlement.kind,
+                      result.dogID == entitlement.dogID, result.points == entitlement.kind.points,
+                      result.balance >= 0, Self.collectionDate(result.collectedAt) != nil else {
+                    throw APIError.invalidResponse
+                }
+                confirmedCollections[entitlement.id] = result
+                lastCollection = result
+                isLoading = true
+                await loadSnapshot(generation: requestGeneration, afterCollection: true)
+                return accepts(requestGeneration) && !Task.isCancelled
+            } catch {
+                if accepts(requestGeneration), !Task.isCancelled { errorMessage = error.localizedDescription }
+                return false
+            }
+        }
+        collectionTask = task
+        let collected = await task.value
+        if accepts(requestGeneration) {
+            collectingID = nil
+            isLoading = false
+            collectionTask = nil
+        }
+        return collected && !Task.isCancelled
+    }
+
     func stop() {
         guard isActive else { return }
         isActive = false
@@ -131,13 +190,18 @@ final class DocumentViewModel: ObservableObject {
         loadTask?.cancel()
         submissionTask?.cancel()
         downloadTask?.cancel()
+        collectionTask?.cancel()
         loadTask = nil
         submissionTask = nil
         downloadTask = nil
+        collectionTask = nil
         sessionObservation?.cancel()
         sessionObservation = nil
         dashboard = nil
         receipt = nil
+        lastCollection = nil
+        confirmedCollections = [:]
+        collectingID = nil
         pending = nil
         errorMessage = nil
         isLoading = false
@@ -159,7 +223,7 @@ final class DocumentViewModel: ObservableObject {
         isActive && generation == requestGeneration && isCurrentOwner
     }
 
-    private func loadSnapshot(generation requestGeneration: Int, afterSubmission: Bool = false) async {
+    private func loadSnapshot(generation requestGeneration: Int, afterSubmission: Bool = false, afterCollection: Bool = false) async {
         guard accepts(requestGeneration), !Task.isCancelled else { return }
         do {
             let result = try await service.fetchDocuments()
@@ -168,9 +232,8 @@ final class DocumentViewModel: ObservableObject {
             errorMessage = nil
         } catch {
             if accepts(requestGeneration), !Task.isCancelled {
-                errorMessage = afterSubmission
-                    ? "Your evidence was submitted. Refresh to update your documents."
-                    : error.localizedDescription
+                errorMessage = afterCollection ? "Your points were collected. Refresh to update your documents."
+                    : (afterSubmission ? "Your evidence was submitted. Refresh to update your documents." : error.localizedDescription)
             }
         }
     }
@@ -185,5 +248,19 @@ final class DocumentViewModel: ObservableObject {
               submission.awardedPoints == result.awardedPoints,
               result.awardedPoints == 0 || result.awardedPoints == request.kind.points,
               result.balance >= 0 else { throw APIError.invalidResponse }
+        if let id = result.entitlementID {
+            guard id > 0, submission.entitlementID == id,
+                  result.rewardStatus != nil, result.rewardStatus == submission.rewardStatus,
+                  result.rewardPoints == request.kind.points, submission.rewardPoints == result.rewardPoints,
+                  result.awardedPoints == 0 else { throw APIError.invalidResponse }
+        }
+    }
+
+    private static func collectionDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
     }
 }

@@ -10,7 +10,6 @@ struct VitailApp: App {
     private let cafeProfileService: CafeProfileService
     private let cafeProductsService: CafeProductsService
     private let questService: QuestService
-    private let leaderboardService: LeaderboardService
     private let documentService: DocumentService
 
     init() {
@@ -25,7 +24,6 @@ struct VitailApp: App {
         cafeProfileService = dependencies.cafeProfileService
         cafeProductsService = dependencies.cafeProductsService
         questService = dependencies.questService
-        leaderboardService = dependencies.leaderboardService
         documentService = dependencies.documentService
     }
 
@@ -40,7 +38,6 @@ struct VitailApp: App {
                 cafeProfileService: cafeProfileService,
                 cafeProductsService: cafeProductsService,
                 questService: questService,
-                leaderboardService: leaderboardService,
                 documentService: documentService
             )
         }

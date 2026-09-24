@@ -10,6 +10,7 @@ struct DocumentSubmissionView: View {
     @StateObject private var model: DocumentViewModel
     private let initialDogID: Int?
     private let onSubmitted: () async -> Void
+    private let onChanged: () async -> Void
     @State private var dogID: Int?
     @State private var kind: DocumentKind = .council
     @State private var registrationNumber = ""
@@ -28,11 +29,13 @@ struct DocumentSubmissionView: View {
     @State private var isVisible = true
 
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil,
-         initialDogID: Int? = nil,
-         onSubmitted: @escaping () async -> Void = {}) {
+         initialDogID: Int? = nil, initialKind: DocumentKind = .council,
+         onSubmitted: @escaping () async -> Void = {}, onChanged: @escaping () async -> Void = {}) {
         _model = StateObject(wrappedValue: DocumentViewModel(service: service, session: session))
+        _kind = State(initialValue: initialKind)
         self.initialDogID = initialDogID
         self.onSubmitted = onSubmitted
+        self.onChanged = onChanged
     }
 
     var body: some View {
@@ -45,11 +48,13 @@ struct DocumentSubmissionView: View {
                 }
                 if let receipt = model.receipt {
                     Section {
-                        Label("Submitted", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(AppColors.success)
-                        Text(receipt.awardedPoints > 0
-                             ? "\(receipt.awardedPoints) points added."
-                             : "Evidence saved. This reward was already received, so no additional points were added.")
+                        if let entitlement = model.entitlement(for: receipt.submission) {
+                            rewardRow(entitlement)
+                        } else {
+                            Label("Submitted", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(AppColors.success)
+                            Text("Your evidence has been saved.")
+                        }
                         Text("Your submission is self-reported and may be checked later.")
                             .font(.footnote).foregroundStyle(AppColors.secondaryText)
                     }
@@ -77,7 +82,7 @@ struct DocumentSubmissionView: View {
         .background(AppColors.background)
         .navigationTitle("Documents")
         .navigationBarTitleDisplayMode(.inline)
-        .disabled(model.isSubmitting || !model.isActive)
+        .disabled(model.isSubmitting || model.collectingID != nil || !model.isActive)
         .task {
             await model.load()
             if dogID == nil {
@@ -185,7 +190,7 @@ struct DocumentSubmissionView: View {
                         .fontWeight(.semibold)
                 }.frame(maxWidth: .infinity)
             }
-            Text("Eligible submissions receive points immediately. Updated evidence for a reward already received earns no extra points.")
+            Text("Submit your evidence, then collect the reward. Updated evidence uses the same reward and adds no extra points.")
                 .font(.footnote).foregroundStyle(AppColors.secondaryText)
         }
         .listRowBackground(AppColors.surface)
@@ -194,8 +199,11 @@ struct DocumentSubmissionView: View {
     private func submissionRow(_ submission: DocumentSubmission) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             Text(submission.kind.title).font(.headline)
-            Text("\(submission.dogName) · Submitted · +\(submission.awardedPoints) points")
+            Text("\(submission.dogName) · Submitted")
                 .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+            if let entitlement = model.entitlement(for: submission), model.receipt?.submission.id != submission.id {
+                rewardRow(entitlement)
+            }
             if !submission.registrationNumber.isEmpty { Text(submission.registrationNumber).font(.footnote) }
             if let date = submission.eventDate { Text(DogBirthday.display(date)).font(.footnote) }
             if let start = submission.validFrom, let end = submission.validTo {
@@ -208,6 +216,28 @@ struct DocumentSubmissionView: View {
             }
         }
         .padding(.vertical, AppSpacing.small)
+    }
+
+    @ViewBuilder
+    private func rewardRow(_ entitlement: DocumentEntitlement) -> some View {
+        if model.isCollected(entitlement) {
+            Label("Collected · \(entitlement.rewardPoints) points", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(AppColors.success)
+        } else {
+            Text("Ready to collect · \(entitlement.rewardPoints) points").font(.headline)
+            if entitlement.canCollect {
+                Button {
+                    Task {
+                        if await model.collect(entitlement), model.isActive, isVisible { await onSubmitted() }
+                    }
+                } label: {
+                    HStack {
+                        if model.collectingID == entitlement.id { ProgressView() }
+                        Text(model.collectingID == entitlement.id ? "Collecting…" : "Collect \(entitlement.rewardPoints) points")
+                    }
+                }.disabled(!model.canCollect(entitlement))
+            }
+        }
     }
 
     private func submit() async {
@@ -226,7 +256,7 @@ struct DocumentSubmissionView: View {
             validTo: kind == .microchip ? DogBirthday.string(from: validTo) : nil,
             filename: filename, fileData: fileData
         )
-        if await model.submit(draft), model.isActive, isVisible { await onSubmitted() }
+        if await model.submit(draft), model.isActive, isVisible { await onChanged() }
     }
 
     private func importPDF(_ url: URL) throws {
