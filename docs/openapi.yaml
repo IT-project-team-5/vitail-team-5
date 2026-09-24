@@ -8,7 +8,10 @@ info:
     Auth and dog paths use no trailing slash; wallet, redemption, café and walk
     paths also accept a trailing slash, as do quest and document
     paths. Arrays are currently unpaginated.
-    Django Admin is a separate session/CSRF-protected interface, not this API.
+    Venue IDs are separate from legacy café account IDs; existing cafe_id fields
+    retain their account-ID meaning. New location/social foundation tables do
+    not expose HTTP routes here. Django Admin is a separate session/CSRF-protected
+    interface, not this API.
 servers:
   - url: http://127.0.0.1:8000
     description: Local development; replace with the shared HTTPS backend for devices.
@@ -181,32 +184,6 @@ paths:
       responses:
         '204': {description: Deleted; no response body}
         default: {$ref: '#/components/responses/Error'}
-  /api/dogs/{id}/goal:
-    parameters:
-      - $ref: '#/components/parameters/ID'
-    get:
-      summary: Read stored goal factors; numeric recommendations are not implemented
-      responses:
-        '200':
-          description: Rules-pending result
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [dog_id, status, recommended_duration_minutes, factors, unresolved_requirements]
-                properties:
-                  dog_id: {type: integer}
-                  status: {type: string, enum: [RULES_PENDING]}
-                  recommended_duration_minutes: {type: integer, nullable: true, description: Always null until numeric rules are agreed}
-                  factors:
-                    type: object
-                    properties:
-                      breed_energy_level: {type: string, enum: [LOW, MODERATE, HIGH]}
-                      age_months: {type: integer, minimum: 0, description: Completed calendar months from DOB when known; otherwise the saved legacy age}
-                      size: {$ref: '#/components/schemas/DogSize'}
-                      is_brachycephalic: {type: boolean}
-                  unresolved_requirements: {type: array, items: {type: string}}
-        default: {$ref: '#/components/responses/Error'}
   /api/walks:
     get:
       summary: List owned walk summaries, newest end time first (OWNER only)
@@ -228,8 +205,10 @@ paths:
         gaps over 60 seconds and segments above 3 m/s earn no distance.
         Five minutes of inactivity ends credit. Distance awards use the current
         daily cumulative floor policy (8 points/km, maximum 40 walking points),
-        pending confirmation of decision O7. Day is the Melbourne/default server
-        local end date. No goal/check-in/streak points are added. Repeating the
+        pending confirmation of decision O7. Awards also respect the shared
+        72-point walking/check-in cap. Day is the Melbourne local end date.
+        No goal/check-in/streak points are awarded by this endpoint; uploaded
+        samples do not populate the live-location foundation tables. Repeating the
         same UUID and payload returns the original result without a second award.
       requestBody:
         required: true
@@ -286,6 +265,11 @@ paths:
   /api/redemptions/rewards:
     get:
       summary: Browse available rewards from active CAFE accounts (OWNER only)
+      description: >-
+        Includes available products at active partner Venues with active café
+        managers, an open sale window and remaining Melbourne-day allocation.
+        venue_id identifies the place; cafe_id retains the legacy User ID.
+        Product, venue and account photos are separate assets.
       responses:
         '200':
           description: Reward catalogue
@@ -307,7 +291,10 @@ paths:
     post:
       summary: Order one reward, quantity 1, with an immediate atomic point deduction
       description: >-
-        OWNER only. Price, owner and café are determined by the server.
+        OWNER only. Price, owner, venue, café and terms are determined by the
+        server. Sale windows and the per-product Melbourne-day quantity limit
+        are checked under the product lock. Pending unexpired and collected
+        orders consume allocation; cancelled/expired orders release it.
         Send a request_id UUID and reuse it when retrying the same confirmation.
         The same owner/UUID/reward returns the original order even if that offer
         is later disabled. A different reward with the same UUID is a conflict.
@@ -376,8 +363,11 @@ paths:
       summary: Create a product for the signed-in CAFE
       description: >-
         CAFE only. The server assigns the café; IDs, ownership fields and unknown
-        properties are rejected. New products are immediately listed in the
-        owner reward catalogue unless is_available is false.
+        properties are rejected. Products belong to the managed Venue. Listing
+        requires an available product, active partner venue and active café
+        manager, an open sale window and remaining daily allocation. Photos are
+        read-only on this endpoint; terms and requires_store_purchase describe
+        the offer and do not create a fiat payment or purchase-verification flow.
       requestBody:
         required: true
         content:
@@ -403,8 +393,9 @@ paths:
         404. IDs, ownership fields and unknown properties are rejected. Changes
         are atomic with concurrent order creation. Setting is_available to false
         removes the product from the owner catalogue and blocks new orders;
-        existing orders retain their original name, price and café snapshots
-        and can still be collected. Products are unlisted instead of deleted.
+        existing orders retain their original name, price, café and terms
+        snapshots and can still be collected. A non-null ends_at must be after
+        starts_at. Products are unlisted instead of deleted.
       requestBody:
         required: true
         content:
@@ -470,20 +461,21 @@ paths:
   /api/cafe/profile:
     get:
       summary: Read the signed-in CAFE's venue profile
-      description: Existing café accounts receive empty optional details on first access.
+      description: Returns the normalized Venue managed by this café account; venue_id is the place ID, distinct from the login account ID.
       responses:
         '200':
-          description: Own café details; name is the account display name
+          description: Own venue details; name and photo are separate from the login account profile
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CafeProfile'}
         default: {$ref: '#/components/responses/Error'}
     patch:
-      summary: Update own café name, address, description and opening hours
+      summary: Update own venue name, address, description, hours and Maps link
       description: >-
         CAFE only. Partial updates are accepted. Email, role, user IDs,
-        offers and point prices cannot be changed here. Name updates the
-        shared account display name; existing order snapshots do not change.
+        venue identity, offers and point prices cannot be changed here. Name
+        updates the managed Venue, not User.display_name. Existing order name,
+        price, café and terms snapshots do not change.
       requestBody:
         required: true
         content:
@@ -559,7 +551,8 @@ paths:
         Upload raw base64 JPEG, PNG or WebP, at most 4 MiB decoded and 16 megapixels.
         The server applies orientation, resizes to at most 1024 pixels per side,
         removes metadata and stores a generated JPEG filename. Replaces the prior
-        uploaded avatar. Responses include an absolute photo URL; no arbitrary
+        uploaded Venue photo without changing the login account avatar.
+        Responses include an absolute photo URL; no arbitrary
         filesystem names or URLs are accepted for upload.
       requestBody:
         required: true
@@ -576,25 +569,20 @@ paths:
         default: {$ref: '#/components/responses/Error'}
   /api/quests:
     get:
-      summary: Read the OWNER's quest dashboard
+      summary: Read the OWNER's actionable Quest tasks
       description: >-
-        Uses the Australia/Melbourne calendar and the next local midnight,
-        including daylight-saving changes. Daily distance comes from accepted
-        walks; targets, verified active time, progress and daily rewards remain
-        null until their rules are confirmed. Streaks are read-only. No base
-        walking reward is repeated as a quest. Check-in items remain empty
-        until the venue service is connected. A disabled quest returns DISABLED;
-        clients must not interpret unknown statuses or null progress as claimable
-        or as zero-percent completion. The tasks array is the compact actionable
-        list, ordered READY, IN_PROGRESS, then COLLECTED with stable identifiers.
-        It includes only currently eligible document tasks, pending document
-        entitlements, birthday rewards available today, and the owner's rewards
-        collected on the same Melbourne calendar day. Previous-day collected
-        rows disappear from this list while their history remains stored.
-        Daily-goal and streak task rows are omitted while their award rules are
-        unavailable. An empty tasks array is valid and does not imply fabricated
-        progress. Legacy section fields remain for compatibility; document
-        submissions, entitlements and history use the documents endpoint.
+        Returns server_time, timezone, local_date, next_reset_at and tasks using
+        the Australia/Melbourne calendar, including daylight-saving changes.
+        Tasks are ordered READY, IN_PROGRESS, then COLLECTED with stable IDs.
+        Only eligible document tasks, pending entitlements, today's available
+        birthdays and the owner's rewards collected today appear. Previous-day
+        collected rows disappear while their history remains stored. Disabled
+        capabilities omit their rows; unknown kinds/states and null progress
+        must never enable collection or imply zero-percent completion.
+        No base walking row, unimplemented goal/streak award or check-in provider
+        is fabricated. Empty tasks is valid. Legacy dashboard section projections
+        are removed; evidence/history use the documents endpoint. Read requests
+        never create a credit.
       responses:
         '200':
           description: Current owner-scoped quest state
@@ -876,115 +864,6 @@ components:
         size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean}
         created_at: {type: string, format: date-time}
-    QuestStatus:
-      type: string
-      description: >-
-        Current section statuses are AVAILABLE, RULES_PENDING, NOT_AVAILABLE
-        and DISABLED. Clients must retain unknown future states as unavailable
-        for collection instead of failing the whole dashboard.
-    DecimalMetres:
-      type: string
-      pattern: '^\d+\.\d{2}$'
-      example: '1250.50'
-      description: Nonnegative metres serialized as a decimal string with two fractional digits
-    QuestDogIdentity:
-      type: object
-      required: [dog_id, name, photo]
-      properties:
-        dog_id: {type: integer, minimum: 1}
-        name: {type: string}
-        photo: {type: string, nullable: true, description: Uploaded absolute URL or legacy photo URL; null when unset}
-    DailyGoalDog:
-      allOf:
-        - $ref: '#/components/schemas/QuestDogIdentity'
-        - type: object
-          required: [distance_m, target_distance_m, active_seconds, target_active_seconds, progress]
-          properties:
-            distance_m: {$ref: '#/components/schemas/DecimalMetres'}
-            target_distance_m:
-              type: string
-              nullable: true
-              description: Decimal-string target; currently null because the daily formula is pending
-            active_seconds: {type: integer, minimum: 0, nullable: true, description: Currently null; elapsed time is not treated as verified active time}
-            target_active_seconds: {type: integer, minimum: 0, nullable: true, description: Currently null}
-            progress: {type: number, minimum: 0, maximum: 1, nullable: true, description: Currently null; never infer zero percent from an unknown target}
-    DailyGoalQuest:
-      type: object
-      required: [status, dogs, reward_points, message]
-      properties:
-        status: {$ref: '#/components/schemas/QuestStatus'}
-        dogs: {type: array, items: {$ref: '#/components/schemas/DailyGoalDog'}}
-        reward_points: {type: integer, minimum: 0, nullable: true, description: Currently null}
-        message: {type: string}
-    StreakMilestone:
-      type: object
-      required: [days, reward_points]
-      properties:
-        days: {type: integer, minimum: 1}
-        reward_points: {type: integer, minimum: 0}
-    StreakQuest:
-      type: object
-      required: [status, current_days, longest_days, active_today, milestones, next_milestone, award_status]
-      properties:
-        status: {$ref: '#/components/schemas/QuestStatus'}
-        current_days: {type: integer, minimum: 0, description: Consecutive positive-distance walking days ending today or yesterday; otherwise zero}
-        longest_days: {type: integer, minimum: 0}
-        active_today: {type: boolean}
-        milestones:
-          type: array
-          description: Informational 7-day/20-point and 30-day/100-point milestones; no streak points are awarded yet
-          items: {$ref: '#/components/schemas/StreakMilestone'}
-        next_milestone:
-          allOf:
-            - $ref: '#/components/schemas/StreakMilestone'
-          description: Next 7-day, 30-day or subsequent 30-day milestone
-        award_status: {type: string, enum: [NOT_ENABLED]}
-    BirthdayQuestDog:
-      allOf:
-        - $ref: '#/components/schemas/QuestDogIdentity'
-        - type: object
-          required: [date_of_birth, next_birthday, is_birthday_today, status]
-          properties:
-            date_of_birth: {type: string, format: date, nullable: true}
-            next_birthday: {type: string, format: date, nullable: true, description: Next actual calendar anniversary; null for missing or invalid DOB}
-            is_birthday_today: {type: boolean}
-            status:
-              type: string
-              enum: [MISSING_BIRTHDAY, INVALID_BIRTHDAY, AVAILABLE, CLAIMED, UPCOMING]
-              description: CLAIMED follows the dog's annual entitlement even after ownership changes; unknown future values must not enable Collect
-    BirthdayQuest:
-      type: object
-      required: [status, reward_points, dogs, message]
-      properties:
-        status: {$ref: '#/components/schemas/QuestStatus'}
-        reward_points: {type: integer, enum: [60]}
-        dogs: {type: array, items: {$ref: '#/components/schemas/BirthdayQuestDog'}}
-        message: {type: string}
-    CheckInQuest:
-      type: object
-      required: [status, items, message]
-      properties:
-        status: {$ref: '#/components/schemas/QuestStatus'}
-        items:
-          type: array
-          maxItems: 0
-          items: {type: object}
-          description: Empty in this slice; there is no backend venue progress or collect route yet
-        message: {type: string}
-    DocumentQuestItem:
-      type: object
-      required: [kind, title, reward_points]
-      properties:
-        kind: {$ref: '#/components/schemas/DocumentKind'}
-        title: {type: string}
-        reward_points: {type: integer, enum: [200, 300]}
-    DocumentQuest:
-      type: object
-      required: [status, items, message]
-      properties:
-        status: {$ref: '#/components/schemas/QuestStatus'}
-        items: {type: array, items: {$ref: '#/components/schemas/DocumentQuestItem'}}
-        message: {type: string}
     QuestTask:
       type: object
       required: [id, kind, status, title, subtitle, subject_name, photo, icon, detail, reward_points, progress, dog_id, entitlement_id, collected_at]
@@ -1013,7 +892,7 @@ components:
         collected_at: {type: string, format: date-time, nullable: true, description: Actual award time; null before collection}
     QuestDashboard:
       type: object
-      required: [server_time, timezone, local_date, next_reset_at, tasks, daily_goal, streak, birthdays, check_ins, documents]
+      required: [server_time, timezone, local_date, next_reset_at, tasks]
       properties:
         server_time: {type: string, format: date-time}
         timezone: {type: string, enum: [Australia/Melbourne]}
@@ -1027,11 +906,6 @@ components:
             deterministic kind/dog/ID ordering within each state. Empty is valid.
             Collected rows are retained only on the same Melbourne calendar day;
             removing a row never removes its ledger or document history.
-        daily_goal: {$ref: '#/components/schemas/DailyGoalQuest'}
-        streak: {$ref: '#/components/schemas/StreakQuest'}
-        birthdays: {$ref: '#/components/schemas/BirthdayQuest'}
-        check_ins: {$ref: '#/components/schemas/CheckInQuest'}
-        documents: {$ref: '#/components/schemas/DocumentQuest'}
     BirthdayAward:
       type: object
       required: [id, kind, dog_id, year, points, awarded_at]
@@ -1220,15 +1094,23 @@ components:
         created_at: {type: string, format: date-time}
     Reward:
       type: object
-      required: [id, name, description, point_cost, cafe_name]
+      required: [id, name, description, point_cost, cafe_name, venue_id, photo, starts_at, ends_at, daily_quantity_limit, terms, requires_store_purchase]
+      description: Available menu item belonging to a normalized Venue; legacy café fields remain for existing clients.
       properties:
         id: {type: integer}
         name: {type: string}
         description: {type: string}
         point_cost: {type: integer, minimum: 1}
-        cafe_name: {type: string}
-        cafe_id: {type: integer}
-        cafe_photo: {type: string, format: uri, nullable: true}
+        cafe_name: {type: string, description: Current Venue name}
+        cafe_id: {type: integer, description: 'Legacy managing café User ID, not Venue ID'}
+        venue_id: {type: integer, minimum: 1, description: Canonical Venue ID}
+        photo: {type: string, format: uri, nullable: true, readOnly: true, description: Product photo; separate from venue and user photos}
+        starts_at: {type: string, format: date-time, nullable: true, description: Inclusive sale start; null means no lower bound}
+        ends_at: {type: string, format: date-time, nullable: true, description: Exclusive sale end; null means no upper bound}
+        daily_quantity_limit: {type: integer, minimum: 1, nullable: true, description: 'Allocation per Melbourne order date; null is unlimited. Pending unexpired and collected orders count; cancelled/expired orders release allocation'}
+        terms: {type: string}
+        requires_store_purchase: {type: boolean, description: 'Offer condition only; no fiat payment or in-store purchase verification is performed by this API'}
+        cafe_photo: {type: string, format: uri, nullable: true, description: Current Venue photo; separate from the login account avatar}
         cafe_address: {type: string}
         cafe_description: {type: string}
         cafe_opening_hours: {type: string}
@@ -1241,27 +1123,43 @@ components:
         description: {type: string, maxLength: 2000, default: ''}
         point_cost: {type: integer, minimum: 1, maximum: 2147483647}
         is_available: {type: boolean, default: true}
+        starts_at: {type: string, format: date-time, nullable: true, description: Inclusive sale start; omitted on create defaults to null}
+        ends_at: {type: string, format: date-time, nullable: true, description: Exclusive sale end; must follow starts_at when both are set}
+        daily_quantity_limit: {type: integer, minimum: 1, maximum: 2147483647, nullable: true, description: Per-product Melbourne-day allocation; null means unlimited}
+        terms: {type: string, maxLength: 2000, default: ''}
+        requires_store_purchase: {type: boolean, default: false, description: Descriptive offer condition; does not verify a cash purchase}
     CafeProduct:
       type: object
-      required: [id, name, description, point_cost, is_available]
+      required: [id, venue_id, name, description, point_cost, is_available, photo, starts_at, ends_at, daily_quantity_limit, terms, requires_store_purchase, updated_at]
       properties:
         id: {type: integer, readOnly: true}
+        venue_id: {type: integer, minimum: 1, readOnly: true, description: Managed Venue assigned from the authenticated café account}
         name: {type: string, minLength: 1, maxLength: 100}
         description: {type: string, maxLength: 2000}
         point_cost: {type: integer, minimum: 1, maximum: 2147483647}
         is_available: {type: boolean}
+        photo: {type: string, format: uri, nullable: true, readOnly: true}
+        starts_at: {type: string, format: date-time, nullable: true}
+        ends_at: {type: string, format: date-time, nullable: true}
+        daily_quantity_limit: {type: integer, minimum: 1, nullable: true}
+        terms: {type: string}
+        requires_store_purchase: {type: boolean}
+        updated_at: {type: string, format: date-time, readOnly: true}
     Redemption:
       type: object
-      required: [id, reference_number, reward, reward_name_snapshot, point_cost_snapshot, status, created_at, collected_at, expires_at, cafe_name_snapshot]
+      required: [id, reference_number, reward, reward_name_snapshot, point_cost_snapshot, status, created_at, collected_at, expires_at, cafe_name_snapshot, venue_id, terms_snapshot, order_date]
       properties:
         id: {type: integer}
         reference_number: {type: string}
         reward: {type: integer, description: Catalogue reward ID; historic names/prices use snapshots}
         reward_name_snapshot: {type: string}
         point_cost_snapshot: {type: integer, minimum: 1}
-        cafe_name_snapshot: {type: string}
-        cafe_id: {type: integer}
-        cafe_photo: {type: string, format: uri, nullable: true}
+        cafe_name_snapshot: {type: string, description: Venue name at order time}
+        cafe_id: {type: integer, description: 'Café User ID responsible at order time; retained even if venue management changes'}
+        venue_id: {type: integer, minimum: 1, description: Canonical Venue recorded on this order}
+        terms_snapshot: {type: string, description: Offer terms at order time; later product edits do not change it}
+        order_date: {type: string, format: date, description: Immutable Melbourne purchase date used for daily allocation}
+        cafe_photo: {type: string, format: uri, nullable: true, description: Current Venue photo}
         cafe_address: {type: string}
         cafe_description: {type: string}
         cafe_opening_hours: {type: string}
@@ -1269,17 +1167,18 @@ components:
         status: {type: string, enum: [PENDING, COLLECTED, EXPIRED, CANCELLED]}
         created_at: {type: string, format: date-time}
         collected_at: {type: string, format: date-time, nullable: true}
-        expires_at: {type: string, format: date-time, description: Next midnight in the configured server timezone}
+        expires_at: {type: string, format: date-time, description: Next Melbourne midnight}
     CafeProfile:
       type: object
-      required: [name, email, address, description, opening_hours, photo, google_maps_url, maps_link]
+      required: [venue_id, name, email, address, description, opening_hours, photo, google_maps_url, maps_link]
       properties:
-        name: {type: string, maxLength: 100}
-        email: {type: string, format: email, readOnly: true}
+        venue_id: {type: integer, minimum: 1, readOnly: true, description: Canonical managed Venue identity; not the login account ID}
+        name: {type: string, maxLength: 100, description: Venue name; changing it does not change User.display_name}
+        email: {type: string, format: email, readOnly: true, description: Managing café account's login email}
         address: {type: string, maxLength: 255}
         description: {type: string, maxLength: 2000}
         opening_hours: {type: string, maxLength: 500}
-        photo: {type: string, format: uri, nullable: true, readOnly: true}
+        photo: {type: string, format: uri, nullable: true, readOnly: true, description: Venue photo; separate from the account avatar}
         google_maps_url: {type: string, maxLength: 2048, description: Stored Google Maps link or blank when using address search}
         maps_link: {type: string, format: uri, readOnly: true, description: Saved link or automatic name/address search}
     CafeOrder:

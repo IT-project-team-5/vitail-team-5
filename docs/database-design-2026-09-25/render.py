@@ -1,108 +1,208 @@
-"""Generate the ERD source and a compact SVG overview from the local DBML.
+"""Render current domain model metadata; never connect to or mutate a database.
 
-No third-party dependencies. This checks names/FK targets and coverage counts;
-it is not a MySQL migration or a substitute for a DBML compiler.
+Run with the backend Python environment from any directory. --check verifies
+checked-in artifacts against the loaded Django models instead of writing them.
+DBML is a logical dictionary: ORM defaults/deletion and Q checks are notes, not
+SQL DDL. Django auth/admin/session tables and implicit permission joins are out.
 """
-from pathlib import Path
+import argparse
 import html
+import os
+from pathlib import Path
 import re
+import sys
 
 ROOT = Path(__file__).resolve().parent
-source = (ROOT / "schema.dbml").read_text()
-tables = {}
-for match in re.finditer(r"^Table (\w+) \{\n(.*?)^\}", source, re.M | re.S):
-    name, body = match.groups()
-    fields = []
-    for line in body.splitlines():
-        field = re.match(r"^  (\w+) ([\w]+(?:\([\d,]+\))?)(?: \[(.*)\])?$", line)
-        if field:
-            field_name, kind, flags = field.groups()
-            fields.append((field_name, kind, flags or ""))
-    tables[name] = fields
-assert len(tables) == 28, f"Expected 28 tables, got {len(tables)}"
-deferred = {"ExternalIdentity", "ChatMessage", "Charity", "Donation", "PushDevice", "NotificationDelivery"}
-assert len(set(tables) - deferred) == 22
-relations = []
-for name, fields in tables.items():
-    assert len(fields) == len({f[0] for f in fields}), name
-    assert any("pk" in flags.split(", ") for _, _, flags in fields), name
-    for field, kind, flags in fields:
-        ref = re.search(r"ref: ([>\-]) (\w+)\.(\w+)", flags)
-        if ref:
-            direction, target, target_field = ref.groups()
-            assert target in tables, (name, field, target)
-            assert target_field in {f[0] for f in tables[target]}, (name, field, target_field)
-            relations.append((name, field, target, "not null" in flags or "pk" in flags, direction == "-"))
+sys.path.insert(0, str(ROOT.parents[1] / "backend"))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ.setdefault("DATABASE_ENGINE", "sqlite")
+import django
 
-mermaid = ["%% Generated from schema.dbml by render.py. Selected fields; DBML contains complete dictionary.", "erDiagram"]
-for name, fields in tables.items():
-    mermaid.append(f"    {name} {{")
-    for field, kind, flags in fields:
-        # Show keys and selected state/time/rule fields so the ERD remains navigable.
-        if not ("pk" in flags or "ref:" in flags or "unique" in flags or field in {
-            "kind", "status", "state", "local_date", "point_date", "amount", "remaining_points",
-            "earned_on", "earn_category", "collected_at", "qualification_key", "entitlement_key",
-            "target_active_seconds", "final_goal_met", "verified_seconds", "required_seconds",
-            "category_slot", "rules_version", "date_of_birth", "microchip_number", "point_cost",
-            "active_seconds", "distance_m", "net_distance_m", "started_at", "ended_at",
-        }):
-            continue
-        keys = []
-        if "pk" in flags: keys.append("PK")
-        if "ref:" in flags: keys.append("FK")
-        if "unique" in flags: keys.append("UK")
-        type_name = re.sub(r"\(.*", "", kind)
-        optional = "nullable" if "not null" not in flags and "pk" not in flags else "required"
-        mermaid.append(f'        {type_name} {field}{" " + ",".join(keys) if keys else ""} "{optional}"')
-    mermaid.append("    }")
-for child, field, parent, required, one in relations:
-    left = "||" if required else "|o"
-    right = "o|" if one else "o{"
-    mermaid.append(f'    {parent} {left}--{right} {child} : "{field}"')
-(ROOT / "schema.mmd").write_text("\n".join(mermaid) + "\n")
+django.setup()
+from django.apps import apps
+from django.db import models
 
-groups = [
-    ("IDENTITY", "People & dogs", ["User", "Breed", "Dog", "ExternalIdentity"], "#256b68", "Photos / birthday / microchip / consent"),
-    ("COMMERCE", "Places & points", ["Venue", "Reward", "Redemption", "PointEntry", "CafeOrderFeedState"], "#956122", "One wallet ledger. One order model."),
-    ("ACTIVITY", "Walks & verification", ["Walk", "WalkDog", "WalkSession", "LocationSample", "NetWalkInterval"], "#3c659b", "Summary history + short-lived GPS evidence"),
-    ("QUESTS", "Goals & collection", ["DogDailyGoal", "QuestDefinition", "QuestAward", "CheckIn", "DocumentEntitlement", "DocumentSubmission", "EvidenceFingerprint"], "#795f92", "Eligibility and collection are distinct."),
-    ("SOCIAL", "Friends & live map", ["Friendship", "UserBlock", "ChatMessage"], "#477c53", "Leaderboard is a query, not a table."),
-    ("LATER", "Donations & notifications", ["Charity", "Donation", "PushDevice", "NotificationDelivery"], "#74747c", "Add with their feature. No payments."),
+DOMAIN_APPS = {"accounts", "dogs", "venues", "rewards", "walks", "quests", "checkins", "evidence", "social"}
+GROUPS = [
+    ("IDENTITY", "People & dogs", ["User", "Breed", "Dog"], "#256b68", "Profiles live; privacy fields are foundations."),
+    ("COMMERCE", "Places & points", ["Venue", "Reward", "Redemption", "PointEntry", "CafeOrderFeedState"], "#956122", "Live catalogue, orders and one point ledger."),
+    ("ACTIVITY", "Walks & evidence", ["Walk", "WalkDog", "WalkSession", "LocationSample", "NetWalkInterval"], "#3c659b", "Walk upload live; server sessions / GPS dormant."),
+    ("QUESTS", "Goals & collection", ["DogDailyGoal", "QuestDefinition", "QuestAward", "CheckIn"], "#795f92", "Birthday live; goals / GPS provider pending."),
+    ("DOCUMENTS", "Proof & eligibility", ["DocumentEntitlement", "DocumentSubmission", "EvidenceFingerprint"], "#477c53", "Submit → READY → Collect. Private evidence."),
+    ("SOCIAL", "Relationship foundation", ["Friendship", "UserBlock"], "#74747c", "Locked services; no social API or matching."),
 ]
-assert {t for _, _, names, _, _ in groups for t in names} == set(tables)
-W, H = 1360, 1080
-out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="title desc">',
-       '<title id="title">Vitail database design overview</title><desc id="desc">28 domain tables in six groups. 22 core tables and six deferred tables. Exact foreign keys are in schema.mmd and schema.dbml. Proposed design, not deployed.</desc>',
-       '<rect width="100%" height="100%" fill="#f6f5f1"/>',
-       '<g font-family="Arial,Helvetica,sans-serif">']
-def text(x, y, value, size=16, fill="#263833", extra=""):
-    return f'<text x="{x}" y="{y}" font-size="{size}" fill="{fill}" {extra}>{html.escape(value)}</text>'
-out += [text(56, 53, "VITAIL / DATA DESIGN", 14, "#64726b", 'letter-spacing="2"'),
-        text(56, 105, "Complete coverage. Small, explicit models.", 36, extra='font-weight="700"'),
-        text(56, 141, "22 core tables + 6 deferred  /  37 Jira items reviewed  /  25 September 2026", 18, "#64726b")]
-for index, (label, title, names, color, subtitle) in enumerate(groups):
-    col, row = index % 3, index // 3
-    x, y, w, h = 56 + col * 430, 186 + row * 382, 390, 342
-    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="16" fill="white" stroke="#d9ddd5"/>')
-    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="8" rx="4" fill="{color}"/>')
-    out += [text(x+22, y+36, label, 12, color, 'letter-spacing="1.7" font-weight="700"'),
-            text(x+22, y+68, title, 24, extra='font-weight="700"')]
-    for i, name in enumerate(names):
-        yy = y + 104 + i * 27
-        out.append(text(x+22, yy, name, 17))
-        if name in deferred:
-            out.append(text(x+w-22, yy, "LATER", 10, "#777", 'text-anchor="end" letter-spacing="1"'))
-    out.append(text(x+22, y+h-22, subtitle, 13, "#6f786f"))
-out += [text(56, 967, "Key relationships", 16, extra='font-weight="700"'),
-        text(56, 997, "User → Dog / Walk / Friendship     Venue → Reward → Redemption     Qualification → PointEntry", 16),
-        text(56, 1038, "Overview only · Exact FK cardinalities and constraints: schema.mmd / schema.dbml · Design proposal, not a migration", 14, "#69786f"),
-        '</g></svg>']
-(ROOT / "overview.svg").write_text("\n".join(out))
+DEFERRED = {"ExternalIdentity", "ChatMessage", "Charity", "Donation", "PushDevice", "NotificationDelivery"}
+registry = {m.__name__: m for m in apps.get_models() if m._meta.app_label in DOMAIN_APPS}
+order = [name for _, _, names, _, _ in GROUPS for name in names]
+assert len(registry) == len(order) == 22 and set(order) == set(registry)
+assert not (set(registry) & DEFERRED)
 
-coverage = (ROOT / "coverage.md").read_text()
-issue_rows = re.findall(r"^\| \[SCRUM-(\d+)\]", coverage, re.M)
-story_rows = re.findall(r"^\| US-(\d+)", coverage, re.M)
-assert len(issue_rows) == len(set(issue_rows)) == 37
-assert len(story_rows) == len(set(story_rows)) == 14
-print(f"Validated {len(tables)} table names, {len(relations)} FK targets, 37 Jira rows, 14 story rows.")
-print("Generated schema.mmd and overview.svg. Logical checks only; no database was contacted.")
+
+def quoted(value):
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ") + "'"
+
+
+def field_type(field):
+    if field.is_relation:
+        return field_type(field.target_field)
+    kind = field.get_internal_type()
+    if kind in ("CharField", "EmailField", "URLField", "FileField"):
+        return f"varchar({field.max_length})"
+    if kind == "DecimalField":
+        return f"decimal({field.max_digits},{field.decimal_places})"
+    return {
+        "BigAutoField": "bigint", "AutoField": "int", "BigIntegerField": "bigint",
+        "PositiveBigIntegerField": "bigint", "IntegerField": "int", "PositiveIntegerField": "int",
+        "SmallIntegerField": "smallint", "PositiveSmallIntegerField": "smallint",
+        "BooleanField": "boolean", "DateTimeField": "datetime", "DateField": "date",
+        "TextField": "text", "JSONField": "json", "UUIDField": "char(32)",
+    }[kind]
+
+
+def field_notes(field):
+    notes = []
+    if field.is_relation:
+        notes.append("Django on_delete=" + field.remote_field.on_delete.__name__)
+    if field.choices:
+        notes.append("choices: " + " / ".join(str(value) for value, _ in field.flatchoices))
+    if field.get_internal_type().startswith("Positive"):
+        notes.append("nonnegative integer")
+    if field.has_default():
+        value = field.default
+        default = (getattr(value, "__module__", "") + "." + value.__qualname__) if callable(value) else repr(value)
+        notes.append("ORM default: " + default)
+    if getattr(field, "auto_now_add", False):
+        notes.append("ORM auto_now_add")
+    if getattr(field, "auto_now", False):
+        notes.append("ORM auto_now")
+    if isinstance(field, models.FileField):
+        notes.append("storage key, not file content")
+    return notes
+
+
+def dbml():
+    out = ["// Generated by render.py from 22 current Django domain models, 2026-09-25.",
+           "// Exact columns/nullability/keys; logical types. Notes are ORM semantics, not SQL DDL.",
+           "// Six deferred tables are NOT defined. See README.md for operational boundaries.",
+           "Project Vitail {", "  database_type: 'MySQL'", "}", ""]
+    for name in order:
+        model = registry[name]
+        out.append(f"Table {name} {{")
+        for field in model._meta.concrete_fields:
+            flags = []
+            if field.primary_key:
+                flags.append("pk")
+                if isinstance(field, (models.AutoField, models.BigAutoField)):
+                    flags.append("increment")
+            if not field.null:
+                flags.append("not null")
+            if field.unique and not field.primary_key:
+                flags.append("unique")
+            if field.is_relation:
+                target = field.remote_field.model
+                assert target.__name__ in registry
+                flags.append(f"ref: {'-' if field.one_to_one else '>'} {target.__name__}.{field.target_field.column}")
+            notes = field_notes(field)
+            if notes:
+                flags.append("note: " + quoted("; ".join(notes)))
+            suffix = " [" + ", ".join(flags) + "]" if flags else ""
+            out.append(f"  {field.column} {field_type(field)}{suffix}")
+        indexes = []
+        for index in model._meta.indexes:
+            columns = [model._meta.get_field(f.lstrip('-')).column for f in index.fields]
+            assert len(columns) == len(index.fields) and not index.expressions
+            indexes.append((columns, ["name: " + quoted(index.name)]))
+        for constraint in model._meta.constraints:
+            if isinstance(constraint, models.UniqueConstraint):
+                assert not constraint.condition and not constraint.expressions
+                indexes.append(([model._meta.get_field(f).column for f in constraint.fields], ["unique", "name: " + quoted(constraint.name)]))
+        for field in model._meta.concrete_fields:
+            if field.db_index and not field.unique:
+                indexes.append(([field.column], []))
+        if indexes:
+            out.append("  indexes {")
+            for columns, flags in indexes:
+                out.append("    (" + ", ".join(columns) + ")" + (" [" + ", ".join(flags) + "]" if flags else ""))
+            out.append("  }")
+        out.append("  Note: " + quoted(f"Physical table: {model._meta.db_table}. Model: {model._meta.label}. All FK deletion notes are Django behavior; constraints below are exact model Q expressions."))
+        for constraint in model._meta.constraints:
+            if isinstance(constraint, models.CheckConstraint):
+                out.append(f"  // CHECK {constraint.name}: {constraint.condition}")
+        out.extend(["}", ""])
+    return "\n".join(out)
+
+
+def mermaid():
+    out = ["%% Generated from current Django metadata by render.py. DBML has all columns and checks.", "erDiagram"]
+    selected = {"kind", "status", "state", "local_date", "point_date", "amount", "remaining_points", "earned_on", "earn_category", "collected_at", "awarded_at", "qualification_key", "entitlement_key", "target_active_seconds", "final_goal_met", "verified_seconds", "required_seconds", "category_slot", "date_of_birth", "point_cost", "active_seconds", "distance_m", "net_distance_m", "started_at", "ended_at"}
+    relations = []
+    for name in order:
+        model = registry[name]
+        out.append(f"    {name} {{")
+        for field in model._meta.concrete_fields:
+            if field.is_relation:
+                relations.append((name, field, field.remote_field.model.__name__))
+            if not (field.primary_key or field.is_relation or field.unique or field.name in selected):
+                continue
+            keys = (["PK"] if field.primary_key else []) + (["FK"] if field.is_relation else []) + (["UK"] if field.unique and not field.primary_key else [])
+            kind = field_type(field).split("(")[0]
+            out.append(f'        {kind} {field.column}{" " + ",".join(keys) if keys else ""} "{"nullable" if field.null else "required"}"')
+        out.append("    }")
+    for child, field, parent in relations:
+        out.append(f'    {parent} {"|o" if field.null else "||"}--{"o|" if field.unique else "o{"} {child} : "{field.column}"')
+    return "\n".join(out) + "\n"
+
+
+def svg():
+    def text(x, y, value, size=16, fill="#263833", extra=""):
+        return f'<text x="{x}" y="{y}" font-size="{size}" fill="{fill}" {extra}>{html.escape(value)}</text>'
+    out = ['<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1110" viewBox="0 0 1360 1110" role="img" aria-labelledby="title desc">',
+           '<title id="title">Vitail current database foundation</title><desc id="desc">22 current domain model tables in six groups. Six deferred tables are not created. Operational features and dormant foundations are distinguished; exact foreign keys are in schema.mmd.</desc>',
+           '<rect width="100%" height="100%" fill="#f6f5f1"/>', '<g font-family="Arial,Helvetica,sans-serif">',
+           text(56, 53, "VITAIL / CURRENT MODEL SCHEMA", 14, "#64726b", 'letter-spacing="2"'),
+           text(56, 105, "22 tables. Clear feature boundaries.", 36, extra='font-weight="700"'),
+           text(56, 141, "37 Jira items traced  /  6 deferred tables NOT created  /  25 September 2026", 18, "#64726b")]
+    for index, (label, title, names, color, subtitle) in enumerate(GROUPS):
+        x, y, w, h = 56 + (index % 3) * 430, 186 + (index // 3) * 335, 390, 295
+        out.extend([f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="16" fill="white" stroke="#d9ddd5"/>',
+                    f'<rect x="{x}" y="{y}" width="{w}" height="8" rx="4" fill="{color}"/>',
+                    text(x+22, y+36, label, 12, color, 'letter-spacing="1.7" font-weight="700"'),
+                    text(x+22, y+68, title, 24, extra='font-weight="700"')])
+        for i, name in enumerate(names):
+            out.append(text(x+22, y+108+i*27, name, 17))
+        out.append(text(x+22, y+h-22, subtitle, 12, "#6f786f"))
+    out.extend([text(56, 876, "NOT CREATED", 12, "#64726b", 'letter-spacing="1.7" font-weight="700"'),
+                text(56, 910, "ExternalIdentity  ·  ChatMessage  ·  Charity  ·  Donation  ·  PushDevice  ·  NotificationDelivery", 19),
+                text(56, 963, "No social / GPS ingestion APIs, live matching, or goal / streak / net-walk awards are enabled.", 18),
+                text(56, 998, "Check-in has internal services and shared UI state; its location provider is not connected.", 18),
+                text(56, 1059, "Model metadata, not deployment status · Django infrastructure excluded · Exact fields / keys: schema.dbml / schema.mmd", 14, "#69786f"), '</g></svg>'])
+    return "\n".join(out) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="fail if generated artifacts differ from current model metadata")
+    args = parser.parse_args()
+    coverage = (ROOT / "coverage.md").read_text()
+    issue_rows = re.findall(r"^\| \[SCRUM-(\d+)\]", coverage, re.M)
+    story_rows = re.findall(r"^\| US-(\d+)", coverage, re.M)
+    expected_issues = {4, 5, 8, 10, 12, *range(17, 39), *range(40, 50)}
+    assert len(issue_rows) == 37 and {int(key) for key in issue_rows} == expected_issues
+    assert len(story_rows) == 14 and {int(key) for key in story_rows} == set(range(1, 15))
+    artifacts = {"schema.dbml": dbml(), "schema.mmd": mermaid(), "overview.svg": svg()}
+    stale = []
+    for filename, content in artifacts.items():
+        path = ROOT / filename
+        if args.check:
+            if path.read_text() != content:
+                stale.append(filename)
+        else:
+            path.write_text(content)
+    if stale:
+        raise SystemExit("Outdated artifacts: " + ", ".join(stale))
+    fields = [f for model in registry.values() for f in model._meta.concrete_fields]
+    print(f"{'Verified' if args.check else 'Generated'} 22 tables, {len(fields)} columns, {sum(f.is_relation for f in fields)} FKs; 37 Jira + 14 User Story rows. No database connection or writes.")
+
+
+if __name__ == "__main__":
+    main()

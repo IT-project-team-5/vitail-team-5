@@ -22,41 +22,6 @@ local history, unconfirmed-summary recovery, automatic stop/logout without an
 award, stable upload IDs, daily-cap estimates, and full-map/summary snapshots.
 They do not replace the real-iPhone tests below.
 
-The 2026-09-24 run for the minimal owner UI completed 203 simulator tests:
-202 passed, zero failed, and one device-only file-protection check was skipped.
-All 138 backend tests passed on disposable MySQL 9.3, and the unsigned Release
-device build passed. Light/dark snapshots cover authentication, profiles, the
-full map, finish summaries, café menus and collection; large-text snapshots cover
-the main confirmation flows. Photo selection and real GPS/background behaviour
-still require physical-iPhone acceptance.
-
-The subsequent 2026-09-24 UI refinements run completed 212 simulator tests:
-211 passed and the same device-only check was skipped. All 145 backend tests
-passed on disposable MySQL, and the unsigned Release device build passed.
-The final receipt-dismissal safeguard also passed 13 focused purchase and
-presentation tests. Visual checks cover inline login, appearance settings,
-play/pause controls, café menus and the automatically presented receipt.
-
-The following counts are **historical verification records**, not results for
-the current UI and finish-confirmation flow.
-
-The 2026-09-09 simulator run completed 116 tests: 115 passed,
-zero failed, and one file-protection attribute check was skipped because the
-simulator did not expose it. Native snapshots also cover normal and large-text
-recovery controls. These checks do not replace the real-iPhone tests below.
-
-The 2026-09-15 integrated simulator run completed 158 tests: 157 passed, zero
-failed, and one device-only file-protection check was skipped. Added checks cover
-upload receipts, legacy archives, pause segments, speed jumps and inactivity.
-
-The 2026-09-16 integration with current main completed 169 simulator tests:
-168 passed, zero failed, and the same device-only check was skipped. Added
-regressions cover delayed GPS inactivity, recovered inactivity windows, stale
-weak fixes, concurrent Finish/upload and logout waiting, tab cancellation,
-stopped-account responses, durable terminal errors and failed local saves.
-All 100 backend tests passed on disposable MySQL 9.3; SQLite passed 95 and
-skipped five MySQL-only checks. The unsigned Release device build also passed.
-
 ## What this version supports
 
 - The map fills the Walk page behind a bottom menu. The menu can be expanded
@@ -211,7 +176,7 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 
 ### 6. Account isolation and sign-out
 
-1. Start a short test walk, then open Account → profile → Sign Out. Background
+1. Start a short test walk, then open Account → profile → Log Out. Background
    capture should stop and the walk should become a protected pending summary.
    Logout must not select dogs, add this walk to uploadable history, or award it.
    Previously confirmed records may still retry before credentials clear.
@@ -244,8 +209,10 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 1. Record a real walk while online, then Pause → Finish. Choose dogs and check the
    estimated points before tapping Complete walk. Only after confirmation should
    the history card show accepted distance and awarded points, and Redeem update
-   its balance. Awards use cumulative daily rounding at 8 points/km, capped at
-   40 points per Melbourne day; multiple dogs do not increase the award.
+   its balance. Awards use cumulative daily rounding and the walking/shared
+   activity caps in [Quest policy](QUESTS.md); multiple dogs do not increase the
+   award. The live estimate can exceed the final receipt if check-ins already
+   consumed some daily allowance.
 2. Pause for less than 60 seconds and move while paused, then Resume, walk again
    and Pause → Finish → choose dogs → Complete walk. Neither local nor server
    distance should bridge that paused movement.
@@ -263,8 +230,8 @@ the recovery checks below and ensure the last checkpoint is shown as Paused.
 6. Confirm legacy history remains readable without retrospective awards. A
    simulator-generated walk must not earn points. Do not remove its source flag.
 7. Use earned points for a test order and verify the owner collection and café
-   order views still agree. Redeem's coffee equivalent uses 60 points per cup;
-   that estimate does not change either the walking rate or menu prices.
+   order views still agree. Redeem's coffee equivalent uses the reference in
+   [Quest policy](QUESTS.md); it does not change walking rates or menu prices.
 
 ### 9. Pending summary recovery and zero-dog completion
 
@@ -296,11 +263,14 @@ a walk after force-quit. Standard iOS location indication is intentional.
 This checklist covers tracking, local history and the integrated distance-award
 flow. It does not validate advanced anti-cheat or personalised welfare rules.
 
+The initial 9 September outdoor export exposed GPS jumps; later simulator
+regressions and visual checks are useful historical evidence, not completion of
+this physical-device checklist. Previous run counts remain in Git history.
+Record new results against the exact build below.
+
 | Date / build | iPhone / iOS | Test | Result | Observed issue / evidence |
 |---|---|---|---|---|
-| 2026-09-09 / MVP checkpoint | Real iPhone | Initial outdoor walks and exported local history | Partial evidence | Saved history is readable and distance matches the within-segment sum; implausible GPS jumps remain a known issue. Export does not include lock-screen or pause event logs. |
-| 2026-09-24 / drawer and receipt refinements | iPhone 17 Pro simulator / iOS 26.2 | 83 affected iOS tests, including drawer geometry, shared scroll hierarchy, redemption and café order compatibility; light/dark and large-text snapshots | Passed | Snapshot inspection confirms shared drawer scrolling and reachable controls. This is not evidence of physical-device gestures or background GPS behaviour. |
-| Pending | — | Full physical-device checklist | Not yet completed | Add results for the remaining cases after testing |
+| Pending | — | Full physical-device checklist | Not yet completed | Add results after testing |
 
 Record route screenshots, expected versus observed pause/recovery behaviour,
 backend availability, power mode and battery change. Do not label the full

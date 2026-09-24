@@ -1,14 +1,10 @@
-%% Generated from schema.dbml by render.py. Selected fields; DBML contains complete dictionary.
+%% Generated from current Django metadata by render.py. DBML has all columns and checks.
 erDiagram
     User {
         bigint id PK "required"
         varchar email UK "required"
-        varchar public_id UK "nullable"
+        varchar public_id UK "required"
         bigint active_walk_session_id FK,UK "nullable"
-    }
-    ExternalIdentity {
-        bigint id PK "required"
-        bigint user_id FK "required"
     }
     Breed {
         bigint id PK "required"
@@ -19,7 +15,6 @@ erDiagram
         bigint owner_id FK "required"
         bigint breed_id FK "required"
         date date_of_birth "nullable"
-        varchar microchip_number "nullable"
     }
     Venue {
         bigint id PK "required"
@@ -34,14 +29,14 @@ erDiagram
     Redemption {
         bigint id PK "required"
         bigint owner_user_id FK "required"
-        bigint cafe_user_id FK "required"
         bigint reward_id FK "required"
         bigint venue_id FK "required"
         varchar reference_number UK "required"
-        varchar status "required"
-        datetime collected_at "nullable"
+        bigint cafe_user_id FK "required"
         bigint spend_entry_id FK,UK "nullable"
         bigint refund_entry_id FK,UK "nullable"
+        varchar status "required"
+        datetime collected_at "nullable"
     }
     PointEntry {
         bigint id PK "required"
@@ -51,7 +46,6 @@ erDiagram
         varchar source_reference UK "nullable"
         varchar earn_category "nullable"
         date earned_on "nullable"
-        varchar rules_version "nullable"
     }
     CafeOrderFeedState {
         bigint cafe_user_id PK,FK "required"
@@ -67,7 +61,6 @@ erDiagram
         bigint base_point_entry_id FK,UK "nullable"
         decimal net_distance_m "nullable"
         bigint net_point_entry_id FK,UK "nullable"
-        varchar rules_version "nullable"
     }
     WalkDog {
         bigint id PK "required"
@@ -96,7 +89,6 @@ erDiagram
         bigint session_high_id FK "required"
         datetime started_at "required"
         datetime ended_at "required"
-        varchar rules_version "required"
     }
     DogDailyGoal {
         bigint id PK "required"
@@ -104,23 +96,20 @@ erDiagram
         bigint owner_id FK "required"
         date local_date "required"
         int target_active_seconds "required"
-        varchar rules_version "required"
         boolean final_goal_met "nullable"
     }
     QuestDefinition {
         bigint id PK "required"
         varchar code UK "required"
-        varchar rules_version "required"
     }
     QuestAward {
         bigint id PK "required"
         bigint owner_id FK "required"
         varchar kind "required"
-        varchar qualification_key UK "required"
         bigint dog_id FK "nullable"
+        varchar qualification_key UK "required"
         bigint point_entry_id FK,UK "nullable"
-        datetime collected_at "nullable"
-        varchar rules_version "required"
+        datetime awarded_at "nullable"
     }
     CheckIn {
         bigint id PK "required"
@@ -128,12 +117,12 @@ erDiagram
         bigint venue_id FK "nullable"
         date local_date "required"
         varchar category_slot "required"
+        char attempt_id UK "required"
         int required_seconds "required"
         int verified_seconds "required"
         datetime started_at "nullable"
         bigint point_entry_id FK,UK "nullable"
         datetime collected_at "nullable"
-        varchar rules_version "required"
     }
     DocumentEntitlement {
         bigint id PK "required"
@@ -141,7 +130,6 @@ erDiagram
         bigint dog_id FK "nullable"
         varchar kind "required"
         varchar entitlement_key "required"
-        varchar rules_version "required"
         bigint point_entry_id FK,UK "nullable"
         datetime collected_at "nullable"
     }
@@ -172,43 +160,15 @@ erDiagram
         bigint blocker_id FK "required"
         bigint blocked_id FK "required"
     }
-    ChatMessage {
-        bigint id PK "required"
-        bigint sender_id FK "required"
-        bigint recipient_id FK "required"
-        varchar kind "required"
-    }
-    Charity {
-        bigint id PK "required"
-    }
-    Donation {
-        bigint id PK "required"
-        bigint owner_id FK "required"
-        bigint charity_id FK "required"
-        varchar reference_number UK "required"
-        bigint spend_entry_id FK,UK "required"
-    }
-    PushDevice {
-        bigint id PK "required"
-        bigint user_id FK "required"
-        uuid installation_id UK "required"
-    }
-    NotificationDelivery {
-        bigint id PK "required"
-        bigint user_id FK "required"
-        varchar kind "required"
-        varchar status "required"
-    }
     WalkSession |o--o| User : "active_walk_session_id"
-    User ||--o{ ExternalIdentity : "user_id"
     User ||--o{ Dog : "owner_id"
     Breed ||--o{ Dog : "breed_id"
     User |o--o| Venue : "manager_user_id"
     Venue ||--o{ Reward : "venue_id"
     User ||--o{ Redemption : "owner_user_id"
-    User ||--o{ Redemption : "cafe_user_id"
     Reward ||--o{ Redemption : "reward_id"
     Venue ||--o{ Redemption : "venue_id"
+    User ||--o{ Redemption : "cafe_user_id"
     PointEntry |o--o| Redemption : "spend_entry_id"
     PointEntry |o--o| Redemption : "refund_entry_id"
     User ||--o{ PointEntry : "user_id"
@@ -247,10 +207,3 @@ erDiagram
     User ||--o{ Friendship : "requested_by_id"
     User ||--o{ UserBlock : "blocker_id"
     User ||--o{ UserBlock : "blocked_id"
-    User ||--o{ ChatMessage : "sender_id"
-    User ||--o{ ChatMessage : "recipient_id"
-    User ||--o{ Donation : "owner_id"
-    Charity ||--o{ Donation : "charity_id"
-    PointEntry ||--o| Donation : "spend_entry_id"
-    User ||--o{ PushDevice : "user_id"
-    User ||--o{ NotificationDelivery : "user_id"

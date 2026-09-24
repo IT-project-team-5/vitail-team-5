@@ -23,7 +23,9 @@ directory. No fixed demo password is included in this repository.
 ## Reset procedure
 
 This deletes existing users, dog profiles, walks, orders, products, point entries,
-venue profiles, feed cursors, admin logs and sessions. Breed reference data and
+venues, friendships, blocks, check-ins, live walk sessions/samples, goal snapshots,
+Quest qualifications, evidence versions and entitlements, feed cursors, admin logs
+and sessions. Breed reference data and
 schema migrations remain. Account ID sequences are preserved so old tokens and
 local route archives cannot become another user's data.
 
@@ -43,7 +45,7 @@ local route archives cannot become another user's data.
    An existing credentials file, incorrect database confirmation or `DEBUG=False`
    prevents the reset. `--owner-points` accepts 1 through 1,000,000. All deletions
    and creations share a transaction; failure to save credentials rolls it back.
-4. Verify five users, three populated café profiles, fifteen available products,
+4. Verify five users, three populated Venues, fifteen available products,
    the owner's balance, and an empty order/walk history. Restart API and expiry.
 5. Sign out of any old iOS session, then sign in with the generated credentials.
    The admin uses the web admin; the owner and cafés use the iOS app.

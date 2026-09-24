@@ -3,7 +3,9 @@
 Account, dog and café photo endpoints accept authenticated JSON uploads. Uploads
 must be JPEG, PNG or WebP, no more than 4 MiB decoded and 16 megapixels. The server
 applies EXIF orientation, resizes to 1024 pixels per side, removes metadata and
-stores a generated JPEG. User and café photos share the same account photo. A dog
+stores a generated JPEG. Account and Venue photos are stored independently. The
+Venue migration copies existing café images to separate storage keys, so changing
+an account avatar does not delete the Venue image. A dog
 upload takes precedence over its existing external `photo` URL, which remains
 stored for backwards compatibility.
 

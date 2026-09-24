@@ -1,32 +1,36 @@
 # Feature Status
 
-Keep this table lightweight. Update it when a feature starts or reaches its MVP
-acceptance criteria; detailed behaviour remains in `README.md`.
+Updated for the 25 September 2026 cleanup. **Connected** means a real client/API
+flow exists; it does not certify every physical-device acceptance case.
+**Foundation** means data/services are prepared but the end-user feature is not
+complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 
-| Feature | Status | MVP acceptance |
+| Feature | Delivery | Current boundary |
 |---|---|---|
-| Authentication | Ready for device test | User chooses owner or café context; owner can register; both can log in and log out from Account; backend role controls routing |
-| Debug backend selection | Ready for device test | Signed-out testers can save or reset a backend URL in Debug builds; it applies immediately to all requests and is absent from Staging/Release |
-| Appearance settings | Ready for device test | Owner profile settings and Café Account provide persisted System/Light/Dark selection across login, pages and sheets |
-| App navigation | Ready for device test | Owner sees Vitail above Account/Walk/Quest/Redeem; wallet and 60-point coffee estimate only in Redeem; owner logout inside profile editor; café sees Account/Products/Orders |
-| Owner and dog profiles | Ready for device test | People/dogs/cafés have uploaded photos with a picker/crop flow; new owners see Add Dog. Owner can edit their display name, view read-only email, and add/edit/delete up to 10 persistent dogs using backend breed reference data; dog data is owner-isolated. Goal API exposes stored inputs but returns no duration until numeric welfare and heat rules are agreed |
-| Walk tracking and history | Ready for integrated device test | Full-height map, draggable bottom menu, state-specific Start/Pause/Resume/Finish, background recording and segmented local route history. Protected drafts recover as Paused after termination; no tracking occurs while terminated. Legacy histories remain readable, without invented accuracy metadata |
-| Walk-distance earning | Ready for integrated device test | Finish summaries persist before confirmation; dogs are selected after the walk. Only explicitly confirmed walks with dogs upload; no-dog records remain local with zero points. Actual accuracy/source and segment IDs go to the existing server validator; no distance crosses a pause. Server receipts update the canonical wallet (8 points/km, max 40/day). Stable UUID/payload retries and receipt reconciliation avoid repeat awards. Routes remain local, server stores summaries only; legacy/invalid/expired records remain local without points. Physical-device GPS/background testing remains required |
-| Venue check-in | Quest/map integration ready; provider pending | One shared verified progress/collect store for the map drawer and Quest; stable retry IDs and session isolation. Maximum four daily rows; uncollected rows hide at the 72-point walking/check-in cap, collected rows remain today. Location validation, venue start flow, caps and HTTP provider belong to the venue feature |
-| Quest list | Ready for device test | Compact avatar rows and detail sheets; only eligible tasks; READY highlighted first, IN_PROGRESS next, COLLECTED muted below until Melbourne midnight. Undefined daily goals and unenabled streak rewards are hidden |
-| Walking streak | Rules available; award delivery pending | Legacy API reports accepted walking streaks, but no actionable Quest row appears while awards are disabled |
-| Dog birthdays | Ready for device test | Explicit nullable birthday, computed age, safe legacy profiles; 60-point birthday collection once per dog/year linked to the canonical ledger |
-| Care document rewards | Ready for device test | Per-dog council/microchip/vet tasks; self-reported submissions reserve rewards; explicit Collect credits once; immutable re-uploads, idempotent retries, private authenticated files and read-only admin evidence |
-| Leaderboard | Owned by another teammate | Removed this slice's tab, service, stores, views, backend endpoint and tests |
-| Wallet and ledger | Ready for device test | Unexpired point credits produce the real balance; spending consumes soonest-expiring credits; Admin grants are positive-only; old ledger rows are read-only |
-| Redemption | Ready for device test | Café-first menus with Maps links; centred product/café/deadline confirmation opens the receipt after success, even if a follow-up refresh fails. One reward/quantity 1 per order; owner confirmation deducts once; retry UUID is idempotent; only that owner can slide to collect; history includes terminal states |
-| Café orders | Ready for device test | Item-first cards show customer and current profile dogs with avatars, with details on tap and no update-time header. Feed remains read-only and café-scoped. Profile-aware clients request fresh pending-order snapshots; legacy deltas/304 remain supported |
-| Café venue profile | Ready for device test | Café Account edits its own photo/name/address/description/opening hours/Google Maps link; name uses the same user display name as the catalogue, email stays read-only; products/prices are managed separately in Products |
-| Café products | Ready for device test | Café can list, create and edit only its own canonical Reward products, including descriptions, positive whole-number point prices and availability; unavailable products leave the owner catalogue and existing orders keep their snapshots |
-| Expiry and refunds | Ready for device test | Compose worker refunds uncollected orders at next local midnight and expires old point lots; read paths enforce order expiry; Admin can cancel/refund pending orders once; audit records cannot be deleted |
-| Personalised goal awards | Planned | Numeric welfare/heat rules and goal evaluation unit still require decisions; stored dog inputs do not fabricate targets or award 20 points |
-| Charity and social sharing | Planned | No UI/API completion is claimed by the connected MVP |
+| Email authentication | Connected | Owner registration; admin-created café login; authoritative role routing; shared Keychain refresh and logout |
+| Login and appearance | Connected | Same-page role accordions; Debug-only backend override below the fold; persisted System/Light/Dark |
+| Owner/dog profiles | Connected | Profile photos, name editing and logout; up to 10 owner-scoped dogs; birthday-derived age with safe legacy unknown birthdays; new-owner Add Dog modal |
+| Owner navigation | Connected | Account / Walk / Quest / Redeem; Vitail title; wallet/coffee estimate only in Redeem |
+| Walk tracking/history | Connected; physical acceptance pending | Full map, draggable/scrollable drawer, Start/Pause/Resume/Finish, protected drafts/history and paused recovery; no tracking while terminated |
+| Walking points | Connected | Explicit finish/dog confirmation, measured segmented GPS, durable retries and server receipts; no-dog records remain local with zero points |
+| Compact Quest list | Connected | Available tasks only; READY first, IN_PROGRESS next, today's COLLECTED last; detail sheets and explicit collection; stale/session responses guarded |
+| Birthday reward | Connected | Actual birthday qualification and once-per-dog/year credit; no invented birthdays |
+| Care documents | Connected | Council/microchip/vet evidence per dog; submit reserves, Collect credits; private files, immutable versions and replay safety; later spot-audit workflow remains unbuilt |
+| Wallet/orders | Connected | Canonical expiring ledger; café-first menus, real prices, purchase confirmation/receipt, owner slide-to-collect and history |
+| Café account/products | Connected | Own Venue details/photo/Maps, own Reward products/prices/availability; venue photo separated from account avatar; unavailable products preserve historical orders |
+| Café orders | Connected | Read-only café-scoped feed, product/customer/profile-dog cards and receipt details; current profile data refreshes while open |
+| Expiry/refunds/admin | Connected | Automatic due expiry/refunds; positive admin grants and repeat-safe pending-order cancellation; these controls do not constitute a full audit/dispute system |
+| Venue normalization | Foundation plus existing café integration | Canonical Venue and Reward relationship; café APIs preserved. Public discovery/start-check-in flow is not delivered |
+| Check-in progress/collection | Foundation; provider pending | Persisted service and one shared iOS map/Quest store; no public GPS ingestion or enabled iOS provider. Verified qualification required; shared daily cap, no partial awards |
+| Daily goals | Foundation; formula pending | Dog inputs and daily snapshot schema; reward amount is agreed, but no fabricated target/progress or automatic award |
+| Streak rewards | Planned | Policy recorded; no active Quest row, calculation projection or award delivery |
+| Live sessions/location/net-walk | Foundation | Session, bounded sample and interval schema; no live location API, peer matcher or net-walk award |
+| Friends/blocks/leaderboard | Foundation / teammate integration | Friendship/block schema only; no social API or working leaderboard tab/endpoint in this app |
+| OAuth, password reset, account deletion | Later delivery | Email login remains current; social identity/account erasure flows are not complete |
+| Chat, push, charity | Later delivery | Optional identity/chat/charity/push tables are not created; no working UI/API is claimed |
+| Social sharing | Later delivery | No completed sharing flow; no separate public-post database required by this scope |
 
-Backend tests include cross-role owner → café → collect/refund flows, existing-data
-migration safety, Admin restrictions and MySQL-only concurrent-spend/refund
-regressions. iOS tests/builds are separate from physical iPhone acceptance.
+The 22-table core foundation includes a Walk–Dog relation and excludes Django
+system tables. A migrated table is not proof that its feature is enabled.
+See [database coverage](database-design-2026-09-25/README.md),
+[Walk device acceptance](WALK_TESTING.md) and [open decisions](DECISIONS.md).

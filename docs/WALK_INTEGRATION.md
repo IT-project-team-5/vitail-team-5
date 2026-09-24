@@ -1,11 +1,11 @@
 # Walk + connected MVP integration
 
-This branch adapts the existing walk-tracking implementation to main's shared
-authentication, dog service, wallet, redemption and café flows. It does not
-replace the reward ledger or add another wallet. OwnerHome owns one active
-WalkSessionCoordinator; the older main WalkView/WalkRecorder are not mounted.
+The active map flow shares authentication, dogs, the canonical wallet, redemption
+and café services. OwnerHome owns one WalkSessionCoordinator. The unreachable
+legacy WalkView/WalkViewModel/WalkRecorder stack has been removed; recording and
+recovery use the coordinator, tracker, location, draft, history and sync stores.
 
-## Finish confirmation update (2026-09-23)
+## Finish confirmation
 
 The map now fills the Walk page with a draggable bottom menu. Start does not
 choose dogs. Pause exposes Resume and Finish; Finish creates a protected pending
@@ -62,7 +62,7 @@ points. Earlier confirmed finished archives keep their retry behavior.
 
 ## Recording and server policy
 
-- The production coordinator enables main's basic 3 m/s speed filter and a
+- The production coordinator enables a basic 3 m/s speed filter and a
   maximum of 5,000 GPS samples. A jump/weak fix starts another visible segment.
   This is a sanity filter, not a guarantee of precise GPS or full anti-cheat.
 - segment_id defaults to zero for older clients. New clients use consecutive
@@ -86,29 +86,23 @@ points. Earlier confirmed finished archives keep their retry behavior.
   path sends data as the next account.
 - Live/local distance and pre-confirmation points are estimates. Actual awarded
   points and accepted distance come from the server and may differ. The estimate
-  uses known receipts for cumulative Melbourne-day rounding at 8 points/km and
-  the 40-point daily cap. Multiple dogs do not multiply points. Redeem's
-  60-points-per-coffee display is only a reference, not a different reward rate.
+  uses known walking receipts and the walking cap; the server also applies the
+  shared walking/check-in activity cap. The local estimate may therefore exceed
+  the final award if another activity consumed allowance. Multiple dogs do not
+  multiply points. [Quest policy](QUESTS.md) is the canonical rate/cap reference;
+  the coffee comparison never changes walking earnings or menu prices.
+
+The current walk-upload API stores validated summaries, not raw routes. The new
+WalkSession/LocationSample/NetWalkInterval database foundation is separate: no
+public GPS ingestion or matching pipeline is enabled, and ordinary uploads do
+not populate it. Production route/evidence retention remains an open decision.
 
 ## Verification
 
-Run the complete iOS suite and `DATABASE_ENGINE=sqlite python manage.py test`
-in an isolated environment. SQLite skips the MySQL-only concurrency checks;
+Run the complete iOS suite and `make test` from the repository root, or
+`DATABASE_ENGINE=sqlite python manage.py test` from `backend/` in an isolated
+environment. SQLite skips the MySQL-only concurrency checks;
 run those separately against a disposable MySQL test database, not shared data.
-
-### Historical verification: 2026-09-16
-
-The following records predate the map/finish-confirmation redesign and do not
-certify its current device behavior.
-
-Local verification on 2026-09-16, integrated with main's registration fixes:
-iPhone 17 Pro / iOS 26.2 Simulator 169 tests (168 passed, one device-only
-file-protection check skipped); isolated SQLite backend 100 tests (95 passed,
-five MySQL-only checks skipped); disposable MySQL 9.3 backend 100 tests passed
-with no skips. Release device build with signing disabled also passed. There
-were no failures. System checks and migration dry-run report no changes; the
-integration adds no migration beyond main's existing ones. Temporary test
-database removal was verified without modifying existing database data.
 
 ### Current regression and device acceptance scope
 
@@ -125,7 +119,8 @@ permission changes, active recovery, pending-summary recovery, offline confirmed
 completion/retry, logout without an award, and zero-dog completion. A connected
 happy path is Start → Pause → Finish → choose dogs → Complete walk → inspect
 receipt and Redeem balance → purchase → collect. Follow `WALK_TESTING.md` and
-record current build/device results separately from the historical runs above.
+record the current build/device results without treating simulator tests as
+physical GPS acceptance.
 
 Personal signing/server settings and real route exports remain outside the
 repository.

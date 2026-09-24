@@ -35,6 +35,12 @@ reserved ones, and vet remaining slots include reservations. Legacy receipts,
 point entries, files and submission-level awarded amounts remain unchanged. The
 additive migration backfills legacy collection times from linked ledger entries.
 
+Each entitlement freezes its promised points and rules version. Hold/rejection
+metadata can block collection without rewriting the original evidence or ledger.
+Submissions include optional audit metadata and upload byte size; historical file
+sizes remain unknown. The audit workflow is not enabled and no migrated submission
+is marked verified.
+
 Re-uploading preserves another version of the original entitlement and never
 creates a second reward. Conflicting request-ID reuse returns 409. Per-dog file
 fingerprints cannot support a different entitlement; the same registration number
