@@ -1,144 +1,159 @@
 # Quest integration — 25 September 2026
 
-This slice adds Account / Walk / Quest / Leaderboard / Redeem navigation, dog
-birthdays, self-reported document rewards, and shared check-in presentation.
-The policy source is the client meeting's **New Point Retrieval / Calculation**
-table, followed by the owner's decisions in the implementation conversation.
+Owner navigation is **Account / Walk / Quest / Redeem**. Leaderboard belongs to
+another teammate: this slice's tab, services, views, backend endpoint and tests
+have been removed. Existing walks, dogs, points and evidence are preserved.
 
-## Implemented rules and boundaries
+## Available tasks and presentation
 
-| Quest | Display / qualification | Award |
+Quest is a compact list without a large heading or unavailable placeholders.
+Each horizontal row has a pet avatar or venue symbol, task name, subject and
+state. Tap for a detail sheet containing the conditions, progress and reward.
+
+| State | Presentation | Action |
 |---|---|---|
-| Daily goal | Each dog's accepted distance today; targets and completion stay null until the formula is confirmed | Not enabled |
-| Walking streak | Consecutive Melbourne dates with a positive-distance accepted walk; current, longest and next milestone on the outer card | Milestones describe 7 days → 20 and 30/60/90… → 100; automatic/claim awards not enabled in this slice |
-| Birthday | Explicit date of birth; missing dates prompt profile editing; birthday-day collection | 60 per dog per year, through the canonical point ledger |
-| Council registration | Number and/or PDF, separately for each dog | 300 once per dog |
-| Microchip registration | Number and/or PDF with annual validity dates, separately for each dog | 300 per eligible annual registration period |
-| Vet check-up | Actual visit date and JPEG/PNG evidence, separately for each dog | 200, at most twice per visit calendar year, at least 60 days between rewarded visits |
-| Venue check-in | Both map drawer and Quest observe one verified progress store | The venue feature supplies qualification, collection and the authoritative receipt |
+| `READY` | Highlighted, at the top | Tap details, then Collect |
+| `IN_PROGRESS` | Normal row with progress where measurable | Tap details to continue |
+| `COLLECTED` | Muted, below all active rows | Read details; no further credit |
 
-Base walking is not a separate Quest card. Existing walking awards remain
-8 points/km, maximum 40 per day. Leaderboard provides **This week / All time**
-using accepted walking distance, walk count and walking points. It is explicitly
-self-only until the separate friends feature exists; it does not rank strangers
-or include purchases, grants, refunds or birthday/document points as walking.
+Collected rows remain only on their **Melbourne collection date**; after local
+midnight they leave the main list. Original evidence, entitlement and ledger
+records remain. Device display expiry does not qualify or award a reward.
+Unknown task kinds/states never become collectible. Successful collection stays
+visible when a subsequent refresh fails or returns older data.
 
-New dog forms request a date of birth. Existing age-only profiles remain
-editable and are never assigned a fabricated birthday. Known birthdays drive
-completed-month age calculation. Date-only fields do not shift with device time
-zone. Birthday reward dates and reporting weeks use Australia/Melbourne; weeks
-start Monday and local midnight boundaries account for daylight saving.
+| Kind | When it appears | Reward |
+|---|---|---|
+| Birthday | Actual birthday today, or the owner's collection today | 60 per dog per year |
+| Council registration | Eligible dog without a lifetime entitlement, pending proof, or collection today | 300 once per dog |
+| Microchip registration | Eligible annual period, pending proof, or collection today | 300 per annual registration period |
+| Vet check-up | Current quota/date eligibility, pending proof, or collection today | 200, maximum twice per visit calendar year, at least 60 days apart |
+| Venue check-in | Provider-supplied daily opportunities below the combined cap; today's collections remain below | Provider confirms actual reward and cap |
 
-Open product decisions remain visible rather than becoming guessed values:
+Daily goal targets and live dog attribution await the formula. Streak award
+delivery is not enabled. These capabilities do not produce actionable task rows
+until implemented; legacy summary fields remain in the API for compatibility.
+Base walking is not a Quest row. Its existing rule remains 8 points/km, maximum
+40 walking points per day. Leaderboard is outside this slice.
 
-- Daily target formula, units, welfare/heat factors and live walk dog attribution.
-- Whether annual microchip rewards use actual registration periods or calendar
-  years. The current implementation follows explicit annual validity periods.
-- Which non-leap-year day observes a 29 February birthday. The current birthday
-  collector accepts actual anniversaries only; age calculation separately clamps
-  month-end anniversaries.
-- Final streak award delivery and historical eligibility; the current streak
-  card reports accepted activity without awarding points.
+Explicit nullable dog birthdays never invent dates for old age-only profiles.
+Known birthdays determine completed-month age. An observed non-leap-year date
+for 29 February remains undecided; actual birthday anniversaries are used.
+Microchip rewards currently use explicit annual validity periods; a switch to
+calendar-year entitlement remains a separate product decision.
 
-## Server ownership
+## Submit, then collect
 
-`QuestDefinition` controls the five typed catalogue entries. It is not a generic
-rules engine. Accepted `Walk` rows supply activity, `Dog` supplies profile facts,
-and `PointEntry` remains the only wallet. `QuestAward` records birthday entitlement
-and its ledger link. No client-written counter can qualify a reward.
+Evidence is self-reported; no up-front review or authenticity verification is
+claimed. Eligible submission reserves a `DocumentEntitlement`, preserving a
+`DocumentSubmission` version with zero awarded points. **Only explicit Collect
+creates a ledger credit.** Later spot-audit workflows are not implemented.
 
-Document evidence has three distinct records:
+The original three document rules, file limits and validation remain described
+in [the evidence documentation](../backend/evidence/README.md). Pending
+entitlements reserve quota, so additional submissions cannot evade limits.
+Re-uploading proof for the same qualification reuses the same entitlement.
+Stable submission UUIDs replay their original stored response; a changed payload
+under the same UUID returns 409. The live dashboard provides current status even
+when an old submission response describes an earlier state.
 
-- `DocumentEntitlement`: the dog's qualifying lifetime/annual/visit entitlement
-  and its one ledger credit.
-- `DocumentSubmission`: each immutable submission version and retry receipt.
-- `EvidenceFingerprint`: per-dog evidence reuse protection. One family document
-  may cover multiple dogs; one dog's file cannot support another entitlement.
+Collect locks the owner, dog and entitlement and links one canonical `PointEntry`.
+Repeated or simultaneous collection from Quest and Documents returns the same
+reward without another credit. Account changes discard late client responses.
+After collection the canonical wallet refresh is queued even if another load or
+purchase is in progress. Successful receipts survive follow-up refresh failures.
 
-Successful submission immediately credits an eligible reward and records
-`SELF_REPORTED`. This means submitted, not verified or approved. Later spot audits
-are not implemented. Re-uploading an existing entitlement keeps the new version
-and awards zero. Stable UUID retries return the original receipt; changing the
-payload under the same UUID returns 409. Owner/dog locks serialize entitlement
-and ledger changes; database uniqueness is the final duplicate guard.
+The additive `evidence.0002_documententitlement_collected_at` migration copies
+existing credits' creation timestamps. It does not revoke, replay or create
+credits. Prior submission receipts remain unchanged. A transferred/deleted dog's
+historical credit stays with its recipient; prior owners see their submitted
+name snapshot rather than another owner's updated profile.
 
-PDFs are bounded, parsed, unencrypted and 1–20 pages. Vet photos must decode as
-JPEG/PNG. This validates file structure, not document authenticity. Files are
-limited to 4 MiB decoded and remain outside public media under
-`backend/private_uploads/`. Only the submitting owner or admin may download;
-responses prevent caching and MIME sniffing. Back up this directory with the
-database, separately from public profile photos. No production retention period
-is inferred. See [evidence details](../backend/evidence/README.md).
+Private evidence remains under `backend/private_uploads/`, outside public media.
+Only the submitting owner or admin may download files. Preserve original bytes
+and back up private files with the database. Retention and audit procedures are
+separate policy decisions; the Quest list's daily hiding does not delete files.
 
 ## API
 
-All routes require the authenticated OWNER except document downloads, which also
-permit ADMIN. Both trailing-slash variants work. See [OpenAPI](openapi.yaml).
+See [OpenAPI](openapi.yaml) for request/response fields and permissions. All routes
+accept both trailing-slash styles. OWNER authentication is required except file
+downloads, which also allow ADMIN.
 
 | Method | Route | Result |
 |---|---|---|
-| GET | `/api/quests` | Server date/reset, per-dog daily goal, streak, birthdays, capability availability |
-| POST | `/api/quests/birthdays/{dog_id}/collect` | Birthday award, balance and created flag |
-| GET | `/api/leaderboard?period=week\|all_time` | Explicit self-only walking statistics |
-| GET | `/api/quests/documents` | Owned dogs, evidence versions and eligibility |
-| POST | `/api/quests/documents` | Evidence receipt, awarded points and balance |
-| GET | `/api/quests/documents/{id}/file` | Authenticated attachment download |
+| GET | `/api/quests` | Server date/reset and ordered actionable `tasks`, plus legacy summary fields |
+| POST | `/api/quests/birthdays/{dog_id}/collect` | Birthday credit receipt and balance |
+| GET | `/api/quests/documents` | Dogs, immutable evidence versions, current entitlements and eligibility |
+| POST | `/api/quests/documents` | Saved evidence and reserved reward; no new credit |
+| POST | `/api/quests/documents/entitlements/{id}/collect` | One entitlement's credit receipt and balance |
+| GET | `/api/quests/documents/{id}/file` | Authenticated original-file download |
 
-After an award, iOS refreshes the canonical wallet. A wallet refresh requested
-during another load or purchase is queued, so a late older result does not leave
-the displayed balance stale. A successful receipt remains visible if a later
-history refresh fails. Account-bound stores reject responses after sign-out or
-switching users.
+`tasks` carries stable IDs, kind/state, title/subject/avatar, detail text,
+reward points, optional progress, dog/entitlement IDs and collection timestamp.
+Unavailable birthdays and ineligible document opportunities are excluded.
+Read endpoints never award points. `QuestDefinition` switches gate new work;
+completed request replays and historical file access remain available.
 
 ## Venue teammate handoff
 
-The location verification and check-in backend belong to the venue feature.
-This slice deliberately has no invented HTTP endpoint or local dwell timer.
-Implement `CheckInProgressServing`, then inject the provider through
-`OwnerHomeView(checkInService:)` using the shared authenticated API client.
-
-The provider's two operations are:
+Location verification, the actual check-in backend and map start/discovery flow
+belong to the venue feature. Implement `CheckInProgressServing` and inject it
+through `OwnerHomeView(checkInService:)` with the shared authenticated API client.
+No invented HTTP endpoint, local dwell qualification or fabricated venue rows
+are supplied while this provider is absent.
 
 ```swift
-func fetchProgress() async throws -> [VenueCheckInProgress]
+func fetchProgress() async throws -> CheckInProgressSnapshot
 func collect(id: String, requestID: UUID) async throws -> CheckInCollectionReceipt
 ```
 
-Each progress item supplies a stable `id`, venue identity/name/photo,
-`requiredSeconds`, **server-verified** `verifiedSeconds`, `updatedAt`,
-`rewardPoints`, and status `inProgress`, `ready`, `collected` or `cancelled`.
-The receipt contains the confirmed collected item, actual awarded points and
-wallet balance. The backend must enforce owner scope, eligibility, daily caps
-and UUID idempotency; an unknown/invalid receipt cannot update the shared store.
+A snapshot contains:
 
-`CheckInProgressStore` is shared by the map drawer and Quest. Both show the same
-bar and call the same collect method. Duplicate taps are serialized, retry IDs
-survive lost responses, and a confirmed collection cannot be overwritten by an
-older ready response, even after an empty refresh. Foreground Walk/Quest polling
-refreshes every five seconds; tab/background cancellation stops polling. The
-provider may also trigger `refresh()` after its own start/progress events.
+- `items`: at most **four** daily opportunities, with stable daily IDs, venue
+  identity/photo, required seconds, server-verified seconds, reward points,
+  status (`inProgress`, `ready`, `collected`, `cancelled`) and actual `collectedAt`.
+- `earnedPointsToday`: the authoritative **walking + check-in** earned total,
+  from 0 to 72. It is never wallet balance and excludes birthday/document bonuses.
+- `serverTime` and `localDate`: a consistent Australia/Melbourne day.
 
-Without a provider, the UI honestly reports that check-ins are unavailable.
-There is no fake progress or local award. The venue owner must align the final
-API and rule contract before enabling this capability.
+All four opportunities remain visible below 72, including ones not started yet
+(`inProgress`, zero verified seconds). At 72 uncollected opportunities disappear;
+collected opportunities remain at the bottom through the collection day. Keep
+collected daily slots in the snapshot so they are not replaced by a fifth offer.
+
+Collection receipts include the collected item, actual awarded points,
+`walletBalance`, `dailyEarnedPoints`, and `localDate`. The backend must enforce
+owner scope, daily maximum count, dwell qualification, cap and idempotency. It
+must return actual credited points when the remaining daily allowance is smaller
+than the nominal reward. iOS displays the remaining allowance but does not credit
+or independently decide qualification.
+
+Both map and Quest observe one store and use the same compact card/detail flow.
+Duplicate taps are serialized; ambiguous retries keep the same UUID. Confirmed
+collections and the cap cannot be undone by stale/older-day responses. At local
+midnight the previous daily rows are hidden until a fresh snapshot arrives.
+Foreground Walk/Quest polling runs every five seconds and is cancelled when
+leaving/backgrounding. Neither progress nor points advance using device time.
 
 ## Validation
 
-Run backend tests from `backend/` (or `make test`); running Django discovery from
-the repository root can find zero tests. SQLite covers models, API permissions,
-period/date boundaries, idempotency and rollback. Run MySQL transaction tests as
-well for concurrent collections/submissions. Test databases must be isolated
-from the local demo database.
+Run backend discovery from `backend/` or use `make test`; repository-root Django
+discovery can accidentally run zero tests. SQLite covers API logic, dates,
+permissions, migration preservation, file failure and receipt replay. MySQL
+transaction tests use an isolated test database for simultaneous collectors.
+Never run test flushes against the demo database.
 
-iOS tests cover response decoding, services, account changes, late responses,
-duplicate collection, stable retries, wallet refresh races and document receipt
-validation. SwiftUI attachments cover light/dark and accessibility layouts.
-Physical-device GPS and the teammate's actual check-in service remain separate
+The iOS suite covers row availability, explicit document/birthday collection,
+session changes, stale responses, Melbourne midnight, four venue slots, the
+72-point cap, wallet refresh races and light/dark/accessibility snapshots.
+Physical-device GPS and the teammate's real check-in provider remain separate
 integration acceptance work.
 
-Verified on 25 September 2026: the full backend suite passed **201 tests** on an
-isolated MySQL 8.4 instance, including birthday/document concurrency. The iOS
-simulator suite passed **254 tests**, with one protected-file test requiring a
-physical device skipped. Django checks and migration drift checks passed. Local
-demo migrations and authenticated HTTP reads succeeded; existing account, dog,
-product, ledger and order counts were preserved.
+This revision passed 214 backend tests on an isolated MySQL 8.4 database and
+266 iOS simulator tests, with one physical-device protection test skipped.
+Seven Quest list/detail appearance snapshots were exported and the light, dark
+and accessibility layouts inspected. Django migration drift checks passed;
+local authenticated HTTP reads returned actionable tasks and the removed
+leaderboard route returned 404. The additive evidence migration was applied
+after a database backup, and the signed simulator build was updated.

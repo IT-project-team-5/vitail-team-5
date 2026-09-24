@@ -63,9 +63,13 @@ behaviour for them, raise them instead.
 | R48 | Coffee estimate | Temporarily use 60 points ≈ 1 cup for the wallet display. This is an estimate only; actual product prices and walking earn rates are unchanged |
 | R49 | UI refinements | Confirmed on 2026-09-24: login forms expand beneath their role row; Walk uses play/pause symbols with more spacing and a slogan; product-titled centred purchase alerts show café/deadline and open the receipt on success; café menus omit the Vitail title and stale purchase notices; café order cards show item/customer/profile dogs with details on tap; users can persist System/Light/Dark appearance |
 | R50 | Drawer, receipt and dog photos | Follow-up on 2026-09-24: the Walk drawer moves as one piece, with controls and history in one scroll area. Receipt uses a large café photo, opens café details on tap, replaces point cost with order number, and fills the collect slider as it moves. Café order cards show dog avatars and omit the entire update-time header |
-| R51 | Quest scope | Confirmed on 2026-09-25: add Quest and Leaderboard tabs; show daily goal per dog, check-in progress and streak on outer cards; base walking is not a separate Quest. Venue location/backend belongs to another teammate; Quest and map share verified progress and collection state |
+| R51 | Quest scope | Confirmed on 2026-09-25: add Quest and Leaderboard tabs (**Leaderboard scope superseded by R54**); show daily goal per dog, check-in progress and streak on outer cards; base walking is not a separate Quest. Venue location/backend belongs to another teammate; Quest and map share verified progress and collection state |
 | R52 | Birthday reward | Record actual dog birthdays; 60 points per dog per year on its birthday. Existing age-only records keep an unknown birthday until edited |
-| R53 | Document awards | Council registration, microchip registration and vet check-up rewards are counted separately per dog. Successful eligible submission immediately awards points; re-uploading the same entitlement does not award again. Evidence is self-reported; later spot audits replace prior assumptions of up-front review |
+| R53 | Document awards | Council registration, microchip registration and vet check-up rewards are counted separately per dog. Successful eligible submission immediately awards points (**timing superseded by R55**); re-uploading the same entitlement does not award again. Evidence is self-reported; later spot audits replace prior assumptions of up-front review |
+
+| R54 | Quest list and ownership | Follow-up on 2026-09-25: remove this slice's Leaderboard entirely; another teammate owns it. Quest uses compact horizontal avatar/venue rows with detail sheets, no large heading or unavailable tasks. READY highlighted first, IN_PROGRESS next, COLLECTED muted at the bottom for the collection day only |
+| R55 | Explicit collection | Supersedes R53's timing: document submission reserves eligibility without crediting points. Collect credits the canonical wallet exactly once. Collected rows leave the main list after Melbourne midnight; evidence and award history remain |
+| R56 | Venue availability | At most four venue opportunities per day. All four remain visible while combined walking/check-in earnings are below 72; hide uncollected opportunities at the cap and retain today's collected rows below. Wallet balance and birthday/document bonuses are not the cap counter |
 
 ### Quest delivery update (2026-09-25)
 
@@ -81,7 +85,7 @@ least 60 days between rewarded visits. Explicit annual validity dates are the
 current microchip implementation; calendar-year versus actual-period treatment
 is still awaiting the owner's answer. No target or daily goal percentage is
 fabricated while the formula remains pending. Streak display is connected;
-streak award delivery is not enabled in this slice.
+streak award delivery is not enabled in this slice, so the task is hidden.
 
 ### Connected MVP implementation notes (2026-09-09)
 
@@ -140,8 +144,8 @@ is not reused, so earlier references stay valid.
 
 ### O1 — Vet checkup confirmation
 
-Resolved for first delivery by R53: actual check-up date plus photo, immediate
-self-reported award, at most two per dog per event calendar year and 60 days
+Resolved for first delivery by R53: actual check-up date plus photo, self-reported submission followed by explicit
+collection under R55, at most two per dog per event calendar year and 60 days
 apart. No up-front review. Later spot-audit workflow remains unimplemented.
 
 ### O5 — Daily cap suppresses multi-venue check-ins
@@ -188,7 +192,7 @@ and insurers, and for database growth.
 ### O10 — Council registration evidence
 
 Registration documents contain name, address and sometimes microchip number.
-R53 confirms per-dog submission and immediate eligible awards. Council/microchip
+R53 confirms per-dog submission; R55 requires explicit Collect before awards. Council/microchip
 accept a number or PDF; files are private and owner/admin-readable, and versions
 are preserved for later checks. Production retention and spot-audit procedures
 still require decisions.

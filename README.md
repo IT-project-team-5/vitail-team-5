@@ -24,7 +24,7 @@ The app stays deliberately small:
 
 ```text
 User chooses Dog Owner or Cafe → authentication form opens
-Dog owner registers/signs in → Account / Walk / Quest / Leaderboard / Redeem
+Dog owner registers/signs in → Account / Walk / Quest / Redeem
 Café owner signs in with an admin-created account → Account / Products / Orders
 ```
 
@@ -40,17 +40,19 @@ and crop a photo from the system photo picker; uploads persist on the server.
 Personalised-goal inputs are stored, but no duration is displayed until the
 open numeric welfare and heat-adjustment rules are resolved.
 
-Quest shows each dog's accepted distance today, the owner's walking streak,
-birthday treats and document tasks. Birthdays are explicit dates; old age-only
-profiles remain editable without invented birthdays. Birthday collection earns
-60 points per dog per year. Council, annual microchip and vet evidence are
-self-reported per dog: eligible submission immediately awards points, repeat
-entitlements do not, and private files remain available for later checks.
-Leaderboard currently shows the owner's weekly/all-time walking statistics;
-friend comparisons await the friends feature. Daily goal targets and live dog
-attribution await the confirmed formula. The map and Quest share an injectable
-verified check-in store; the venue teammate supplies its actual backend/location
-provider. Streak milestones are displayed; streak awards are not enabled yet.
+Quest lists currently available tasks as compact rows with a pet avatar or venue
+icon. Tap a row for its details. Ready rewards are highlighted above in-progress
+tasks; collected rewards are muted at the bottom until Melbourne midnight.
+Birthdays are explicit dates; old age-only profiles remain editable without
+invented birthdays. Birthday collection earns 60 points per dog per year.
+Council, annual microchip and vet evidence are self-reported per dog: submission
+reserves an eligible reward, and **Collect** credits it exactly once. Private
+originals remain available for later checks. Unavailable birthdays, undefined
+daily goals and unenabled streak rewards are hidden. The map and Quest share
+verified check-in presentation: at most four daily opportunities, all visible
+below the 72-point walking/check-in cap; reaching the cap hides uncollected rows.
+The venue teammate supplies the actual backend/location provider. Leaderboard
+is owned by another teammate and has been removed from this implementation.
 See [Quest rules, API and integration handoff](docs/QUESTS.md).
 
 Both login choices stay on the same page and expand their form underneath.
