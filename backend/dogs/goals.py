@@ -29,7 +29,7 @@ class DogGoalService:
             recommended_duration_minutes=None,
             factors={
                 "breed_energy_level": dog.breed.energy_level,
-                "age_months": dog.age_months,
+                "age_months": dog.current_age_months,
                 "size": dog.size,
                 "is_brachycephalic": dog.is_brachycephalic,
             },

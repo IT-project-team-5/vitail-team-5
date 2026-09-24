@@ -16,7 +16,8 @@ struct DogDetailView: View {
                     Text(currentDog.name).font(.largeTitle.bold())
                     VStack(spacing: AppSpacing.medium) {
                         LabeledContent("Breed", value: currentDog.breed.name)
-                        LabeledContent("Age", value: currentDog.ageDescription)
+                        LabeledContent("Birthday", value: currentDog.dateOfBirth.map(DogBirthday.display) ?? "Not recorded")
+                        LabeledContent(currentDog.dateOfBirth == nil ? "Recorded age" : "Age", value: currentDog.ageDescription)
                         LabeledContent("Size", value: currentDog.size.label)
                         if currentDog.isBrachycephalic {
                             LabeledContent("Brachycephalic", value: "Yes")
