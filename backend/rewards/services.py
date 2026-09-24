@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
+from .catalogue import MELBOURNE, active_rewards, daily_allocation_filter, purchase_fingerprint
 from .models import CafeOrderFeedState, PointEntry, Redemption, Reward, default_point_expiry
 
 
@@ -56,19 +57,27 @@ def get_balance(user):
 
 
 @transaction.atomic
-def credit_points(*, user, amount, type=PointEntry.Type.ADMIN, expires_at=None, source_reference=None):
+def credit_points(*, user, amount, type=PointEntry.Type.ADMIN, expires_at=None, source_reference=None,
+                  earn_category=None, earned_on=None, rules_version=None):
     _lock_owner(user)
     if amount <= 0 or type not in (PointEntry.Type.ADMIN, PointEntry.Type.EARN, PointEntry.Type.REFUND):
         raise ValueError("Credits must be positive and use a credit entry type.")
+    metadata = (earn_category, earned_on, rules_version)
+    if any(value is not None for value in metadata):
+        if type != PointEntry.Type.EARN or earn_category not in PointEntry.EarnCategory.values or earned_on is None or not rules_version:
+            raise ValueError("Earn metadata requires an EARN entry, known category, date and rules version.")
     if source_reference:
         existing = PointEntry.objects.filter(source_reference=source_reference).first()
         if existing:
             if (existing.user_id, existing.amount, existing.type) != (user.pk, amount, type):
                 raise IdempotencyConflictError("This point event was already used for a different credit.")
+            if earn_category is not None and (existing.earn_category, existing.earned_on, existing.rules_version) != metadata:
+                raise IdempotencyConflictError("This point event was already used with different earning rules.")
             return existing
     return PointEntry.objects.create(
         user=user, amount=amount, remaining_points=amount, type=type,
         expires_at=expires_at or default_point_expiry(), source_reference=source_reference,
+        earn_category=earn_category, earned_on=earned_on, rules_version=rules_version,
     )
 
 
@@ -105,24 +114,36 @@ def spend_points(*, user, amount, source_reference=None):
 @transaction.atomic
 def create_redemption(*, owner, reward_id, request_id=None):
     owner = _lock_owner(owner)
+    fingerprint = purchase_fingerprint(reward_id)
     if request_id:
         existing = Redemption.objects.filter(owner_user=owner, request_id=request_id).first()
         if existing:
-            if existing.reward_id != reward_id:
+            if existing.reward_id != reward_id or (existing.request_fingerprint and existing.request_fingerprint != fingerprint):
                 raise IdempotencyConflictError("This request ID was already used for another reward.")
             return existing
-    reward = Reward.objects.select_for_update().filter(
-        pk=reward_id, is_available=True, cafe_user__role="CAFE", cafe_user__is_active=True
-    ).first()
-    if reward is None:
+    now = timezone.now()
+    # All purchases of a product acquire this same row lock before checking its
+    # daily allocation, including purchases by different owners.
+    reward = active_rewards(now).select_for_update().filter(pk=reward_id).first()
+    # A row-lock wait can cross closing time or Melbourne midnight. Evaluate
+    # the final sale window and quota date only after the lock is acquired.
+    now = timezone.now()
+    if reward is None or (reward.starts_at and reward.starts_at > now) or (reward.ends_at and reward.ends_at <= now):
         raise RewardUnavailableError("This reward is not available.")
+    if reward.daily_quantity_limit is not None:
+        allocated = reward.redemptions.filter(daily_allocation_filter(now)).count()
+        if allocated >= reward.daily_quantity_limit:
+            raise RewardUnavailableError("This reward has reached its daily quantity limit.")
     redemption = Redemption.objects.create(
-        owner_user=owner, reward=reward, cafe_user=reward.cafe_user,
-        owner_name_snapshot=owner.display_name, cafe_name_snapshot=reward.cafe_user.display_name,
+        owner_user=owner, reward=reward, venue=reward.venue, cafe_user=reward.venue.manager_user,
+        owner_name_snapshot=owner.display_name, cafe_name_snapshot=reward.venue.name,
         reward_name_snapshot=reward.name, point_cost_snapshot=reward.point_cost, request_id=request_id,
+        request_fingerprint=fingerprint, terms_snapshot=reward.terms,
+        eligibility_snapshot={}, order_date=timezone.localdate(now, timezone=MELBOURNE),
     )
-    spend_points(user=owner, amount=reward.point_cost,
-                 source_reference=f"redemption:{redemption.reference_number}")
+    redemption.spend_entry = spend_points(user=owner, amount=reward.point_cost,
+        source_reference=f"redemption:{redemption.reference_number}")
+    redemption.save(update_fields=["spend_entry"])
     _publish_order(redemption)
     return redemption
 
@@ -131,13 +152,13 @@ def _refund_pending(redemption, status):
     """Caller holds owner/order locks. Status and refund commit together."""
     if redemption.status != Redemption.Status.PENDING:
         return False
-    credit_points(
+    redemption.refund_entry = credit_points(
         user=redemption.owner_user, amount=redemption.point_cost_snapshot,
         type=PointEntry.Type.REFUND,
         source_reference=f"refund:{redemption.reference_number}",
     )
     redemption.status = status
-    redemption.save(update_fields=["status"])
+    redemption.save(update_fields=["status", "refund_entry"])
     _publish_order(redemption)
     return True
 

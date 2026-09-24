@@ -65,10 +65,10 @@ class PointEntryAdmin(admin.ModelAdmin):
 
 @admin.register(Reward)
 class RewardAdmin(admin.ModelAdmin):
-    list_display = ("name", "cafe_user", "point_cost", "is_available")
+    list_display = ("name", "venue", "point_cost", "is_available")
     list_filter = ("is_available",)
-    search_fields = ("name", "cafe_user__email", "cafe_user__display_name")
-    autocomplete_fields = ("cafe_user",)
+    search_fields = ("name", "venue__name", "venue__manager_user__email")
+    autocomplete_fields = ("venue",)
 
 
 @admin.register(Redemption)

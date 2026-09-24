@@ -1,7 +1,6 @@
 import hashlib
 import json
 import uuid
-from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
@@ -9,19 +8,18 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
 from django.utils import timezone
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from accounts.photos import photo_url
 from dogs.models import Dog
 from quests.models import QuestDefinition
 from rewards.models import PointEntry
+from rewards.policy import DOCUMENT_POINTS as POINTS, MELBOURNE, local_date as _local_today
 from rewards.services import credit_points, get_balance
 
 from .models import DocumentEntitlement, DocumentKind, DocumentSubmission, EvidenceFingerprint
 from .serializers import DocumentSubmissionSerializer, first_anniversary
 from .storage import private_storage
-
-POINTS = {DocumentKind.COUNCIL: 300, DocumentKind.MICROCHIP: 300, DocumentKind.VET: 200}
 
 
 class RequestConflict(APIException):
@@ -71,6 +69,7 @@ def _entitlement(owner, dog, data):
         key = f"visit:{event.isoformat()}"
     return DocumentEntitlement.objects.create(
         owner=owner, dog=dog, dog_id_snapshot=dog.pk, kind=kind, entitlement_key=key,
+        promised_points=POINTS[kind],
         event_date=data.get("event_date"), valid_from=data.get("valid_from"), valid_to=data.get("valid_to"),
     ), True
 
@@ -81,6 +80,8 @@ def submit_document(*, owner, data):
     try:
         with transaction.atomic():
             owner = get_user_model().objects.select_for_update().get(pk=owner.pk)
+            if owner.role != "OWNER" or not owner.is_active or owner.deleted_at:
+                raise PermissionDenied("Only active dog owners can submit documents.")
             previous = DocumentSubmission.objects.filter(owner=owner, request_id=data["request_id"]).first()
             if previous:
                 if previous.request_fingerprint != fingerprint:
@@ -123,11 +124,12 @@ def submit_document(*, owner, data):
                 file=stored_name or "", filename=upload["filename"] if upload else "",
                 file_content_type=upload["content_type"] if upload else "",
                 file_sha256=upload["sha256"] if upload else "", awarded_points=awarded,
+                file_size_bytes=len(upload["bytes"]) if upload else None,
             )
             receipt = {"submission": dict(DocumentSubmissionSerializer(submission).data),
                        "balance": get_balance(owner), "awarded_points": awarded, "created": True,
                        "entitlement_id": entitlement.pk, "reward_status": "COLLECTED" if entitlement.point_entry_id else "READY",
-                       "reward_points": POINTS[entitlement.kind], "collected_at": _iso(entitlement.collected_at)}
+                       "reward_points": entitlement.promised_points, "collected_at": _iso(entitlement.collected_at)}
             submission.response_snapshot = receipt
             submission.save(update_fields=["response_snapshot"])
             return receipt, True
@@ -138,15 +140,8 @@ def submit_document(*, owner, data):
         raise
 
 
-MELBOURNE = ZoneInfo("Australia/Melbourne")
-
-
 def _iso(value):
     return value.isoformat() if value else None
-
-
-def _local_today(now=None):
-    return (now or timezone.now()).astimezone(MELBOURNE).date()
 
 
 def _collection_receipt(entitlement, owner, created):
@@ -158,6 +153,8 @@ def _collection_receipt(entitlement, owner, created):
 @transaction.atomic
 def collect_document(*, owner, entitlement_id, now=None):
     owner = get_user_model().objects.select_for_update().get(pk=owner.pk)
+    if owner.role != "OWNER" or not owner.is_active or owner.deleted_at:
+        raise Http404
     candidate = DocumentEntitlement.objects.filter(pk=entitlement_id).first()
     if candidate is None:
         raise Http404
@@ -172,9 +169,12 @@ def collect_document(*, owner, entitlement_id, now=None):
         raise Http404
     if not QuestDefinition.objects.filter(code=QuestDefinition.Code.DOCUMENTS, is_enabled=True).exists():
         raise DocumentsUnavailable()
+    if entitlement.eligibility_status != "ELIGIBLE":
+        raise ValidationError("This document reward is unavailable pending a review outcome.")
     entitlement.point_entry = credit_points(
-        user=owner, amount=POINTS[entitlement.kind], type=PointEntry.Type.EARN,
+        user=owner, amount=entitlement.promised_points, type=PointEntry.Type.EARN,
         source_reference=f"document-entitlement:{entitlement.pk}",
+        earn_category=PointEntry.EarnCategory.DOCUMENT, earned_on=_local_today(now), rules_version=entitlement.rules_version,
     )
     entitlement.owner = owner
     entitlement.collected_at = now or timezone.now()
@@ -197,9 +197,9 @@ def entitlements_for(owner):
     rows = DocumentEntitlement.objects.filter(documentsubmission__owner=owner).distinct().select_related("dog", "point_entry").prefetch_related("documentsubmission_set")
     enabled = QuestDefinition.objects.filter(code="DOCUMENTS", is_enabled=True).exists()
     return [{"id": row.pk, "dog_id": row.dog_id_snapshot, "dog_name": _name(row, owner), "kind": row.kind,
-             "reward_status": "COLLECTED" if row.point_entry_id else "READY", "reward_points": POINTS[row.kind],
+             "reward_status": "COLLECTED" if row.point_entry_id else "READY", "reward_points": row.promised_points,
              "collected_at": _iso(row.collected_at),
-             "can_collect": bool(enabled and not row.point_entry_id and row.dog_id and row.dog.owner_id == owner.pk)}
+             "can_collect": bool(enabled and row.eligibility_status == "ELIGIBLE" and not row.point_entry_id and row.dog_id and row.dog.owner_id == owner.pk)}
             for row in rows]
 
 
@@ -249,7 +249,7 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
         return {"id": f"entitlement:{row.pk}" if row else f"document:{dog.pk}:{kind}",
                 "kind": kind, "status": status, "title": DocumentKind(kind).label,
                 "subtitle": name, "subject_name": name, "photo": photo, "icon": "doc.text",
-                "detail": details[kind], "reward_points": POINTS[kind], "progress": None,
+                "detail": details[kind], "reward_points": row.promised_points if row else POINTS[kind], "progress": None,
                 "dog_id": row.dog_id_snapshot if row else dog.pk,
                 "entitlement_id": row.pk if row else None, "collected_at": _iso(row.collected_at) if row else None}
 
@@ -259,7 +259,7 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
         if row.point_entry_id:
             if row.point_entry.user_id == owner.pk and row.collected_at and row.collected_at.astimezone(MELBOURNE).date() == today:
                 tasks.append(task(dog, row.kind, "COLLECTED", row))
-        elif dog and _has_submission(row, owner):
+        elif dog and row.eligibility_status == "ELIGIBLE" and _has_submission(row, owner):
             tasks.append(task(dog, row.kind, "READY", row))
     for dog in dogs:
         for kind in DocumentKind.values:

@@ -1,3 +1,4 @@
+from venues.services import venue_for
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -33,10 +34,10 @@ class RewardsApiTestCase(APITestCase):
         self.client.force_authenticate(self.owner)
 
         self.reward = Reward.objects.create(
-            cafe_user=self.cafe_user, name="Small Coffee", point_cost=40
+            venue=venue_for(self.cafe_user), name="Small Coffee", point_cost=40
         )
         self.unavailable_reward = Reward.objects.create(
-            cafe_user=self.cafe_user,
+            venue=venue_for(self.cafe_user),
             name="Retired Reward",
             point_cost=10,
             is_available=False,

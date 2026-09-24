@@ -43,6 +43,6 @@ class WalkSerializer(serializers.ModelSerializer):
         model = Walk
         fields = (
             "id", "request_id", "started_at", "ended_at", "distance_m",
-            "points_awarded", "point_date", "dog_ids",
+            "points_awarded", "point_date", "dog_ids", "active_seconds",
         )
         read_only_fields = fields

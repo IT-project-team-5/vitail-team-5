@@ -1,30 +1,32 @@
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from rewards.permissions import IsCafeRole
-
-from .models import CafeProfile, User
+from venues.models import Venue
+from venues.services import venue_for
 from .photos import ImageUploadSerializer, PhotoJSONParser, photo_url, replace_photo
 from .venues import google_maps_url, validate_google_maps_url
 
 
 class CafeProfileSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source="user.display_name", max_length=100, required=False)
-    email = serializers.EmailField(source="user.email", read_only=True)
+    name = serializers.CharField(max_length=100, required=False)
+    email = serializers.EmailField(source="manager_user.email", read_only=True)
+    venue_id = serializers.IntegerField(source="id", read_only=True)
     photo = serializers.SerializerMethodField()
     maps_link = serializers.SerializerMethodField()
 
     class Meta:
-        model = CafeProfile
-        fields = ("name", "email", "address", "description", "opening_hours", "photo", "google_maps_url", "maps_link")
+        model = Venue
+        fields = ("venue_id", "name", "email", "address", "description", "opening_hours", "photo", "google_maps_url", "maps_link")
 
-    def get_photo(self, profile):
-        return photo_url(profile.user.photo, self.context.get("request"))
+    def get_photo(self, venue):
+        return photo_url(venue.photo, self.context.get("request"))
 
-    def get_maps_link(self, profile):
-        return google_maps_url(profile.user, profile)
+    def get_maps_link(self, venue):
+        return google_maps_url(venue)
 
     def validate_google_maps_url(self, value):
         return validate_google_maps_url(value)
@@ -37,24 +39,16 @@ class CafeProfileSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        user = User.objects.select_for_update().get(pk=instance.user_id)
-        profile = CafeProfile.objects.select_for_update().get(pk=instance.pk)
-        user_data = validated_data.pop("user", {})
-        if "display_name" in user_data:
-            user.display_name = user_data["display_name"]
-            user.save(update_fields=["display_name"])
-        profile = super().update(profile, validated_data)
-        profile.user = user
-        return profile
+        user = self.context["request"].user
+        venue = get_object_or_404(Venue.objects.select_for_update(), pk=instance.pk, manager_user=user)
+        return super().update(venue, validated_data)
 
 
 class CafeProfileView(APIView):
     permission_classes = [IsCafeRole]
 
     def profile(self, request):
-        profile, _ = CafeProfile.objects.get_or_create(user=request.user)
-        profile.user = request.user
-        return profile
+        return venue_for(request.user)
 
     def get(self, request):
         return Response(CafeProfileSerializer(self.profile(request), context={"request": request}).data)
@@ -73,8 +67,7 @@ class CafePhotoView(CafeProfileView):
         serializer = ImageUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
-            user = User.objects.select_for_update().get(pk=request.user.pk)
-            replace_photo(user, "photo", serializer.validated_data["image_base64"])
-            profile, _ = CafeProfile.objects.get_or_create(user=user)
-            profile.user = user
-        return Response(CafeProfileSerializer(profile, context={"request": request}).data)
+            venue = self.profile(request)
+            venue = get_object_or_404(Venue.objects.select_for_update(), pk=venue.pk, manager_user=request.user)
+            replace_photo(venue, "photo", serializer.validated_data["image_base64"])
+        return Response(CafeProfileSerializer(venue, context={"request": request}).data)

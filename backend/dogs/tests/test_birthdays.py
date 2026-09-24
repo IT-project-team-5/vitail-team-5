@@ -62,14 +62,12 @@ class BirthdayApiTests(APITestCase):
                 self.assertIn("date_of_birth", response.data)
         self.assertEqual(Dog.objects.count(), 0)
 
-    def test_age_recalculates_on_read_and_goal_without_editing_profile(self, _today):
+    def test_age_recalculates_on_read_without_editing_profile(self, _today):
         dog = Dog.objects.create(owner=self.owner, breed=self.breed, name="Coco", age_months=1,
                                  date_of_birth=date(2024, 9, 26), size="SMALL", is_brachycephalic=False)
         self.assertEqual(self.client.get("/api/dogs").data[0]["age_months"], 23)
-        self.assertEqual(self.client.get(f"/api/dogs/{dog.pk}/goal").data["factors"]["age_months"], 23)
         with patch("django.utils.timezone.localdate", return_value=date(2026, 9, 26)):
             self.assertEqual(self.client.get("/api/dogs").data[0]["age_months"], 24)
-            self.assertEqual(self.client.get(f"/api/dogs/{dog.pk}/goal").data["factors"]["age_months"], 24)
         dog.refresh_from_db()
         self.assertEqual(dog.age_months, 1)  # Reads do not mutate legacy/cache fields.
 

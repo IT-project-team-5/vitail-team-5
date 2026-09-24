@@ -1,3 +1,4 @@
+from venues.services import venue_for
 import base64
 import io
 import tempfile
@@ -11,7 +12,8 @@ from django.test import TransactionTestCase, override_settings
 from PIL import Image
 from rest_framework.test import APITestCase
 
-from accounts.models import CafeProfile, User
+from accounts.models import User
+from venues.models import Venue
 from accounts.photos import MAX_IMAGE_BYTES
 from dogs.models import Breed, Dog
 from rewards.models import Reward
@@ -40,8 +42,8 @@ class PhotoAndVenueApiTests(APITestCase):
         cls.other_cafe = User.objects.create_user(email="avatar-other-cafe@example.com", display_name="Other Café", role="CAFE")
         cls.breed, _ = Breed.objects.get_or_create(name="Avatar Test Breed", defaults={"energy_level": "MODERATE", "default_size": "MEDIUM"})
         cls.dog = Dog.objects.create(owner=cls.owner, name="Coco", breed=cls.breed, age_months=12, size="MEDIUM", is_brachycephalic=False, photo="https://example.com/legacy.jpg")
-        cls.profile = CafeProfile.objects.create(user=cls.cafe, address="15 Garden St, Melbourne", description="A dog-friendly garden.", opening_hours="Daily 8–4")
-        cls.reward = Reward.objects.create(cafe_user=cls.cafe, name="Coffee", point_cost=60)
+        cls.profile = Venue.objects.create(manager_user=cls.cafe, name=cls.cafe.display_name, is_partner=True, address="15 Garden St, Melbourne", description="A dog-friendly garden.", opening_hours="Daily 8–4")
+        cls.reward = Reward.objects.create(venue=venue_for(cls.cafe), name="Coffee", point_cost=60)
 
     def setUp(self):
         self.media = tempfile.TemporaryDirectory()
@@ -142,13 +144,13 @@ class PhotoAndVenueApiTests(APITestCase):
             self.assertEqual(self.upload(path).status_code, 401)
         self.assertFalse(list(Path(self.media.name).rglob("*.jpg")))
 
-    def test_cafe_photo_is_shared_with_account_catalogue_and_order_without_mutating_snapshots(self):
+    def test_cafe_photo_is_independent_of_account_and_shared_with_catalogue_and_order(self):
         credit_points(user=self.owner, amount=100)
         order = create_redemption(owner=self.owner, reward_id=self.reward.pk)
         self.client.force_authenticate(self.cafe)
         photo = self.upload("/api/cafe/profile/photo").data["photo"]
         self.cafe.refresh_from_db()  # force_authenticate reuses this instance across requests.
-        self.assertEqual(self.client.get("/api/auth/me").data["photo"], photo)
+        self.assertIsNone(self.client.get("/api/auth/me").data["photo"])
         self.assertEqual(self.client.get("/api/cafe/profile").data["photo"], photo)
         self.client.patch("/api/cafe/profile", {"name": "New Name"}, format="json")
         self.client.force_authenticate(self.other_cafe)
@@ -186,12 +188,12 @@ class PhotoAndVenueApiTests(APITestCase):
         self.assertIn("2+New+Street", changed.data["maps_link"])
 
     def test_catalogue_handles_legacy_cafe_without_profile(self):
-        Reward.objects.create(cafe_user=self.other_cafe, name="Tea", point_cost=40)
+        Reward.objects.create(venue=venue_for(self.other_cafe), name="Tea", point_cost=40)
         reward = next(row for row in self.client.get("/api/redemptions/rewards").data if row["cafe_id"] == self.other_cafe.pk)
         self.assertEqual(reward["cafe_address"], "")
         self.assertIsNone(reward["cafe_photo"])
         self.assertTrue(reward["cafe_google_maps_url"].startswith("https://www.google.com/maps/search/"))
-        self.assertFalse(CafeProfile.objects.filter(user=self.other_cafe).exists())
+        self.assertTrue(Venue.objects.filter(manager_user=self.other_cafe).exists())
 
 
 class AvatarMigrationTests(TransactionTestCase):
@@ -211,10 +213,10 @@ class AvatarMigrationTests(TransactionTestCase):
             dog = Dog.objects.get(pk=old_dog.pk)
             self.assertEqual(user.password, "unchanged-password-hash")
             self.assertFalse(user.photo)
-            self.assertEqual(user.cafe_profile.address, "Original address")
-            self.assertEqual(user.cafe_profile.description, "Original description")
-            self.assertEqual(user.cafe_profile.opening_hours, "9–5")
-            self.assertEqual(user.cafe_profile.google_maps_url, "")
+            self.assertEqual(user.managed_venue.address, "Original address")
+            self.assertEqual(user.managed_venue.description, "Original description")
+            self.assertEqual(user.managed_venue.opening_hours, "9–5")
+            self.assertEqual(user.managed_venue.google_maps_url, "")
             self.assertEqual(dog.photo, "https://example.com/dog.jpg")
             self.assertFalse(dog.uploaded_photo)
         finally:

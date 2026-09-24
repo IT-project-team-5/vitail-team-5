@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 
 from .models import User
+from venues.models import Venue
 
 
 class AdminUserCreationForm(UserCreationForm):
@@ -20,8 +21,8 @@ class AdminUserChangeForm(UserChangeForm):
         if self.instance.pk and role != self.instance.role:
             # Existing balances/orders must keep their owner and café meaning.
             # Create a separate account instead of stranding that history.
-            relations = ("dogs", "point_entries", "redemptions", "cafe_redemptions", "rewards", "walks")
-            if any(
+            relations = ("dogs", "point_entries", "redemptions", "cafe_redemptions", "walks")
+            if Venue.objects.filter(manager_user=self.instance).exists() or any(
                 getattr(self.instance, name, None) is not None
                 and getattr(self.instance, name).exists()
                 for name in relations

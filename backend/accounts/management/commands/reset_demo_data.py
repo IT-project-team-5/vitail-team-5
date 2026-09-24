@@ -12,7 +12,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.utils import timezone
 
-from accounts.models import CafeProfile, User
+from accounts.models import User
+from venues.models import Venue
 from dogs.models import Dog
 from rewards.models import CafeOrderFeedState, PointEntry, Redemption, Reward
 from rewards.services import credit_points
@@ -153,6 +154,22 @@ class Command(BaseCommand):
     def _delete_account_data():
         # Respect protected foreign keys. DELETE preserves sequences, so a token
         # issued for a removed user cannot acquire a new account with the same ID.
+        from checkins.models import CheckIn
+        from dogs.models import DogDailyGoal
+        from evidence.models import DocumentEntitlement, DocumentSubmission, EvidenceFingerprint
+        from quests.models import QuestAward
+        from walks.models import LocationSample, NetWalkInterval, WalkSession
+
+        User.objects.update(active_walk_session=None)
+        LocationSample.objects.all().delete()
+        NetWalkInterval.objects.all().delete()
+        WalkSession.objects.all().delete()
+        CheckIn.objects.all().delete()
+        QuestAward.objects.all().delete()
+        EvidenceFingerprint.objects.all().delete()
+        DocumentSubmission.objects.all().delete()
+        DocumentEntitlement.objects.all().delete()
+        DogDailyGoal.objects.all().delete()
         Walk.dogs.through.objects.all().delete()
         Walk.objects.all().delete()
         Redemption.objects.all().delete()
@@ -160,7 +177,7 @@ class Command(BaseCommand):
         PointEntry.objects.all().delete()
         CafeOrderFeedState.objects.all().delete()
         Dog.objects.all().delete()
-        CafeProfile.objects.all().delete()
+        Venue.objects.all().delete()
         Session.objects.all().delete()
         LogEntry.objects.all().delete()
         User.objects.all().delete()
@@ -187,13 +204,13 @@ class Command(BaseCommand):
         )
         for cafe_data in DEMO_CAFES:
             cafe = create_account(email=cafe_data["email"], name=cafe_data["name"], role=User.Role.CAFE)
-            CafeProfile.objects.create(
-                user=cafe, address=cafe_data["address"],
+            venue = Venue.objects.create(
+                manager_user=cafe, name=cafe.display_name, is_partner=True, address=cafe_data["address"],
                 description=cafe_data["description"], opening_hours=cafe_data["opening_hours"],
             )
             for name, description, cost in cafe_data["products"]:
                 Reward.objects.create(
-                    cafe_user=cafe, name=name, description=description,
+                    venue=venue, name=name, description=description,
                     point_cost=cost, is_available=True,
                 )
         return accounts

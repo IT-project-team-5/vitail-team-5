@@ -1,3 +1,4 @@
+from venues.services import venue_for
 """Cross-feature regressions for the owner → wallet → café order MVP.
 
 These requests use real login tokens, so they also catch API routing and role
@@ -52,7 +53,7 @@ class ConnectedRedemptionFlowTests(APITestCase):
             role=User.Role.OWNER,
         )
         cls.reward = Reward.objects.create(
-            cafe_user=cls.cafe,
+            venue=venue_for(cls.cafe),
             name="Flat white",
             point_cost=40,
         )
@@ -260,8 +261,8 @@ class ConnectedRedemptionFlowTests(APITestCase):
         self.assertEqual(set(feed.data["upserts"][0]["owner_dogs"][0]), {"id", "name", "photo"})
         # Changing catalogue ownership must not expose existing customer orders
         # or dogs to a different café.
-        self.reward.cafe_user = self.other_cafe
-        self.reward.save(update_fields=["cafe_user"])
+        self.reward.venue = venue_for(self.other_cafe)
+        self.reward.save(update_fields=["venue"])
         other = self.login(self.other_cafe).get(self.feed_url, {"include_owner_dogs": "true"})
         self.assertEqual(other.data["upserts"], [])
         self.assertNotIn("Customer Dog", str(other.data))
@@ -330,7 +331,7 @@ class ConnectedRedemptionFlowTests(APITestCase):
         self.assert_balance(60)
 
         another_reward = Reward.objects.create(
-            cafe_user=self.cafe, name="Tea", point_cost=20
+            venue=venue_for(self.cafe), name="Tea", point_cost=20
         )
         conflict = self.create_order(reward=another_reward, request_id=request_id)
         self.assertEqual(conflict.status_code, status.HTTP_409_CONFLICT)
@@ -340,7 +341,7 @@ class ConnectedRedemptionFlowTests(APITestCase):
 
     def test_insufficient_points_never_creates_a_cafe_order_or_debit(self):
         expensive = Reward.objects.create(
-            cafe_user=self.cafe, name="Too expensive", point_cost=101
+            venue=venue_for(self.cafe), name="Too expensive", point_cost=101
         )
         before = self.cafe_client.get(self.feed_url)
 
@@ -429,8 +430,8 @@ class ConnectedRedemptionFlowTests(APITestCase):
         # Order-time customer/item data must not change with profile/catalog edits.
         self.reward.name = "Renamed coffee"
         self.reward.point_cost = 50
-        self.reward.cafe_user = self.other_cafe
-        self.reward.save(update_fields=["name", "point_cost", "cafe_user"])
+        self.reward.venue = venue_for(self.other_cafe)
+        self.reward.save(update_fields=["name", "point_cost", "venue"])
         feed = self.cafe_client.get(self.feed_url)
         self.assertEqual(feed.data["upserts"][0]["owner_name"], "Connected Owner")
         self.assertEqual(feed.data["upserts"][0]["items"], [{"name": "Flat white", "quantity": 1}])
@@ -507,7 +508,7 @@ class ConnectedRewardsMigrationTests(TransactionTestCase):
                 source_reference=f"redemption:{order.reference_number}",
             )
 
-            MigrationExecutor(connection).migrate(rewards_target)
+            MigrationExecutor(connection).migrate(latest_targets)
 
             upgraded = Redemption.objects.get(pk=order.pk)
             self.assertEqual(upgraded.owner_user_id, owner.pk)
@@ -564,7 +565,7 @@ class ConnectedRedemptionConcurrencyTests(TransactionTestCase):
             display_name="Concurrent Café",
             role=User.Role.CAFE,
         )
-        self.reward = Reward.objects.create(cafe_user=cafe, name="Coffee", point_cost=40)
+        self.reward = Reward.objects.create(venue=venue_for(cafe), name="Coffee", point_cost=40)
         credit_points(user=self.owner, amount=40)
         login = APIClient().post(
             "/api/auth/login",

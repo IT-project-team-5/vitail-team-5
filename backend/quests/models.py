@@ -1,5 +1,8 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+from rewards.policy import local_date
 
 
 class QuestDefinition(models.Model):
@@ -32,27 +35,41 @@ class QuestDefinition(models.Model):
 
 
 class QuestAward(models.Model):
-    """Birthday qualification linked to the canonical point ledger.
-
-    Dog identity and reward year are retained even if its profile is deleted.
-    No independent balance or editable progress is stored here.
-    """
+    """Typed qualification; only confirmed birthday rules currently issue awards."""
 
     class Kind(models.TextChoices):
         BIRTHDAY = "BIRTHDAY", "Birthday"
+        DAILY_GOAL = "DAILY_GOAL", "Daily goal"
+        STREAK = "STREAK", "Streak"
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="quest_awards")
     kind = models.CharField(max_length=20, choices=Kind.choices)
     dog = models.ForeignKey("dogs.Dog", null=True, on_delete=models.SET_NULL, related_name="quest_awards")
-    dog_id_snapshot = models.PositiveBigIntegerField()
-    dog_name_snapshot = models.CharField(max_length=100)
-    year = models.PositiveSmallIntegerField()
-    point_entry = models.OneToOneField("rewards.PointEntry", on_delete=models.PROTECT, related_name="quest_award")
+    dog_id_snapshot = models.PositiveBigIntegerField(null=True, blank=True)
+    dog_name_snapshot = models.CharField(max_length=100, blank=True)
+    year = models.PositiveSmallIntegerField(null=True, blank=True)
+    qualification_key = models.CharField(max_length=120, unique=True)
+    qualified_on = models.DateField(default=local_date)
+    qualified_at = models.DateTimeField(default=timezone.now)
+    run_start_date = models.DateField(null=True, blank=True)
+    milestone_days = models.PositiveIntegerField(null=True, blank=True)
+    promised_points = models.PositiveIntegerField(default=0)
+    eligibility_snapshot = models.JSONField(default=dict)
+    claim_expires_at = models.DateTimeField(null=True, blank=True)
+    point_entry = models.OneToOneField("rewards.PointEntry", null=True, blank=True, on_delete=models.PROTECT, related_name="quest_award")
     rules_version = models.CharField(max_length=40)
-    awarded_at = models.DateTimeField(auto_now_add=True)
+    awarded_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ("-awarded_at", "-id")
+        indexes = [models.Index(fields=("owner", "awarded_at"), name="quest_owner_collection")]
         constraints = [
             models.UniqueConstraint(fields=("kind", "dog_id_snapshot", "year"), name="quest_award_dog_year_unique"),
+            models.CheckConstraint(condition=~models.Q(qualification_key="") & models.Q(promised_points__gt=0), name="quest_qualification_required"),
+            models.CheckConstraint(condition=models.Q(point_entry__isnull=True, awarded_at__isnull=True) | models.Q(point_entry__isnull=False, awarded_at__isnull=False), name="quest_collection_shape"),
+            models.CheckConstraint(condition=(
+                models.Q(kind="BIRTHDAY", dog_id_snapshot__isnull=False, year__isnull=False, run_start_date__isnull=True, milestone_days__isnull=True)
+                | models.Q(kind="DAILY_GOAL", dog_id_snapshot__isnull=True, year__isnull=True, run_start_date__isnull=True, milestone_days__isnull=True)
+                | models.Q(kind="STREAK", dog_id_snapshot__isnull=True, year__isnull=True, run_start_date__isnull=False, milestone_days__isnull=False, milestone_days__gt=0)
+            ), name="quest_kind_shape"),
         ]

@@ -2,22 +2,12 @@ from urllib.parse import urlencode, urlsplit
 
 from rest_framework import serializers
 
-from .models import CafeProfile
-
-
-def cafe_profile_for(user):
-    try:
-        return user.cafe_profile
-    except CafeProfile.DoesNotExist:
-        return None
-
-
-def google_maps_url(user, profile=None):
-    if profile and profile.google_maps_url:
-        return profile.google_maps_url
-    query = user.display_name
-    if profile and profile.address:
-        query += ", " + profile.address
+def google_maps_url(venue):
+    if venue.google_maps_url:
+        return venue.google_maps_url
+    query = venue.name
+    if venue.address:
+        query += ", " + venue.address
     return "https://www.google.com/maps/search/?" + urlencode({"api": 1, "query": query})
 
 

@@ -97,7 +97,7 @@ class LoginSerializer(serializers.Serializer):
             username=email,
             password=attrs["password"],
         )
-        if user is None or not user.is_active:
+        if user is None or not user.is_active or user.deleted_at:
             raise AuthenticationFailed("Invalid email or password.")
         attrs["user"] = user
         return attrs
@@ -106,6 +106,12 @@ class LoginSerializer(serializers.Serializer):
 class AccountTokenRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
         try:
+            token = self.token_class(attrs["refresh"])
+            if token.get("user_id") is None:
+                raise AuthenticationFailed("This session has ended.", code="session_revoked")
+            user = User.objects.get(pk=token["user_id"])
+            if user.deleted_at or token.get("av", 1) != user.auth_version:
+                raise AuthenticationFailed("This session has ended. Please sign in again.", code="session_revoked")
             return super().validate(attrs)
         except User.DoesNotExist as exc:
             # A deleted account's signed token must end the session, not cause
@@ -117,6 +123,7 @@ class AccountTokenRefreshSerializer(TokenRefreshSerializer):
 
 def token_response(user: User, request=None) -> dict:
     refresh = RefreshToken.for_user(user)
+    refresh["av"] = user.auth_version
     return {
         "access": str(refresh.access_token),
         "refresh": str(refresh),

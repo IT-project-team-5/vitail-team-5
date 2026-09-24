@@ -3,7 +3,9 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+
+from accounts.authentication import AccountJWTAuthentication
 
 from accounts.photos import photo_url
 from dogs.models import Dog
@@ -44,10 +46,14 @@ class DocumentCollectView(APIView):
 
 
 class DocumentFileView(APIView):
-    authentication_classes = [JWTAuthentication, SessionAuthentication]
+    authentication_classes = [AccountJWTAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request, submission_id):
+        # Admin downloads also allow Django sessions. Those do not pass through
+        # JWT account-version checks, so a tombstone must be denied here too.
+        if request.user.deleted_at:
+            raise AuthenticationFailed("This session has ended. Please sign in again.", code="session_revoked")
         submissions = DocumentSubmission.objects.all()
         if request.user.role != "ADMIN" and not request.user.is_superuser:
             submissions = submissions.filter(owner=request.user)

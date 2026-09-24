@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from accounts.photos import photo_url
-from accounts.venues import cafe_profile_for, google_maps_url
+from accounts.venues import google_maps_url
 
 from .models import PointEntry, Redemption, Reward
 
@@ -14,48 +14,48 @@ class PointEntrySerializer(serializers.ModelSerializer):
 
 
 CAFE_DETAIL_FIELDS = (
-    "cafe_id", "cafe_photo", "cafe_address", "cafe_description",
+    "cafe_id", "venue_id", "cafe_photo", "cafe_address", "cafe_description",
     "cafe_opening_hours", "cafe_google_maps_url",
 )
 
 
 class CafeDetailsSerializer(serializers.ModelSerializer):
-    cafe_id = serializers.IntegerField(source="cafe_user_id", read_only=True)
+    cafe_id = serializers.SerializerMethodField()
+    venue_id = serializers.IntegerField(read_only=True)
     cafe_photo = serializers.SerializerMethodField()
-    cafe_address = serializers.SerializerMethodField()
-    cafe_description = serializers.SerializerMethodField()
-    cafe_opening_hours = serializers.SerializerMethodField()
+    cafe_address = serializers.CharField(source="venue.address", read_only=True)
+    cafe_description = serializers.CharField(source="venue.description", read_only=True)
+    cafe_opening_hours = serializers.CharField(source="venue.opening_hours", read_only=True)
     cafe_google_maps_url = serializers.SerializerMethodField()
 
+    def get_cafe_id(self, instance):
+        # Legacy clients group cafés by login User ID, not the new place ID.
+        return instance.cafe_user_id if isinstance(instance, Redemption) else instance.venue.manager_user_id
+
     def get_cafe_photo(self, instance):
-        return photo_url(instance.cafe_user.photo, self.context.get("request"))
-
-    def get_cafe_address(self, instance):
-        profile = cafe_profile_for(instance.cafe_user)
-        return profile.address if profile else ""
-
-    def get_cafe_description(self, instance):
-        profile = cafe_profile_for(instance.cafe_user)
-        return profile.description if profile else ""
-
-    def get_cafe_opening_hours(self, instance):
-        profile = cafe_profile_for(instance.cafe_user)
-        return profile.opening_hours if profile else ""
+        return photo_url(instance.venue.photo, self.context.get("request"))
 
     def get_cafe_google_maps_url(self, instance):
-        return google_maps_url(instance.cafe_user, cafe_profile_for(instance.cafe_user))
+        return google_maps_url(instance.venue)
 
 
 class RewardSerializer(CafeDetailsSerializer):
-    cafe_name = serializers.CharField(source="cafe_user.display_name", read_only=True)
+    photo = serializers.SerializerMethodField()
+    cafe_name = serializers.CharField(source="venue.name", read_only=True)
+
+    def get_photo(self, instance):
+        return photo_url(instance.photo, self.context.get("request"))
 
     class Meta:
         model = Reward
-        fields = ("id", "name", "description", "point_cost", "cafe_name") + CAFE_DETAIL_FIELDS
+        fields = ("id", "name", "description", "point_cost", "cafe_name", "photo", "starts_at", "ends_at", "daily_quantity_limit", "terms", "requires_store_purchase") + CAFE_DETAIL_FIELDS
         read_only_fields = fields
 
 
 class CafeProductSerializer(serializers.ModelSerializer):
+    photo = serializers.SerializerMethodField()
+    terms = serializers.CharField(max_length=2000, allow_blank=True, required=False)
+    daily_quantity_limit = serializers.IntegerField(min_value=1, max_value=2147483647, allow_null=True, required=False)
     name = serializers.CharField(max_length=100, trim_whitespace=True)
     description = serializers.CharField(max_length=2000, allow_blank=True, required=False)
     # Keep prices within the range supported by every Django database and the
@@ -64,8 +64,18 @@ class CafeProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reward
-        fields = ("id", "name", "description", "point_cost", "is_available")
-        read_only_fields = ("id",)
+        fields = ("id", "venue_id", "name", "description", "point_cost", "is_available", "photo", "starts_at", "ends_at", "daily_quantity_limit", "terms", "requires_store_purchase", "updated_at")
+        read_only_fields = ("id", "venue_id", "photo", "updated_at")
+
+    def get_photo(self, instance):
+        return photo_url(instance.photo, self.context.get("request"))
+
+    def validate(self, attrs):
+        start = attrs.get("starts_at", self.instance.starts_at if self.instance else None)
+        end = attrs.get("ends_at", self.instance.ends_at if self.instance else None)
+        if start and end and end <= start:
+            raise serializers.ValidationError({"ends_at": "End time must be after start time."})
+        return attrs
 
     def to_internal_value(self, data):
         if isinstance(data, dict):
@@ -84,7 +94,7 @@ class RedemptionSerializer(CafeDetailsSerializer):
         fields = (
             "id", "reference_number", "reward", "reward_name_snapshot",
             "point_cost_snapshot", "status", "created_at", "collected_at", "expires_at",
-            "cafe_name_snapshot",
+            "cafe_name_snapshot", "terms_snapshot", "order_date",
         ) + CAFE_DETAIL_FIELDS
         read_only_fields = fields
 

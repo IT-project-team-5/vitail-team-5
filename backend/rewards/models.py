@@ -1,6 +1,7 @@
 import calendar
 import uuid
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -25,9 +26,14 @@ def default_point_expiry():
 
 def default_redemption_expiry():
     """Pending redemptions expire at the next local midnight."""
-    local_now = timezone.localtime()
+    zone = ZoneInfo("Australia/Melbourne")
+    local_now = timezone.localtime(timezone.now(), timezone=zone)
     tomorrow = local_now.date() + timedelta(days=1)
-    return timezone.make_aware(datetime.combine(tomorrow, time.min))
+    return timezone.make_aware(datetime.combine(tomorrow, time.min), timezone=zone)
+
+
+def redemption_order_date():
+    return timezone.localdate(timezone=ZoneInfo("Australia/Melbourne"))
 
 
 def new_redemption_reference():
@@ -35,6 +41,15 @@ def new_redemption_reference():
 
 
 class PointEntry(models.Model):
+    class EarnCategory(models.TextChoices):
+        WALK = "WALK", "Walk"
+        NET_WALK = "NET_WALK", "Net-walking"
+        DAILY_GOAL = "DAILY_GOAL", "Daily goal"
+        CHECK_IN = "CHECK_IN", "Check-in"
+        STREAK = "STREAK", "Streak"
+        BIRTHDAY = "BIRTHDAY", "Birthday"
+        DOCUMENT = "DOCUMENT", "Document"
+
     class Type(models.TextChoices):
         EARN = "EARN", "Earn"
         SPEND = "SPEND", "Spend"
@@ -58,11 +73,23 @@ class PointEntry(models.Model):
         help_text="Stable idempotency key for the event that created this entry.",
     )
     expires_at = models.DateTimeField(null=True, blank=True)
+    earn_category = models.CharField(max_length=20, choices=EarnCategory.choices, null=True, blank=True)
+    earned_on = models.DateField(null=True, blank=True)
+    rules_version = models.CharField(max_length=40, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("created_at", "id")
+        indexes = [
+            models.Index(fields=("user", "expires_at"), name="points_owner_expiry"),
+            models.Index(fields=("user", "earned_on", "earn_category"), name="points_owner_day_source"),
+        ]
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(earn_category__isnull=True, earned_on__isnull=True, rules_version__isnull=True)
+                | (models.Q(type="EARN", earn_category__isnull=False, earn_category__in=["WALK", "NET_WALK", "DAILY_GOAL", "CHECK_IN", "STREAK", "BIRTHDAY", "DOCUMENT"], earned_on__isnull=False, rules_version__isnull=False) & ~models.Q(rules_version="")),
+                name="point_entry_earn_source_shape",
+            ),
             models.CheckConstraint(
                 condition=(
                     models.Q(
@@ -105,31 +132,43 @@ class PointEntry(models.Model):
 
 
 class Reward(models.Model):
-    cafe_user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+    venue = models.ForeignKey(
+        "venues.Venue",
         on_delete=models.PROTECT,
         related_name="rewards",
     )
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    photo = models.FileField(upload_to="rewards/photos/", max_length=255, blank=True)
     point_cost = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     is_available = models.BooleanField(default=True)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    daily_quantity_limit = models.PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(1)])
+    terms = models.TextField(blank=True)
+    requires_store_purchase = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ("cafe_user__display_name", "point_cost", "name", "id")
+        ordering = ("venue__name", "point_cost", "name", "id")
+        indexes = [models.Index(fields=("venue", "is_available"), name="reward_venue_available_idx")]
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(point_cost__gt=0),
                 name="reward_point_cost_positive",
-            )
+            ),
+            models.CheckConstraint(condition=models.Q(daily_quantity_limit__isnull=True) | models.Q(daily_quantity_limit__gt=0), name="reward_daily_limit_positive"),
+            models.CheckConstraint(condition=models.Q(starts_at__isnull=True) | models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=models.F("starts_at")), name="reward_window_ordered"),
         ]
 
     def clean(self):
         super().clean()
-        if self.cafe_user_id and self.cafe_user.role != self.cafe_user.Role.CAFE:
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValidationError({"ends_at": "End time must be after start time."})
+        if self.venue_id and (not self.venue.manager_user_id or self.venue.manager_user.role != "CAFE" or not self.venue.is_partner):
             raise ValidationError(
-                {"cafe_user": "Rewards can only belong to a café account."}
+                {"venue": "Products require a partner venue managed by a café account."}
             )
 
     def __str__(self):
@@ -153,6 +192,7 @@ class Redemption(models.Model):
         on_delete=models.PROTECT,
         related_name="redemptions",
     )
+    venue = models.ForeignKey("venues.Venue", on_delete=models.PROTECT, related_name="redemptions")
     reference_number = models.CharField(
         max_length=20,
         unique=True,
@@ -169,6 +209,12 @@ class Redemption(models.Model):
         help_text="Café responsible when ordered; later catalogue changes do not move orders.",
     )
     request_id = models.UUIDField(null=True, blank=True)
+    request_fingerprint = models.CharField(max_length=64, null=True, blank=True)
+    terms_snapshot = models.TextField(blank=True)
+    eligibility_snapshot = models.JSONField(default=dict, blank=True)
+    order_date = models.DateField(default=redemption_order_date)
+    spend_entry = models.OneToOneField(PointEntry, null=True, blank=True, on_delete=models.PROTECT, related_name="spent_redemption")
+    refund_entry = models.OneToOneField(PointEntry, null=True, blank=True, on_delete=models.PROTECT, related_name="refunded_redemption")
     feed_cursor = models.PositiveBigIntegerField(default=0)
     point_cost_snapshot = models.PositiveIntegerField()
     status = models.CharField(
@@ -182,7 +228,14 @@ class Redemption(models.Model):
 
     class Meta:
         ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(fields=("cafe_user", "feed_cursor"), name="redemption_cafe_cursor_idx"),
+            models.Index(fields=("owner_user", "created_at"), name="redemption_owner_created_idx"),
+            models.Index(fields=("reward", "order_date", "status"), name="redemption_reward_quota_idx"),
+            models.Index(fields=("status", "expires_at"), name="redemption_status_expiry_idx"),
+        ]
         constraints = [
+            models.CheckConstraint(condition=models.Q(refund_entry__isnull=True) | models.Q(status__in=["EXPIRED", "CANCELLED"]), name="redemption_refund_terminal"),
             models.UniqueConstraint(
                 fields=("owner_user", "request_id"),
                 name="redemption_owner_request_unique",

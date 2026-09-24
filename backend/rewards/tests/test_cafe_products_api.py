@@ -1,3 +1,4 @@
+from venues.services import venue_for
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import AccessToken
@@ -27,13 +28,13 @@ class CafeProductsApiTests(APITestCase):
             email="menu-admin@example.com", password="StrongAdmin123!", display_name="Admin"
         )
         cls.product = Reward.objects.create(
-            cafe_user=cls.cafe, name="Flat white", description="Double espresso and milk", point_cost=40
+            venue=venue_for(cls.cafe), name="Flat white", description="Double espresso and milk", point_cost=40
         )
         cls.unavailable = Reward.objects.create(
-            cafe_user=cls.cafe, name="Croissant", point_cost=50, is_available=False
+            venue=venue_for(cls.cafe), name="Croissant", point_cost=50, is_available=False
         )
         cls.other_product = Reward.objects.create(
-            cafe_user=cls.other_cafe, name="Other coffee", point_cost=30
+            venue=venue_for(cls.other_cafe), name="Other coffee", point_cost=30
         )
 
     def setUp(self):
@@ -47,12 +48,13 @@ class CafeProductsApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual({row["id"] for row in response.data}, {self.product.pk, self.unavailable.pk})
         self.assertEqual(response.data[0], {
-            "id": self.product.pk, "name": "Flat white", "description": "Double espresso and milk",
+            "id": self.product.pk, "venue_id": self.product.venue_id, "name": "Flat white", "description": "Double espresso and milk",
             "point_cost": 40, "is_available": True,
+            "photo": None, "starts_at": None, "ends_at": None, "daily_quantity_limit": None, "terms": "", "requires_store_purchase": False, "updated_at": response.data[0]["updated_at"],
         })
 
     def test_empty_menu_returns_an_empty_array(self):
-        Reward.objects.filter(cafe_user=self.other_cafe).delete()
+        Reward.objects.filter(venue__manager_user=self.other_cafe).delete()
         self.client.force_authenticate(self.other_cafe)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
@@ -62,10 +64,10 @@ class CafeProductsApiTests(APITestCase):
         response = self.client.post(self.url, {"name": "  Iced latte  ", "point_cost": 60}, format="json")
         self.assertEqual(response.status_code, 201)
         product = Reward.objects.get(pk=response.data["id"])
-        self.assertEqual(product.cafe_user_id, self.cafe.pk)
+        self.assertEqual(product.venue.manager_user_id, self.cafe.pk)
         self.assertEqual(response.data, {
-            "id": product.pk, "name": "Iced latte", "description": "", "point_cost": 60,
-            "is_available": True,
+            "id": product.pk, "venue_id": product.venue_id, "name": "Iced latte", "description": "", "point_cost": 60,
+            "is_available": True, "photo": None, "starts_at": None, "ends_at": None, "daily_quantity_limit": None, "terms": "", "requires_store_purchase": False, "updated_at": response.data["updated_at"],
         })
         self.client.force_authenticate(self.owner)
         catalogue = self.client.get("/api/redemptions/rewards").data
@@ -92,7 +94,7 @@ class CafeProductsApiTests(APITestCase):
         self.assertTrue(response.data["is_available"])
         self.assertEqual(self.update({"description": ""}).data["description"], "")
         self.product.refresh_from_db()
-        self.assertEqual(self.product.cafe_user_id, self.cafe.pk)
+        self.assertEqual(self.product.venue.manager_user_id, self.cafe.pk)
 
     def test_unlisting_prevents_new_orders_and_relisting_restores_catalogue(self):
         self.assertEqual(self.update({"is_available": False}).status_code, 200)
@@ -162,7 +164,7 @@ class CafeProductsApiTests(APITestCase):
     def test_create_and_update_reject_ownership_id_and_unknown_field_injection(self):
         for field, value in (
             ("id", self.other_product.pk), ("cafe_user", self.other_cafe.pk),
-            ("cafe_user_id", self.other_cafe.pk), ("owner_user", self.owner.pk),
+            ("cafe_user_id", self.other_cafe.pk), ("venue_id", self.other_product.venue_id), ("venue", self.other_product.venue_id), ("owner_user", self.owner.pk),
             ("created_at", "2020-01-01T00:00:00Z"), ("unexpected", "value"),
         ):
             with self.subTest(field=field):
@@ -173,7 +175,7 @@ class CafeProductsApiTests(APITestCase):
                 self.assertEqual(edited.status_code, 400)
                 self.assertIn(field, edited.data)
         self.product.refresh_from_db()
-        self.assertEqual((self.product.cafe_user_id, self.product.name), (self.cafe.pk, "Flat white"))
+        self.assertEqual((self.product.venue.manager_user_id, self.product.name), (self.cafe.pk, "Flat white"))
         self.assertEqual(Reward.objects.count(), 3)
 
     def test_create_requires_name_and_price(self):

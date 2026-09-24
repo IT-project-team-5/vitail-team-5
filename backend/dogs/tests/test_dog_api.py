@@ -238,21 +238,6 @@ class DogApiTests(APITestCase):
             status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
-    def test_goal_endpoint_returns_inputs_without_invented_duration(self):
-        dog = self.create_dog()
-
-        response = self.client.get(f"{self.list_url}/{dog.id}/goal")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["status"], "RULES_PENDING")
-        self.assertIsNone(response.data["recommended_duration_minutes"])
-        self.assertEqual(response.data["factors"]["age_months"], dog.age_months)
-
-    def test_goal_endpoint_does_not_expose_another_owners_dog(self):
-        dog = self.create_dog(owner=self.other_owner)
-        response = self.client.get(f"{self.list_url}/{dog.id}/goal")
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
     def test_dog_endpoints_require_authenticated_owner(self):
         self.client.force_authenticate(user=None)
         self.assertEqual(

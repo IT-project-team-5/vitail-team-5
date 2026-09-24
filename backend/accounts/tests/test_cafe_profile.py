@@ -1,9 +1,11 @@
+from venues.services import venue_for
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient, APITestCase
 
-from accounts.models import CafeProfile, User
+from accounts.models import User
+from venues.models import Venue
 from rewards.models import Reward
 from rewards.services import create_redemption, credit_points
 
@@ -22,13 +24,13 @@ class CafeProfileApiTests(APITestCase):
         response = self.client.get("/api/cafe/profile")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, {
-            "name": "Original Café", "email": self.cafe.email,
+            "venue_id": venue_for(self.cafe).pk, "name": "Original Café", "email": self.cafe.email,
             "address": "", "description": "", "opening_hours": "",
             "photo": None,
             "google_maps_url": "",
             "maps_link": "https://www.google.com/maps/search/?api=1&query=Original+Caf%C3%A9",
         })
-        self.assertEqual(CafeProfile.objects.filter(user=self.cafe).count(), 1)
+        self.assertEqual(Venue.objects.filter(manager_user=self.cafe).count(), 1)
         self.assertEqual(self.client.get("/api/cafe/profile/").status_code, 200)
 
     def test_editing_own_details_and_partial_updates(self):
@@ -39,15 +41,15 @@ class CafeProfileApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["name"], "New Café")
         self.cafe.refresh_from_db()
-        self.assertEqual(self.cafe.display_name, "New Café")
+        self.assertEqual(self.cafe.display_name, "Original Café")
         cleared = self.client.patch("/api/cafe/profile", {"description": ""}, format="json")
         self.assertEqual(cleared.status_code, 200)
         self.assertEqual(cleared.data["description"], "")
         self.assertEqual(cleared.data["address"], "12 Coffee Lane")
-        self.assertEqual(self.client.get("/api/auth/me").data["display_name"], "New Café")
+        self.assertEqual(self.client.get("/api/auth/me").data["display_name"], "Original Café")
 
     def test_profile_cannot_change_email_role_another_user_or_offer_price(self):
-        reward = Reward.objects.create(cafe_user=self.cafe, name="Coffee", point_cost=40)
+        reward = Reward.objects.create(venue=venue_for(self.cafe), name="Coffee", point_cost=40)
         response = self.client.patch("/api/cafe/profile", {
             "email": "stolen@example.com", "role": "ADMIN", "user_id": self.other_cafe.pk,
             "point_cost": 0, "name": "My Café",
@@ -78,7 +80,7 @@ class CafeProfileApiTests(APITestCase):
         self.assertEqual(self.cafe.display_name, "Original Café")
 
     def test_new_cafe_name_updates_catalogue_but_not_existing_order_snapshot(self):
-        reward = Reward.objects.create(cafe_user=self.cafe, name="Coffee", point_cost=40)
+        reward = Reward.objects.create(venue=venue_for(self.cafe), name="Coffee", point_cost=40)
         credit_points(user=self.owner, amount=100)
         order = create_redemption(owner=self.owner, reward_id=reward.pk)
         self.client.patch("/api/cafe/profile", {"name": "New Café"}, format="json")
@@ -92,7 +94,7 @@ class CafeProfileApiTests(APITestCase):
         self.client.force_authenticate(self.other_cafe)
         self.assertEqual(self.client.get("/api/cafe/profile").data["address"], "")
         self.client.patch("/api/cafe/profile", {"address": "Second address"}, format="json")
-        self.assertEqual(CafeProfile.objects.get(user=self.cafe).address, "First address")
+        self.assertEqual(Venue.objects.get(manager_user=self.cafe).address, "First address")
 
 
 class CafeProfileMigrationTests(TransactionTestCase):
@@ -110,6 +112,6 @@ class CafeProfileMigrationTests(TransactionTestCase):
             client = APIClient()
             client.force_authenticate(user)
             self.assertEqual(client.get("/api/cafe/profile").data["name"], "Legacy Café")
-            self.assertEqual(CafeProfile.objects.get(user=user).address, "")
+            self.assertEqual(Venue.objects.get(manager_user=user).address, "")
         finally:
             MigrationExecutor(connection).migrate(latest)

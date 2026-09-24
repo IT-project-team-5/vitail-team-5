@@ -1,3 +1,4 @@
+from venues.services import venue_for
 import io
 import json
 from pathlib import Path
@@ -16,7 +17,8 @@ from django.db import connection
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import CafeProfile, User
+from accounts.models import User
+from venues.models import Venue
 from dogs.models import Breed, Dog
 from rewards.models import CafeOrderFeedState, PointEntry, Redemption, Reward
 from rewards.services import create_redemption, credit_points, get_balance
@@ -32,7 +34,7 @@ class DemoResetTests(TestCase):
         cls.cafe = User.objects.create_user(
             email="old-cafe@example.com", display_name="Old Café", role=User.Role.CAFE,
         )
-        CafeProfile.objects.create(user=cls.cafe, description="Old profile")
+        Venue.objects.create(manager_user=cls.cafe, name=cls.cafe.display_name, is_partner=True, description="Old profile")
         cls.breed = Breed.objects.create(name="Reference breed", energy_level="LOW", default_size="SMALL")
         cls.dog = Dog.objects.create(
             owner=cls.owner, name="Old Dog", breed=cls.breed,
@@ -45,7 +47,7 @@ class DemoResetTests(TestCase):
             point_date=now.date(), distance_m=1000, points_awarded=10,
         )
         cls.walk.dogs.add(cls.dog)
-        cls.reward = Reward.objects.create(cafe_user=cls.cafe, name="Old Coffee", point_cost=40)
+        cls.reward = Reward.objects.create(venue=venue_for(cls.cafe), name="Old Coffee", point_cost=40)
         credit_points(user=cls.owner, amount=100)
         cls.order = create_redemption(owner=cls.owner, reward_id=cls.reward.pk)
         cls.session = Session.objects.create(
@@ -68,7 +70,7 @@ class DemoResetTests(TestCase):
         return {
             model._meta.label: list(model.objects.order_by("pk").values())
             for model in (
-                User, CafeProfile, Breed, Dog, Walk, Walk.dogs.through,
+                User, Venue, Breed, Dog, Walk, Walk.dogs.through,
                 Reward, Redemption, PointEntry, CafeOrderFeedState, Session, LogEntry,
             )
         }
@@ -186,16 +188,16 @@ class DemoResetTests(TestCase):
                          (owner.pk, 10000, 10000, PointEntry.Type.ADMIN))
         self.assertGreater(grant.expires_at, before + timedelta(days=364))
         self.assertLess(grant.expires_at, timezone.now() + timedelta(days=367))
-        self.assertEqual(CafeProfile.objects.count(), 3)
+        self.assertEqual(Venue.objects.count(), 3)
         self.assertEqual(Reward.objects.count(), 15)
         for cafe in User.objects.filter(role=User.Role.CAFE):
             with self.subTest(cafe=cafe.email):
-                profile = cafe.cafe_profile
+                profile = cafe.managed_venue
                 self.assertGreater(len(profile.description), 100)
                 self.assertTrue(profile.address)
                 self.assertTrue(profile.opening_hours)
-                self.assertEqual(cafe.rewards.count(), 5)
-                for reward in cafe.rewards.all():
+                self.assertEqual(cafe.managed_venue.rewards.count(), 5)
+                for reward in cafe.managed_venue.rewards.all():
                     self.assertTrue(reward.description)
                     self.assertTrue(reward.is_available)
                     self.assertGreaterEqual(reward.point_cost, 40)

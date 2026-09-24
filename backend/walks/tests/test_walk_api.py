@@ -12,6 +12,7 @@ from rest_framework.test import APIClient, APITestCase
 from dogs.models import Breed, Dog
 from rewards.models import PointEntry, Redemption, Reward
 from walks.models import Walk
+from venues.services import venue_for
 
 
 User = get_user_model()
@@ -100,6 +101,15 @@ class WalkApiTests(APITestCase):
         self.assertEqual(entry.source_reference, f"walk:{response.data['id']}")
         self.assertEqual(entry.amount, 8)
         self.assertEqual(entry.remaining_points, 8)
+        walk = Walk.objects.get(pk=response.data["id"])
+        self.assertEqual(walk.base_point_entry_id, entry.pk)
+        self.assertEqual(entry.earn_category, "WALK")
+        self.assertEqual(entry.earned_on, walk.point_date)
+        self.assertEqual(walk.active_seconds, 500)
+        participant = walk.participants.get(dog=self.dog)
+        self.assertEqual(participant.dog_name_snapshot, "Milo")
+        self.assertEqual(participant.active_seconds, 500)
+        self.assertEqual(participant.distance_m, walk.distance_m)
         self.assertEqual(entry.expires_at.year, self.now.year + 1)
         self.assertNotIn("samples", response.data)
         self.assertNotIn("samples", [field.name for field in Walk._meta.fields])
@@ -132,6 +142,39 @@ class WalkApiTests(APITestCase):
             self.assertEqual(across_midnight.data["point_date"], "2026-09-09")
             self.assertEqual(across_midnight.data["points_awarded"], 8)
             self.assert_wallet(48)
+
+    def test_checkin_credits_reduce_shared_cap_but_unrelated_bonus_does_not(self):
+        from rewards.services import credit_points
+        for category in range(4):
+            credit_points(user=self.owner, amount=12, type="EARN", source_reference=f"test-checkin:{category}",
+                          earn_category="CHECK_IN", earned_on=self.now.date(), rules_version="test-only")
+        credit_points(user=self.owner, amount=60, type="EARN", source_reference="test-birthday",
+                      earn_category="BIRTHDAY", earned_on=self.now.date(), rules_version="test-only")
+        response = self.submit(self.payload(distance_m=5001, start_seconds=-22000))
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["points_awarded"], 24)
+        self.assertEqual(Walk.objects.get(pk=response.data["id"]).base_point_entry.amount, 24)
+
+    def test_stationary_and_pause_time_never_become_activity_seconds(self):
+        payload = self.payload(distance_m=200)
+        # All stationary: elapsed time is 100s, validated active time is 0s.
+        for sample in payload["samples"]:
+            sample["longitude"] = 0
+        response = self.submit(payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["active_seconds"], 0)
+        self.assertIsNone(Walk.objects.get(pk=response.data["id"]).base_point_entry_id)
+
+    def test_participant_snapshots_survive_rename_transfer_and_deletion(self):
+        response = self.submit(self.payload())
+        walk = Walk.objects.get(pk=response.data["id"])
+        identity = self.dog.pk
+        Dog.objects.filter(pk=identity).update(name="Changed", owner=self.other_owner)
+        self.dog.delete()
+        participant = walk.participants.get()
+        self.assertIsNone(participant.dog_id)
+        self.assertEqual(participant.dog_id_snapshot, identity)
+        self.assertEqual(participant.dog_name_snapshot, "Milo")
 
     def test_retries_are_idempotent_and_changed_payload_conflicts(self):
         payload = self.payload()
@@ -168,6 +211,7 @@ class WalkApiTests(APITestCase):
         response = self.submit(payload)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertAlmostEqual(response.data["distance_m"], 180, delta=0.02)
+        self.assertEqual(response.data["active_seconds"], 90)
         replay = self.submit(payload)
         self.assertEqual(response.data["id"], replay.data["id"])
 
@@ -263,6 +307,7 @@ class WalkApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["distance_m"], 0)
         self.assertEqual(response.data["points_awarded"], 0)
+        self.assertEqual(response.data["active_seconds"], 0)
         self.assert_wallet(0)
 
     def test_driving_segment_is_discarded_without_losing_valid_walking(self):
@@ -292,7 +337,7 @@ class WalkApiTests(APITestCase):
         self.assert_wallet(0)
 
     def test_earned_walk_points_can_buy_the_cafes_canonical_reward(self):
-        reward = Reward.objects.create(cafe_user=self.cafe, name="Walk coffee", point_cost=8)
+        reward = Reward.objects.create(venue=venue_for(self.cafe), name="Walk coffee", point_cost=8)
         walked = self.submit(self.payload())
         self.assertEqual(walked.status_code, status.HTTP_201_CREATED)
 

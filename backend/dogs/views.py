@@ -2,11 +2,10 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from accounts.photos import ImageUploadSerializer, PhotoJSONParser, replace_photo
-from rest_framework import generics, status
+from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .goals import DogGoalService
 from .models import Breed, Dog
 from .permissions import IsOwner
 from .serializers import BreedSerializer, DogSerializer
@@ -33,22 +32,6 @@ class DogDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Dog.objects.filter(owner=self.request.user).select_related("breed")
-
-
-class DogGoalView(APIView):
-    permission_classes = [IsOwner]
-    service_class = DogGoalService
-
-    def get(self, request, pk):
-        dog = get_object_or_404(
-            Dog.objects.select_related("breed"),
-            pk=pk,
-            owner=request.user,
-        )
-        return Response(
-            {"dog_id": dog.id, **self.service_class().calculate(dog)},
-            status=status.HTTP_200_OK,
-        )
 
 
 class DogPhotoView(APIView):

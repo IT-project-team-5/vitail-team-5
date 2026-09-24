@@ -4,11 +4,14 @@ from django.db import transaction
 from django.db.models import Prefetch
 
 from dogs.models import Dog
+from venues.models import Venue
+from venues.services import venue_for
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .catalogue import available_rewards
 from .models import PointEntry, Redemption, Reward
 from .permissions import IsCafeRole, IsOwnerRole
 from .serializers import (
@@ -46,9 +49,7 @@ class RewardListView(APIView):
     permission_classes = [IsOwnerRole]
 
     def get(self, request):
-        rewards = Reward.objects.filter(
-            is_available=True, cafe_user__is_active=True, cafe_user__role="CAFE"
-        ).select_related("cafe_user__cafe_profile")
+        rewards = available_rewards().select_related("venue__manager_user")
         return Response(RewardSerializer(rewards, many=True, context={"request": request}).data)
 
 
@@ -56,14 +57,19 @@ class CafeProductListCreateView(APIView):
     permission_classes = [IsCafeRole]
 
     def get(self, request):
-        products = Reward.objects.filter(cafe_user=request.user)
-        return Response(CafeProductSerializer(products, many=True).data)
+        products = Reward.objects.filter(venue__manager_user=request.user)
+        return Response(CafeProductSerializer(products, many=True, context={"request": request}).data)
 
     def post(self, request):
-        serializer = CafeProductSerializer(data=request.data)
+        serializer = CafeProductSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        serializer.save(cafe_user=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        with transaction.atomic():
+            candidate = venue_for(request.user)
+            venue = Venue.objects.select_for_update().filter(pk=candidate.pk, manager_user=request.user).first()
+            if venue is None:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+            serializer.save(venue=venue)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class CafeProductUpdateView(APIView):
@@ -74,11 +80,11 @@ class CafeProductUpdateView(APIView):
             # Redemption creation locks the same reward, so a concurrent order
             # snapshots either the complete old product or the complete edit.
             product = Reward.objects.select_for_update().filter(
-                pk=product_id, cafe_user=request.user
+                pk=product_id, venue__manager_user=request.user
             ).first()
             if product is None:
                 return Response(status=status.HTTP_404_NOT_FOUND)
-            serializer = CafeProductSerializer(product, data=request.data, partial=True)
+            serializer = CafeProductSerializer(product, data=request.data, partial=True, context={"request": request})
             serializer.is_valid(raise_exception=True)
             serializer.save()
             return Response(serializer.data)
@@ -90,7 +96,7 @@ class RedemptionListCreateView(APIView):
     def get(self, request):
         expire_redemptions(owner=request.user)
         return Response(RedemptionSerializer(
-            request.user.redemptions.select_related("cafe_user__cafe_profile"),
+            request.user.redemptions.select_related("venue__manager_user"),
             many=True, context={"request": request},
         ).data)
 

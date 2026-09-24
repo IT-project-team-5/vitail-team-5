@@ -21,10 +21,20 @@ class DocumentEntitlement(models.Model):
     valid_to = models.DateField(null=True, blank=True)
     point_entry = models.OneToOneField("rewards.PointEntry", null=True, on_delete=models.PROTECT)
     collected_at = models.DateTimeField(null=True, blank=True)
+    promised_points = models.PositiveIntegerField(default=0)
+    rules_version = models.CharField(max_length=40, default="documents-2026-09-25")
+    eligibility_status = models.CharField(max_length=12, choices=[("ELIGIBLE", "Eligible"), ("ON_HOLD", "On hold"), ("REJECTED", "Rejected")], default="ELIGIBLE")
+    eligibility_reason = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("dog_id_snapshot", "kind", "entitlement_key"), name="evidence_entitlement_unique")]
+        constraints = [
+            models.UniqueConstraint(fields=("dog_id_snapshot", "kind", "entitlement_key"), name="evidence_entitlement_unique"),
+            models.CheckConstraint(condition=models.Q(promised_points__gt=0), name="document_reward_positive"),
+            models.CheckConstraint(condition=models.Q(point_entry__isnull=True, collected_at__isnull=True) | models.Q(point_entry__isnull=False, collected_at__isnull=False), name="document_collection_shape"),
+            models.CheckConstraint(condition=models.Q(eligibility_status="ELIGIBLE") | (models.Q(eligibility_status__in=("ON_HOLD", "REJECTED")) & ~models.Q(eligibility_reason="")), name="document_eligibility_reason"),
+        ]
+        indexes = [models.Index(fields=("owner", "collected_at"), name="evidence_owner_collection"), models.Index(fields=("dog_id_snapshot", "kind", "event_date"), name="evidence_dog_event")]
 
 
 class DocumentSubmission(models.Model):
@@ -45,6 +55,11 @@ class DocumentSubmission(models.Model):
     filename = models.CharField(max_length=150, blank=True)
     file_content_type = models.CharField(max_length=40, blank=True)
     file_sha256 = models.CharField(max_length=64, blank=True)
+    file_size_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+    audit_status = models.CharField(max_length=16, choices=[("NOT_REVIEWED", "Not reviewed"), ("VERIFIED", "Verified"), ("REJECTED", "Rejected")], default="NOT_REVIEWED")
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="reviewed_evidence")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=500, blank=True)
     awarded_points = models.PositiveIntegerField(default=0)
     response_snapshot = models.JSONField(default=dict)
     submitted_at = models.DateTimeField(auto_now_add=True)

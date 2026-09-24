@@ -1,3 +1,4 @@
+from venues.services import venue_for
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from io import StringIO
@@ -33,7 +34,7 @@ class RewardSafetyTests(TestCase):
         cls.cafe = User.objects.create_user(email="safety-cafe@example.com", display_name="Café", role="CAFE")
         cls.other_cafe = User.objects.create_user(email="safety-other-cafe@example.com", display_name="Other Café", role="CAFE")
         cls.staff = User.objects.create_superuser(email="safety-admin@example.com", password="TestAdmin572!", display_name="Admin")
-        cls.reward = Reward.objects.create(cafe_user=cls.cafe, name="Coffee", point_cost=40)
+        cls.reward = Reward.objects.create(venue=venue_for(cls.cafe), name="Coffee", point_cost=40)
 
     def setUp(self):
         self.api = APIClient()
@@ -95,7 +96,7 @@ class RewardSafetyTests(TestCase):
 
     def test_cafe_edits_do_not_reroute_existing_order_or_rename_snapshots(self):
         order = self.order()
-        Reward.objects.filter(pk=self.reward.pk).update(cafe_user=self.other_cafe, name="New item", point_cost=80)
+        Reward.objects.filter(pk=self.reward.pk).update(venue=venue_for(self.other_cafe), name="New item", point_cost=80)
         User.objects.filter(pk=self.owner.pk).update(display_name="New owner name")
         User.objects.filter(pk=self.cafe.pk).update(display_name="New café name")
         order.refresh_from_db()
@@ -196,7 +197,7 @@ class RefundConcurrencyTests(TransactionTestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="refund-owner@example.com", display_name="Owner")
         cafe = User.objects.create_user(email="refund-cafe@example.com", display_name="Café", role="CAFE")
-        reward = Reward.objects.create(cafe_user=cafe, name="Coffee", point_cost=40)
+        reward = Reward.objects.create(venue=venue_for(cafe), name="Coffee", point_cost=40)
         credit_points(user=self.owner, amount=100)
         self.order = create_redemption(owner=self.owner, reward_id=reward.pk)
 
