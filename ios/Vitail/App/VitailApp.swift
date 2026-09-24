@@ -9,6 +9,9 @@ struct VitailApp: App {
     private let walkService: WalkService
     private let cafeProfileService: CafeProfileService
     private let cafeProductsService: CafeProductsService
+    private let questService: QuestService
+    private let leaderboardService: LeaderboardService
+    private let documentService: DocumentService
 
     init() {
         let dependencies = AppDependencies.live()
@@ -21,6 +24,9 @@ struct VitailApp: App {
         walkService = dependencies.walkService
         cafeProfileService = dependencies.cafeProfileService
         cafeProductsService = dependencies.cafeProductsService
+        questService = dependencies.questService
+        leaderboardService = dependencies.leaderboardService
+        documentService = dependencies.documentService
     }
 
     var body: some Scene {
@@ -32,7 +38,10 @@ struct VitailApp: App {
                 redemptionService: redemptionService,
                 walkService: walkService,
                 cafeProfileService: cafeProfileService,
-                cafeProductsService: cafeProductsService
+                cafeProductsService: cafeProductsService,
+                questService: questService,
+                leaderboardService: leaderboardService,
+                documentService: documentService
             )
         }
     }

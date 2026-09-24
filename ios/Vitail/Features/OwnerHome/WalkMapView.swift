@@ -389,6 +389,7 @@ struct WalkMapView: View {
     @ObservedObject private var walkTracker: WalkSessionTracker
     @ObservedObject private var dogSelection: WalkDogSelectionViewModel
     @ObservedObject private var walkHistory: WalkHistoryStore
+    @ObservedObject private var checkIns: CheckInProgressStore
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: -37.8136, longitude: 144.9631),
@@ -405,6 +406,7 @@ struct WalkMapView: View {
     init(
         coordinator: WalkSessionCoordinator, isActive: Bool,
         initialDrawerDetent: WalkDrawerDetent = .collapsed,
+        checkIns: CheckInProgressStore? = nil,
         onManageDogs: @escaping () -> Void
     ) {
         _drawerDetent = State(initialValue: initialDrawerDetent)
@@ -415,6 +417,7 @@ struct WalkMapView: View {
         walkTracker = coordinator.tracker
         dogSelection = coordinator.dogSelection
         walkHistory = coordinator.history
+        self.checkIns = checkIns ?? CheckInProgressStore(ownerID: 0)
     }
 
     var body: some View {
@@ -557,6 +560,11 @@ struct WalkMapView: View {
             if coordinator.storageErrorMessage != nil {
                 Button("Your walk needs attention · Retry") { coordinator.retryStorage() }
                     .font(.caption).padding(.bottom, AppSpacing.small)
+            }
+            ForEach(checkIns.visibleItems.filter { $0.status != .collected }) { item in
+                CheckInProgressCard(store: checkIns, checkInID: item.id)
+                    .padding(.horizontal, AppSpacing.medium)
+                    .padding(.bottom, AppSpacing.small)
             }
         }
         .fixedSize(horizontal: false, vertical: true)

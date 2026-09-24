@@ -8,6 +8,9 @@ struct AppDependencies: Sendable {
     let walkService: WalkService
     let cafeProfileService: CafeProfileService
     let cafeProductsService: CafeProductsService
+    let questService: QuestService
+    let leaderboardService: LeaderboardService
+    let documentService: DocumentService
 
     static func live() -> AppDependencies {
         let apiClient = APIClient()
@@ -31,7 +34,10 @@ struct AppDependencies: Sendable {
             redemptionService: RedemptionService(apiClient: authenticatedAPIClient),
             walkService: WalkService(apiClient: authenticatedAPIClient),
             cafeProfileService: CafeProfileService(apiClient: authenticatedAPIClient),
-            cafeProductsService: CafeProductsService(apiClient: authenticatedAPIClient)
+            cafeProductsService: CafeProductsService(apiClient: authenticatedAPIClient),
+            questService: QuestService(apiClient: authenticatedAPIClient),
+            leaderboardService: LeaderboardService(apiClient: authenticatedAPIClient),
+            documentService: DocumentService(apiClient: authenticatedAPIClient)
         )
     }
 }

@@ -82,6 +82,24 @@
 		F10000000000000000000002 /* DogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DogDetailView.swift */; };
 		F10000000000000000000003 /* AvatarProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* AvatarProfileTests.swift */; };
 		F10000000000000000000004 /* SlideToCollect.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* SlideToCollect.swift */; };
+		A7F7B2EC02EC98B63A3D3872 /* QuestModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */; };
+		19B14471CE7DC0423715C4FD /* QuestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F5379B23557A4EF3CFD21D /* QuestService.swift */; };
+		9854E00A30D4766CFB62D214 /* QuestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBC97A9308058DE40CEA3E34 /* QuestStore.swift */; };
+		0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C5A6C711492542BA1C468B /* QuestView.swift */; };
+		E206A9030C9F705CA891D265 /* LeaderboardModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B176A868BA62FF09FC50735 /* LeaderboardModels.swift */; };
+		EFB8D09BA28365719EFC497A /* LeaderboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ADF4361D531A88A2E414684 /* LeaderboardService.swift */; };
+		85EE2DA57774D1348D8EE103 /* LeaderboardStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4019AFC1EEC5105C4B154B47 /* LeaderboardStore.swift */; };
+		BE8A9D342C5A086D3DDF360A /* LeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F7B595D23843BE6D3D32B84 /* LeaderboardView.swift */; };
+		B050D75339160A6E5DED733D /* CheckInProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */; };
+		18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */; };
+		B3C767A9C15E35A6C2AA554C /* CheckInProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */; };
+		2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */; };
+		7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE812BF2460D749B2A393459 /* DocumentService.swift */; };
+		D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */; };
+		6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */; };
+		0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECF0F73A9474B166766F7F /* DocumentTests.swift */; };
+		DFDB93C3237E58D028699C37 /* QuestLeaderboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACB97598A23B803F298053B /* QuestLeaderboardTests.swift */; };
+		6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +196,24 @@
 		F20000000000000000000002 /* DogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDetailView.swift; sourceTree = "<group>"; };
 		F20000000000000000000003 /* AvatarProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarProfileTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000004 /* SlideToCollect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideToCollect.swift; sourceTree = "<group>"; };
+		A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestModels.swift; sourceTree = "<group>"; };
+		81F5379B23557A4EF3CFD21D /* QuestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestService.swift; sourceTree = "<group>"; };
+		EBC97A9308058DE40CEA3E34 /* QuestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestStore.swift; sourceTree = "<group>"; };
+		47C5A6C711492542BA1C468B /* QuestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestView.swift; sourceTree = "<group>"; };
+		7B176A868BA62FF09FC50735 /* LeaderboardModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardModels.swift; sourceTree = "<group>"; };
+		7ADF4361D531A88A2E414684 /* LeaderboardService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardService.swift; sourceTree = "<group>"; };
+		4019AFC1EEC5105C4B154B47 /* LeaderboardStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardStore.swift; sourceTree = "<group>"; };
+		5F7B595D23843BE6D3D32B84 /* LeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardView.swift; sourceTree = "<group>"; };
+		36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgress.swift; sourceTree = "<group>"; };
+		A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressCard.swift; sourceTree = "<group>"; };
+		020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressTests.swift; sourceTree = "<group>"; };
+		25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModels.swift; sourceTree = "<group>"; };
+		BE812BF2460D749B2A393459 /* DocumentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentService.swift; sourceTree = "<group>"; };
+		0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSubmissionView.swift; sourceTree = "<group>"; };
+		D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewModel.swift; sourceTree = "<group>"; };
+		F6ECF0F73A9474B166766F7F /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
+		1ACB97598A23B803F298053B /* QuestLeaderboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestLeaderboardTests.swift; sourceTree = "<group>"; };
+		88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRefreshTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -304,6 +340,10 @@
 		20A000000000000000000001 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				222CA46EF530402A1EFB0C1D /* Documents */,
+				58A8F78977627F369AF92B94 /* CheckIn */,
+				BB33382BBDA2E8C6D276E907 /* Leaderboard */,
+				83A28EB6FFBE5CEDAA98F129 /* Quest */,
 				20B000000000000000000001 /* Auth */,
 				20C000000000000000000001 /* OwnerHome */,
 				20D000000000000000000001 /* CafeOrders */,
@@ -358,6 +398,10 @@
 		20E000000000000000000001 /* VitailTests */ = {
 			isa = PBXGroup;
 			children = (
+				88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */,
+				1ACB97598A23B803F298053B /* QuestLeaderboardTests.swift */,
+				F6ECF0F73A9474B166766F7F /* DocumentTests.swift */,
+				020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */,
 				00000000000000000000E213 /* BrandAppearanceTests.swift */,
 				F20000000000000000000003 /* AvatarProfileTests.swift */,
 				00000000000000000000E20A /* WalkDogSelectionTests.swift */,
@@ -445,6 +489,48 @@
 				100000000000000000000033 /* CafeProductsView.swift */,
 			);
 			path = CafeProducts;
+			sourceTree = "<group>";
+		};
+		83A28EB6FFBE5CEDAA98F129 /* Quest */ = {
+			isa = PBXGroup;
+			children = (
+				47C5A6C711492542BA1C468B /* QuestView.swift */,
+				EBC97A9308058DE40CEA3E34 /* QuestStore.swift */,
+				81F5379B23557A4EF3CFD21D /* QuestService.swift */,
+				A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */,
+			);
+			path = Quest;
+			sourceTree = "<group>";
+		};
+		BB33382BBDA2E8C6D276E907 /* Leaderboard */ = {
+			isa = PBXGroup;
+			children = (
+				5F7B595D23843BE6D3D32B84 /* LeaderboardView.swift */,
+				4019AFC1EEC5105C4B154B47 /* LeaderboardStore.swift */,
+				7ADF4361D531A88A2E414684 /* LeaderboardService.swift */,
+				7B176A868BA62FF09FC50735 /* LeaderboardModels.swift */,
+			);
+			path = Leaderboard;
+			sourceTree = "<group>";
+		};
+		58A8F78977627F369AF92B94 /* CheckIn */ = {
+			isa = PBXGroup;
+			children = (
+				A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */,
+				36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */,
+			);
+			path = CheckIn;
+			sourceTree = "<group>";
+		};
+		222CA46EF530402A1EFB0C1D /* Documents */ = {
+			isa = PBXGroup;
+			children = (
+				D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */,
+				0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */,
+				BE812BF2460D749B2A393459 /* DocumentService.swift */,
+				25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */,
+			);
+			path = Documents;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -546,6 +632,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */,
+				D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */,
+				7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */,
+				2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */,
+				18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */,
+				B050D75339160A6E5DED733D /* CheckInProgress.swift in Sources */,
+				BE8A9D342C5A086D3DDF360A /* LeaderboardView.swift in Sources */,
+				85EE2DA57774D1348D8EE103 /* LeaderboardStore.swift in Sources */,
+				EFB8D09BA28365719EFC497A /* LeaderboardService.swift in Sources */,
+				E206A9030C9F705CA891D265 /* LeaderboardModels.swift in Sources */,
+				0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */,
+				9854E00A30D4766CFB62D214 /* QuestStore.swift in Sources */,
+				19B14471CE7DC0423715C4FD /* QuestService.swift in Sources */,
+				A7F7B2EC02EC98B63A3D3872 /* QuestModels.swift in Sources */,
 				00000000000000000000E100 /* WalkMapView.swift in Sources */,
 				00000000000000000000E101 /* WalkDogSelectionViewModel.swift in Sources */,
 				00000000000000000000E102 /* WalkDogSelectionCard.swift in Sources */,
@@ -609,6 +709,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */,
+				DFDB93C3237E58D028699C37 /* QuestLeaderboardTests.swift in Sources */,
+				0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */,
+				B3C767A9C15E35A6C2AA554C /* CheckInProgressTests.swift in Sources */,
 				00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */,
 				F10000000000000000000003 /* AvatarProfileTests.swift in Sources */,
 				00000000000000000000E10A /* WalkDogSelectionTests.swift in Sources */,

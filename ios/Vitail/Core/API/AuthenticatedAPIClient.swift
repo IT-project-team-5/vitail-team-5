@@ -65,6 +65,12 @@ struct AuthenticatedAPIClient: Sendable {
         }
     }
 
+    func getData(_ path: String) async throws -> Data {
+        try await withAccessToken { apiClient, token in
+            try await apiClient.getData(path, bearerToken: token)
+        }
+    }
+
     func delete(_ path: String) async throws {
         try await withAccessToken { apiClient, token in
             try await apiClient.delete(path, bearerToken: token)

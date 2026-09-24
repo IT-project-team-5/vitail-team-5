@@ -225,6 +225,14 @@ struct APIClient: Sendable {
         return try decode(Response.self, from: payload.data)
     }
 
+    func getData(_ path: String, bearerToken: String? = nil) async throws -> Data {
+        let payload = try await request(
+            path: path, queryItems: [], method: "GET", body: nil,
+            bearerToken: bearerToken
+        )
+        return payload.data
+    }
+
     func delete(_ path: String, bearerToken: String? = nil) async throws {
         _ = try await request(
             path: path, queryItems: [], method: "DELETE", body: nil,

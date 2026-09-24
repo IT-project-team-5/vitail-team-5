@@ -16,6 +16,7 @@ final class RedemptionViewModel: ObservableObject {
 
     private let service: any RedemptionServing
     private var pendingRequestID: UUID?
+    private var refreshRequested = false
 
     init(service: any RedemptionServing = RedemptionService()) {
         self.service = service
@@ -27,17 +28,26 @@ final class RedemptionViewModel: ObservableObject {
     var cafes: [CafeRewardGroup] { CafeRewardGroup.grouped(rewards) }
 
     func refresh() async {
-        guard !isLoading, !isMutating else { return }
+        guard !isLoading, !isMutating else { refreshRequested = true; return }
         isLoading = true
-        defer { isLoading = false }
-        do {
-            try await reload()
-            errorMessage = nil
-        } catch is CancellationError {
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = error.localizedDescription
-        }
+        defer { isLoading = false; drainRequestedRefresh() }
+        repeat {
+            refreshRequested = false
+            do {
+                try await reload()
+                errorMessage = nil
+            } catch is CancellationError {
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+        } while refreshRequested && !Task.isCancelled
+    }
+
+    private func drainRequestedRefresh() {
+        guard refreshRequested, !isLoading, !isMutating else { return }
+        refreshRequested = false
+        Task { [weak self] in await self?.refresh() }
     }
 
     private func reload() async throws {
@@ -61,7 +71,7 @@ final class RedemptionViewModel: ObservableObject {
         retryRewardID = rewardID
         redeemingRewardID = rewardID
         errorMessage = nil
-        defer { redeemingRewardID = nil }
+        defer { redeemingRewardID = nil; drainRequestedRefresh() }
         do {
             let order = try await service.createRedemption(rewardID: rewardID, requestID: requestID)
             try Task.checkCancellation()
@@ -95,7 +105,7 @@ final class RedemptionViewModel: ObservableObject {
         guard !isMutating, !isLoading else { return }
         collectingRedemptionID = redemptionID
         errorMessage = nil
-        defer { collectingRedemptionID = nil }
+        defer { collectingRedemptionID = nil; drainRequestedRefresh() }
         do {
             let order = try await service.collectRedemption(id: redemptionID)
             try Task.checkCancellation()

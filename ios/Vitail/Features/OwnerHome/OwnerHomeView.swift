@@ -2,9 +2,12 @@ import SwiftUI
 
 struct OwnerHomeView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private enum Page: String, CaseIterable, Identifiable {
         case account = "Account"
         case walk = "Walk"
+        case quest = "Quest"
+        case leaderboard = "Leaderboard"
         case redeem = "Redeem"
 
         var id: Self { self }
@@ -15,6 +18,10 @@ struct OwnerHomeView: View {
                 return "person.crop.circle"
             case .walk:
                 return "figure.walk"
+            case .quest:
+                return "flag"
+            case .leaderboard:
+                return "chart.bar"
             case .redeem:
                 return "gift"
             }
@@ -26,6 +33,10 @@ struct OwnerHomeView: View {
                 return "person.crop.circle.fill"
             case .walk:
                 return "figure.walk"
+            case .quest:
+                return "flag.fill"
+            case .leaderboard:
+                return "chart.bar.fill"
             case .redeem:
                 return "gift.fill"
             }
@@ -36,24 +47,37 @@ struct OwnerHomeView: View {
     @ObservedObject var session: SessionStore
     let dogService: any DogServicing
     let walkService: any WalkServing
+    let documentService: (any DocumentServing)?
     @StateObject private var redemptionViewModel: RedemptionViewModel
     @StateObject private var walkCoordinator: WalkSessionCoordinator
     @StateObject private var onboardingDogs: DogViewModel
+    @StateObject private var questStore: QuestStore
+    @StateObject private var leaderboardStore: LeaderboardStore
+    @StateObject private var checkIns: CheckInProgressStore
     @State private var selection: Page = .walk
     @State private var hasCheckedOnboarding = false
     @State private var isAddingFirstDog = false
     @State private var accountRefreshID = 0
+    @State private var isShowingDocuments = false
 
     init(
         user: User, session: SessionStore,
         dogService: any DogServicing = DogService(),
         redemptionService: any RedemptionServing = RedemptionService(),
-        walkService: any WalkServing = WalkService()
+        walkService: any WalkServing = WalkService(),
+        questService: any QuestServing = QuestService(),
+        leaderboardService: any LeaderboardServing = LeaderboardService(),
+        checkInService: (any CheckInProgressServing)? = nil,
+        documentService: (any DocumentServing)? = nil
     ) {
         self.user = user
         self.session = session
         self.dogService = dogService
         self.walkService = walkService
+        self.documentService = documentService
+        _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
+        _leaderboardStore = StateObject(wrappedValue: LeaderboardStore(ownerID: user.id, session: session, service: leaderboardService))
+        _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
         _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService))
         _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
             ownerID: user.id, session: session, dogService: dogService, walkService: walkService
@@ -70,10 +94,17 @@ struct OwnerHomeView: View {
                     OwnerProfileView(user: user, session: session, dogService: dogService)
                         .id(accountRefreshID)
                         .tag(Page.account)
-                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog) {
+                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns) {
                         selection = .account
                     }
                     .tag(Page.walk)
+                    QuestView(store: questStore, checkIns: checkIns,
+                              onManageDogs: { selection = .account }, onOpenWalk: { selection = .walk },
+                              onOpenDocuments: documentService != nil && questStore.snapshot?.documents.status == .available
+                                ? { isShowingDocuments = true } : nil)
+                        .tag(Page.quest)
+                    LeaderboardView(store: leaderboardStore)
+                        .tag(Page.leaderboard)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
                 }
@@ -86,9 +117,28 @@ struct OwnerHomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $isAddingFirstDog, onDismiss: {
                 accountRefreshID += 1
-                Task { await walkCoordinator.dogSelection.load() }
+                Task {
+                    await walkCoordinator.dogSelection.load()
+                    await questStore.refresh()
+                }
             }) {
                 DogFormView(viewModel: onboardingDogs)
+            }
+            .sheet(isPresented: $isShowingDocuments) {
+                if let documentService {
+                    NavigationStack {
+                        DocumentSubmissionView(service: documentService, session: session) {
+                            async let quests: Void = questStore.refresh()
+                            async let wallet: Void = redemptionViewModel.refresh()
+                            _ = await (quests, wallet)
+                        }
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { isShowingDocuments = false }
+                            }
+                        }
+                    }
+                }
             }
             .task {
                 guard !hasCheckedOnboarding else { return }
@@ -99,35 +149,97 @@ struct OwnerHomeView: View {
             }
             .task(id: "\(selection.rawValue)-\(scenePhase == .active)") {
                 guard scenePhase == .active else { return }
-                walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel] in await redemptionViewModel?.refresh() }
-                session.beforeLogout = { [weak walkCoordinator] in await walkCoordinator?.prepareForLogout() }
-                await walkCoordinator.sync.refreshAndUpload()
-                await redemptionViewModel.refresh()
+                configureCallbacks()
+                async let walks: Void = walkCoordinator.sync.refreshAndUpload()
+                async let wallet: Void = redemptionViewModel.refresh()
+                async let quests: Void = questStore.refresh()
+                async let leaderboard: Void = leaderboardStore.refresh()
+                async let venues: Void = checkIns.refresh()
+                _ = await (walks, wallet, quests, leaderboard, venues)
+                // Both progress surfaces observe the same server-backed store.
+                // Tab changes/backgrounding cancel this task and its polling.
+                while !Task.isCancelled && (selection == .walk || selection == .quest) {
+                    do { try await Task.sleep(for: .seconds(5)) }
+                    catch { break }
+                    guard !Task.isCancelled else { break }
+                    await checkIns.refresh()
+                    if selection == .quest { await questStore.refresh() }
+                }
+            }
+            .onChange(of: session.state) { state in
+                guard case let .signedIn(currentUser) = state,
+                      currentUser.id == user.id, currentUser.role == .owner else {
+                    questStore.stop()
+                    leaderboardStore.stop()
+                    checkIns.stop()
+                    return
+                }
             }
         }
     }
 
+    private func configureCallbacks() {
+        walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel, weak questStore, weak leaderboardStore] in
+            async let wallet: Void? = redemptionViewModel?.refresh()
+            async let quests: Void? = questStore?.refresh()
+            async let leaderboard: Void? = leaderboardStore?.refresh()
+            _ = await (wallet, quests, leaderboard)
+        }
+        questStore.onAward = { [weak redemptionViewModel, weak leaderboardStore] _ in
+            async let wallet: Void? = redemptionViewModel?.refresh()
+            async let leaderboard: Void? = leaderboardStore?.refresh()
+            _ = await (wallet, leaderboard)
+        }
+        checkIns.onCollection = { [weak redemptionViewModel, weak questStore, weak leaderboardStore] in
+            async let wallet: Void? = redemptionViewModel?.refresh()
+            async let quests: Void? = questStore?.refresh()
+            async let leaderboard: Void? = leaderboardStore?.refresh()
+            _ = await (wallet, quests, leaderboard)
+        }
+        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak leaderboardStore, weak checkIns] in
+            questStore?.stop()
+            leaderboardStore?.stop()
+            checkIns?.stop()
+            await walkCoordinator?.prepareForLogout()
+        }
+    }
+
     private var bottomNavigation: some View {
-        HStack {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                ScrollView(.horizontal, showsIndicators: false) { navigationItems }
+            } else {
+                navigationItems
+            }
+        }
+        .padding(.vertical, AppSpacing.small)
+        .padding(.horizontal, AppSpacing.small)
+        .background(AppColors.surface)
+    }
+
+    private var navigationItems: some View {
+        HStack(alignment: .top, spacing: 0) {
             ForEach(Page.allCases) { page in
                 Button {
                     selection = page
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: selection == page ? page.selectedIcon : page.icon)
+                            .accessibilityHidden(true)
                         Text(page.rawValue)
-                            .font(.caption)
+                            .font(.caption2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.center)
                     }
+                    .frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 132 : 0, minHeight: 44)
                     .frame(maxWidth: .infinity)
                     .foregroundStyle(selection == page ? AppColors.brand : AppColors.secondaryText)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(page.rawValue)
+                .accessibilityIdentifier("owner-tab-\(page.rawValue.lowercased())")
                 .accessibilityAddTraits(selection == page ? .isSelected : [])
             }
         }
-        .padding(.top, AppSpacing.small)
-        .padding(.bottom, AppSpacing.small)
-        .padding(.horizontal, AppSpacing.small)
-        .background(AppColors.surface)
     }
 }

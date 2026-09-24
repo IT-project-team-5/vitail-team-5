@@ -9,6 +9,9 @@ struct RootView: View {
     let walkService: any WalkServing
     let cafeProfileService: any CafeProfileServing
     let cafeProductsService: any CafeProductsServing
+    var questService: any QuestServing = QuestService()
+    var leaderboardService: any LeaderboardServing = LeaderboardService()
+    var documentService: (any DocumentServing)? = nil
 
     var body: some View {
         Group {
@@ -47,7 +50,8 @@ struct RootView: View {
             OwnerHomeView(
                 user: user, session: session,
                 dogService: dogService, redemptionService: redemptionService,
-                walkService: walkService
+                walkService: walkService, questService: questService,
+                leaderboardService: leaderboardService, documentService: documentService
             )
             .id(user.id)
         case .cafe:
