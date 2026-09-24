@@ -13,7 +13,7 @@ to **local businesses**, which general fitness apps do not do.
 ## Status
 
 Pilot scope, Melbourne. Product requirements and platform decisions are
-retained below; the connected build status is updated through 2026-09-24.
+retained below; the connected build status is updated through 2026-09-25.
 
 Anything not yet decided is tracked in `docs/DECISIONS.md`. Do not invent
 behaviour for an open decision — raise it instead.
@@ -24,7 +24,7 @@ The app stays deliberately small:
 
 ```text
 User chooses Dog Owner or Cafe → authentication form opens
-Dog owner registers/signs in → Account / Walk / Redeem
+Dog owner registers/signs in → Account / Walk / Quest / Leaderboard / Redeem
 Café owner signs in with an admin-created account → Account / Products / Orders
 ```
 
@@ -39,6 +39,19 @@ owner with no dogs sees the Add Dog form. Dog rows open a detail page, and up to
 and crop a photo from the system photo picker; uploads persist on the server.
 Personalised-goal inputs are stored, but no duration is displayed until the
 open numeric welfare and heat-adjustment rules are resolved.
+
+Quest shows each dog's accepted distance today, the owner's walking streak,
+birthday treats and document tasks. Birthdays are explicit dates; old age-only
+profiles remain editable without invented birthdays. Birthday collection earns
+60 points per dog per year. Council, annual microchip and vet evidence are
+self-reported per dog: eligible submission immediately awards points, repeat
+entitlements do not, and private files remain available for later checks.
+Leaderboard currently shows the owner's weekly/all-time walking statistics;
+friend comparisons await the friends feature. Daily goal targets and live dog
+attribution await the confirmed formula. The map and Quest share an injectable
+verified check-in store; the venue teammate supplies its actual backend/location
+provider. Streak milestones are displayed; streak awards are not enabled yet.
+See [Quest rules, API and integration handoff](docs/QUESTS.md).
 
 Both login choices stay on the same page and expand their form underneath.
 Owner profile settings and Café Account offer System, Light and Dark appearance;

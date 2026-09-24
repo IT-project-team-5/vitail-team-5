@@ -63,6 +63,25 @@ behaviour for them, raise them instead.
 | R48 | Coffee estimate | Temporarily use 60 points ≈ 1 cup for the wallet display. This is an estimate only; actual product prices and walking earn rates are unchanged |
 | R49 | UI refinements | Confirmed on 2026-09-24: login forms expand beneath their role row; Walk uses play/pause symbols with more spacing and a slogan; product-titled centred purchase alerts show café/deadline and open the receipt on success; café menus omit the Vitail title and stale purchase notices; café order cards show item/customer/profile dogs with details on tap; users can persist System/Light/Dark appearance |
 | R50 | Drawer, receipt and dog photos | Follow-up on 2026-09-24: the Walk drawer moves as one piece, with controls and history in one scroll area. Receipt uses a large café photo, opens café details on tap, replaces point cost with order number, and fills the collect slider as it moves. Café order cards show dog avatars and omit the entire update-time header |
+| R51 | Quest scope | Confirmed on 2026-09-25: add Quest and Leaderboard tabs; show daily goal per dog, check-in progress and streak on outer cards; base walking is not a separate Quest. Venue location/backend belongs to another teammate; Quest and map share verified progress and collection state |
+| R52 | Birthday reward | Record actual dog birthdays; 60 points per dog per year on its birthday. Existing age-only records keep an unknown birthday until edited |
+| R53 | Document awards | Council registration, microchip registration and vet check-up rewards are counted separately per dog. Successful eligible submission immediately awards points; re-uploading the same entitlement does not award again. Evidence is self-reported; later spot audits replace prior assumptions of up-front review |
+
+### Quest delivery update (2026-09-25)
+
+The **New Point Retrieval / Calculation** table from the 24 September client
+meeting is the latest policy source. See `QUESTS.md` for the implemented subset,
+shared venue contract and pending decisions. The new source supersedes earlier
+conflicting proposals in this historical document. It does not mean every new
+reward, cap, friendship or location feature has been implemented.
+
+Document rewards are council 300 once per dog, microchip 300 per annual
+registration period, and vet 200 at most twice per event calendar year with at
+least 60 days between rewarded visits. Explicit annual validity dates are the
+current microchip implementation; calendar-year versus actual-period treatment
+is still awaiting the owner's answer. No target or daily goal percentage is
+fabricated while the formula remains pending. Streak display is connected;
+streak award delivery is not enabled in this slice.
 
 ### Connected MVP implementation notes (2026-09-09)
 
@@ -121,12 +140,9 @@ is not reused, so earlier references stay valid.
 
 ### O1 — Vet checkup confirmation
 
-200 points is the largest single award, capped at 2 per year and 60 days apart,
-but the confirmation method is undefined. Who confirms, and against what
-evidence? Admin review of an uploaded invoice is the assumed default, but it is
-unverified and forgeable.
-
-**Blocks:** `rewards` app, Engineer 4.
+Resolved for first delivery by R53: actual check-up date plus photo, immediate
+self-reported award, at most two per dog per event calendar year and 60 days
+apart. No up-front review. Later spot-audit workflow remains unimplemented.
 
 ### O5 — Daily cap suppresses multi-venue check-ins
 
@@ -172,8 +188,10 @@ and insurers, and for database growth.
 ### O10 — Council registration evidence
 
 Registration documents contain name, address and sometimes microchip number.
-This is the most sensitive data in the product, awarded at 300 points. Confirm
-whether pilot needs it at all, and define storage, access and retention if so.
+R53 confirms per-dog submission and immediate eligible awards. Council/microchip
+accept a number or PDF; files are private and owner/admin-readable, and versions
+are preserved for later checks. Production retention and spot-audit procedures
+still require decisions.
 
 ### O11 — Charity partners
 

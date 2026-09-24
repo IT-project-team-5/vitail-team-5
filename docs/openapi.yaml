@@ -1,12 +1,13 @@
 openapi: 3.0.3
 info:
   title: Vitail connected MVP API
-  version: '2026-09-09'
+  version: '2026-09-25'
   description: >-
     Implemented routes only. JWT authentication is required except register,
     login and refresh. Owner/café roles come from the authenticated account.
     Auth and dog paths use no trailing slash; wallet, redemption, café and walk
-    paths also accept a trailing slash. Arrays are currently unpaginated.
+    paths also accept a trailing slash, as do quest, leaderboard and document
+    paths. Arrays are currently unpaginated.
     Django Admin is a separate session/CSRF-protected interface, not this API.
 servers:
   - url: http://127.0.0.1:8000
@@ -118,6 +119,11 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     post:
       summary: Add an owned dog (maximum 10 per account)
+      description: >-
+        Supply a non-null date_of_birth, or age_months for a legacy client.
+        A supplied birthday determines the returned age in completed calendar
+        months; a conflicting age_months is ignored. An age-only request leaves
+        the birthday unknown and does not invent a birth date.
       requestBody:
         required: true
         content:
@@ -125,7 +131,12 @@ paths:
             schema:
               allOf:
                 - $ref: '#/components/schemas/DogInput'
-                - required: [name, breed_id, age_months, size]
+                - required: [name, breed_id, size]
+                  anyOf:
+                    - required: [age_months]
+                    - required: [date_of_birth]
+                      properties:
+                        date_of_birth: {type: string, format: date, nullable: false}
       responses:
         '201':
           description: Created dog
@@ -148,6 +159,11 @@ paths:
       - $ref: '#/components/parameters/ID'
     patch:
       summary: Update a dog owned by the authenticated OWNER
+      description: >-
+        Omitted birthdays remain unchanged. A known birthday is authoritative
+        even when a legacy client sends age_months alone. Explicitly setting
+        date_of_birth to null clears it and preserves the last computed age
+        unless age_months is supplied. Future birthdays are rejected.
       requestBody:
         required: true
         content:
@@ -186,7 +202,7 @@ paths:
                     type: object
                     properties:
                       breed_energy_level: {type: string, enum: [LOW, MODERATE, HIGH]}
-                      age_months: {type: integer, minimum: 0}
+                      age_months: {type: integer, minimum: 0, description: Completed calendar months from DOB when known; otherwise the saved legacy age}
                       size: {$ref: '#/components/schemas/DogSize'}
                       is_brachycephalic: {type: boolean}
                   unresolved_requirements: {type: array, items: {type: string}}
@@ -558,9 +574,193 @@ paths:
               schema:
                 $ref: '#/components/schemas/CafeProfile'
         default: {$ref: '#/components/responses/Error'}
+  /api/quests:
+    get:
+      summary: Read the OWNER's quest dashboard
+      description: >-
+        Uses the Australia/Melbourne calendar and the next local midnight,
+        including daylight-saving changes. Daily distance comes from accepted
+        walks; targets, verified active time, progress and daily rewards remain
+        null until their rules are confirmed. Streaks are read-only. No base
+        walking reward is repeated as a quest. Check-in items remain empty
+        until the venue service is connected. A disabled quest returns DISABLED;
+        clients must not interpret unknown statuses or null progress as claimable
+        or as zero-percent completion. Documents expose their available kinds;
+        submissions and eligibility use the separate documents endpoint.
+      responses:
+        '200':
+          description: Current owner-scoped quest state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuestDashboard'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/quests/birthdays/{dog_id}/collect:
+    parameters:
+      - name: dog_id
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    post:
+      summary: Collect 60 birthday points once per dog per calendar year (OWNER only)
+      description: >-
+        The server verifies the dog's birthday against today's Melbourne date
+        and credits the wallet atomically. No request UUID is needed: the dog
+        and year identify the entitlement, including after an ownership transfer.
+        A 29 February birthday is eligible only on an actual 29 February.
+        The original recipient may retry an award from the current year after
+        a profile correction, transfer, deletion or quest disable; the existing
+        award and current wallet balance are returned without another credit.
+        A new owner cannot collect a birthday reward already used for that dog
+        in the same year and never receives the original recipient's balance.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {type: object, description: Empty object; the server determines eligibility and points}
+      responses:
+        '201':
+          description: New birthday award; created is true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BirthdayCollection'}
+        '200':
+          description: Existing award for the original recipient; created is false
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BirthdayCollection'}
+        '400':
+          description: BIRTHDAY_REQUIRED or BIRTHDAY_IN_FUTURE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '404':
+          description: DOG_NOT_FOUND; no owned dog or replayable award
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: BIRTHDAY_NOT_TODAY, BIRTHDAY_ALREADY_CLAIMED or QUEST_DISABLED
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/leaderboard:
+    get:
+      summary: Read the OWNER's walking totals for this week or all time
+      description: >-
+        Only the signed-in owner's accepted walks are included. SELF_ONLY and
+        friends_available=false mean that rank 1 is not a competitive ranking
+        and no friend data is available. Weekly boundaries are Monday midnight
+        through the next Monday midnight in Australia/Melbourne. All-time totals
+        use starts_at=null and ends_at=server_time. Walking points exclude quest,
+        document, refund and other wallet credits.
+      parameters:
+        - name: period
+          in: query
+          schema: {type: string, enum: [week, all_time], default: week}
+      responses:
+        '200':
+          description: Real self statistics; an owner with no walks receives a zero-valued self row
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Leaderboard'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/quests/documents:
+    get:
+      summary: Read the OWNER's dogs, document submissions and reward eligibility
+      description: >-
+        Submissions are newest first and include historical dog identity
+        snapshots. Existing submissions remain readable when the document quest
+        is disabled. File contents require a separate authenticated download.
+      responses:
+        '200':
+          description: Owned documents and per-dog eligibility
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentDashboard'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Submit evidence and immediately credit any eligible document reward
+      description: >-
+        OWNER only; evidence is self-reported and may be audited later. Rewards
+        belong to the dog: council registration grants 300 points once in its
+        lifetime; microchip registration grants 300 points per non-overlapping
+        annual registration period covering today; vet check-ups grant 200 points
+        per visit, at most twice in the visit's calendar year and at least 60 days
+        apart even across New Year. Updated evidence for an existing entitlement
+        is saved with zero extra points. The same file cannot support a different
+        period or visit for the same owner, dog and kind.
+        Send request_id and reuse the exact request on an ambiguous failure.
+        An identical owner/UUID retry replays the stored receipt, including its
+        original balance and created=true, with HTTP200;
+        do not add awarded_points to a local wallet again. Reusing the UUID for
+        different evidence returns 409. Disabled quests reject new submissions
+        with 409 but permit identical retries of existing submissions.
+        The JSON body is limited to 6 MiB and each decoded file to 4 MiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DocumentRequest'}
+      responses:
+        '201':
+          description: New submission; awarded_points may be zero when the entitlement was already used
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentReceipt'}
+        '200':
+          description: Original stored receipt for an identical retry, including its original balance and created value
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentReceipt'}
+        '400':
+          description: Invalid dog, dates, proof, reward frequency or reused evidence
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentValidationError'}
+        '409':
+          description: Request UUID conflict or document quest currently disabled
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/quests/documents/{submission_id}/file:
+    parameters:
+      - name: submission_id
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    get:
+      summary: Download an authenticated document file
+      description: >-
+        The submitting owner can read their file; ADMIN and superuser accounts
+        can read files for later audits. Other accounts and submissions without
+        an attachment return 404. Files are privately stored and are not public
+        media URLs. JWT or an authenticated Django session is required.
+      security:
+        - bearerAuth: []
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Original evidence as a download with a sanitized display filename
+          headers:
+            Content-Disposition: {schema: {type: string}, description: Attachment with the saved display filename}
+            Cache-Control: {schema: {type: string, enum: ['private, no-store']}}
+            X-Content-Type-Options: {schema: {type: string, enum: [nosniff]}}
+            Content-Security-Policy: {schema: {type: string, enum: ["sandbox; default-src 'none'"]}}
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+            image/jpeg:
+              schema: {type: string, format: binary}
+            image/png:
+              schema: {type: string, format: binary}
+        '404': {description: Submission not visible to this account, no attachment or missing stored file}
+        default: {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    sessionCookie: {type: apiKey, in: cookie, name: sessionid, description: Django session accepted only for protected document downloads}
   parameters:
     ID:
       name: id
@@ -620,21 +820,270 @@ components:
         name: {type: string, minLength: 1, maxLength: 100}
         photo: {type: string, nullable: true, description: Legacy external URL or blank/null. A separately uploaded avatar takes precedence in responses}
         breed_id: {type: integer, minimum: 1}
-        age_months: {type: integer, minimum: 0}
+        age_months: {type: integer, minimum: 0, description: Legacy age when DOB is unknown; computed from DOB whenever a birthday is present}
+        date_of_birth: {type: string, format: date, nullable: true, description: Optional real birthday no later than the current server-local date; null means unknown}
         size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean, description: Defaults from breed when omitted on creation}
     Dog:
       type: object
-      required: [id, name, photo, breed, age_months, size, is_brachycephalic, created_at]
+      required: [id, name, photo, breed, age_months, date_of_birth, size, is_brachycephalic, created_at]
       properties:
         id: {type: integer}
         name: {type: string}
         photo: {type: string, nullable: true}
         breed: {$ref: '#/components/schemas/Breed'}
-        age_months: {type: integer, minimum: 0}
+        age_months: {type: integer, minimum: 0, description: Completed calendar months from date_of_birth, or saved legacy age if DOB is null}
+        date_of_birth: {type: string, format: date, nullable: true}
         size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean}
         created_at: {type: string, format: date-time}
+    QuestStatus:
+      type: string
+      description: >-
+        Current section statuses are AVAILABLE, RULES_PENDING, NOT_AVAILABLE
+        and DISABLED. Clients must retain unknown future states as unavailable
+        for collection instead of failing the whole dashboard.
+    DecimalMetres:
+      type: string
+      pattern: '^\d+\.\d{2}$'
+      example: '1250.50'
+      description: Nonnegative metres serialized as a decimal string with two fractional digits
+    QuestDogIdentity:
+      type: object
+      required: [dog_id, name, photo]
+      properties:
+        dog_id: {type: integer, minimum: 1}
+        name: {type: string}
+        photo: {type: string, nullable: true, description: Uploaded absolute URL or legacy photo URL; null when unset}
+    DailyGoalDog:
+      allOf:
+        - $ref: '#/components/schemas/QuestDogIdentity'
+        - type: object
+          required: [distance_m, target_distance_m, active_seconds, target_active_seconds, progress]
+          properties:
+            distance_m: {$ref: '#/components/schemas/DecimalMetres'}
+            target_distance_m:
+              type: string
+              nullable: true
+              description: Decimal-string target; currently null because the daily formula is pending
+            active_seconds: {type: integer, minimum: 0, nullable: true, description: Currently null; elapsed time is not treated as verified active time}
+            target_active_seconds: {type: integer, minimum: 0, nullable: true, description: Currently null}
+            progress: {type: number, minimum: 0, maximum: 1, nullable: true, description: Currently null; never infer zero percent from an unknown target}
+    DailyGoalQuest:
+      type: object
+      required: [status, dogs, reward_points, message]
+      properties:
+        status: {$ref: '#/components/schemas/QuestStatus'}
+        dogs: {type: array, items: {$ref: '#/components/schemas/DailyGoalDog'}}
+        reward_points: {type: integer, minimum: 0, nullable: true, description: Currently null}
+        message: {type: string}
+    StreakMilestone:
+      type: object
+      required: [days, reward_points]
+      properties:
+        days: {type: integer, minimum: 1}
+        reward_points: {type: integer, minimum: 0}
+    StreakQuest:
+      type: object
+      required: [status, current_days, longest_days, active_today, milestones, next_milestone, award_status]
+      properties:
+        status: {$ref: '#/components/schemas/QuestStatus'}
+        current_days: {type: integer, minimum: 0, description: Consecutive positive-distance walking days ending today or yesterday; otherwise zero}
+        longest_days: {type: integer, minimum: 0}
+        active_today: {type: boolean}
+        milestones:
+          type: array
+          description: Informational 7-day/20-point and 30-day/100-point milestones; no streak points are awarded yet
+          items: {$ref: '#/components/schemas/StreakMilestone'}
+        next_milestone:
+          allOf:
+            - $ref: '#/components/schemas/StreakMilestone'
+          description: Next 7-day, 30-day or subsequent 30-day milestone
+        award_status: {type: string, enum: [NOT_ENABLED]}
+    BirthdayQuestDog:
+      allOf:
+        - $ref: '#/components/schemas/QuestDogIdentity'
+        - type: object
+          required: [date_of_birth, next_birthday, is_birthday_today, status]
+          properties:
+            date_of_birth: {type: string, format: date, nullable: true}
+            next_birthday: {type: string, format: date, nullable: true, description: Next actual calendar anniversary; null for missing or invalid DOB}
+            is_birthday_today: {type: boolean}
+            status:
+              type: string
+              enum: [MISSING_BIRTHDAY, INVALID_BIRTHDAY, AVAILABLE, CLAIMED, UPCOMING]
+              description: CLAIMED follows the dog's annual entitlement even after ownership changes; unknown future values must not enable Collect
+    BirthdayQuest:
+      type: object
+      required: [status, reward_points, dogs, message]
+      properties:
+        status: {$ref: '#/components/schemas/QuestStatus'}
+        reward_points: {type: integer, enum: [60]}
+        dogs: {type: array, items: {$ref: '#/components/schemas/BirthdayQuestDog'}}
+        message: {type: string}
+    CheckInQuest:
+      type: object
+      required: [status, items, message]
+      properties:
+        status: {$ref: '#/components/schemas/QuestStatus'}
+        items:
+          type: array
+          maxItems: 0
+          items: {type: object}
+          description: Empty in this slice; there is no backend venue progress or collect route yet
+        message: {type: string}
+    DocumentQuestItem:
+      type: object
+      required: [kind, title, reward_points]
+      properties:
+        kind: {$ref: '#/components/schemas/DocumentKind'}
+        title: {type: string}
+        reward_points: {type: integer, enum: [200, 300]}
+    DocumentQuest:
+      type: object
+      required: [status, items, message]
+      properties:
+        status: {$ref: '#/components/schemas/QuestStatus'}
+        items: {type: array, items: {$ref: '#/components/schemas/DocumentQuestItem'}}
+        message: {type: string}
+    QuestDashboard:
+      type: object
+      required: [server_time, timezone, local_date, next_reset_at, daily_goal, streak, birthdays, check_ins, documents]
+      properties:
+        server_time: {type: string, format: date-time}
+        timezone: {type: string, enum: [Australia/Melbourne]}
+        local_date: {type: string, format: date}
+        next_reset_at: {type: string, format: date-time, description: Next Melbourne midnight; not a fixed 24-hour offset}
+        daily_goal: {$ref: '#/components/schemas/DailyGoalQuest'}
+        streak: {$ref: '#/components/schemas/StreakQuest'}
+        birthdays: {$ref: '#/components/schemas/BirthdayQuest'}
+        check_ins: {$ref: '#/components/schemas/CheckInQuest'}
+        documents: {$ref: '#/components/schemas/DocumentQuest'}
+    BirthdayAward:
+      type: object
+      required: [id, kind, dog_id, year, points, awarded_at]
+      properties:
+        id: {type: integer, minimum: 1}
+        kind: {type: string, enum: [BIRTHDAY]}
+        dog_id: {type: integer, minimum: 1, description: Immutable dog ID snapshot, including after deletion}
+        year: {type: integer, description: Award calendar year in Australia/Melbourne}
+        points: {type: integer, enum: [60]}
+        awarded_at: {type: string, format: date-time}
+    BirthdayCollection:
+      type: object
+      required: [award, balance, created]
+      properties:
+        award: {$ref: '#/components/schemas/BirthdayAward'}
+        balance: {type: integer, minimum: 0, description: Current authoritative wallet balance, including on replay}
+        created: {type: boolean, description: True only when this request created the award; false on replay}
+    LeaderboardEntry:
+      type: object
+      required: [rank, user_id, display_name, photo, is_current_user, distance_m, walk_count, walking_points]
+      properties:
+        rank: {type: integer, enum: [1], description: Self-only row position, not a rank against friends}
+        user_id: {type: integer, minimum: 1}
+        display_name: {type: string}
+        photo: {type: string, format: uri, nullable: true}
+        is_current_user: {type: boolean, enum: [true]}
+        distance_m: {$ref: '#/components/schemas/DecimalMetres'}
+        walk_count: {type: integer, minimum: 0}
+        walking_points: {type: integer, minimum: 0}
+    Leaderboard:
+      type: object
+      required: [server_time, timezone, period, starts_at, ends_at, scope, friends_available, message, entries]
+      properties:
+        server_time: {type: string, format: date-time}
+        timezone: {type: string, enum: [Australia/Melbourne]}
+        period: {type: string, enum: [week, all_time]}
+        starts_at: {type: string, format: date-time, nullable: true}
+        ends_at: {type: string, format: date-time, description: Exclusive next-week boundary for week; current server time for all_time}
+        scope: {type: string, enum: [SELF_ONLY]}
+        friends_available: {type: boolean, enum: [false]}
+        message: {type: string}
+        entries: {type: array, minItems: 1, maxItems: 1, items: {$ref: '#/components/schemas/LeaderboardEntry'}}
+    DocumentKind:
+      type: string
+      enum: [COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION, VET_CHECKUP]
+    DocumentDog:
+      type: object
+      required: [id, name, photo]
+      properties:
+        id: {type: integer, minimum: 1}
+        name: {type: string}
+        photo: {type: string, nullable: true}
+    DocumentEligibility:
+      type: object
+      required: [dog_id, kind, awards_count, remaining_this_year, can_earn, message]
+      properties:
+        dog_id: {type: integer, minimum: 1}
+        kind: {$ref: '#/components/schemas/DocumentKind'}
+        awards_count: {type: integer, minimum: 0, description: Number of this dog's rewarded entitlements for this kind across all years and owners}
+        remaining_this_year: {type: integer, minimum: 0, maximum: 2, nullable: true, description: Vet reward slots in the current server calendar year; null for registrations}
+        can_earn: {type: boolean, nullable: true, description: Council lifetime eligibility; null for kinds requiring submitted dates to decide}
+        message: {type: string}
+    DocumentSubmission:
+      type: object
+      required: [id, request_id, dog_id, dog_name, kind, status, registration_number, event_date, valid_from, valid_to, filename, file_url, awarded_points, submitted_at]
+      properties:
+        id: {type: integer, minimum: 1}
+        request_id: {type: string, format: uuid}
+        dog_id: {type: integer, minimum: 1, description: Original dog identity retained after deletion or transfer}
+        dog_name: {type: string, description: Submission-time name snapshot}
+        kind: {$ref: '#/components/schemas/DocumentKind'}
+        status: {type: string, enum: [SELF_REPORTED], description: Immediate reward with later audit possible; no prior approval implied}
+        registration_number: {type: string, maxLength: 100}
+        event_date: {type: string, format: date, nullable: true}
+        valid_from: {type: string, format: date, nullable: true}
+        valid_to: {type: string, format: date, nullable: true}
+        filename: {type: string, maxLength: 150, description: Sanitized display filename or empty when no file was submitted}
+        file_url: {type: string, nullable: true, description: Relative authenticated download path, not a public media URL}
+        awarded_points: {type: integer, enum: [0, 200, 300]}
+        submitted_at: {type: string, format: date-time}
+    DocumentDashboard:
+      type: object
+      required: [dogs, submissions, eligibility]
+      properties:
+        dogs: {type: array, items: {$ref: '#/components/schemas/DocumentDog'}}
+        submissions: {type: array, items: {$ref: '#/components/schemas/DocumentSubmission'}}
+        eligibility: {type: array, items: {$ref: '#/components/schemas/DocumentEligibility'}}
+    DocumentRequest:
+      type: object
+      required: [request_id, dog_id, kind]
+      description: >-
+        Council and microchip registrations require a nonblank registration_number
+        or an unencrypted PDF of 1–20 pages. Council rejects event/validity dates.
+        Microchip requires valid_from no later than today and valid_to equal to
+        its first calendar anniversary or the preceding day; new annual rewards
+        require that interval to cover today. Both reject event_date.
+        Vet requires event_date no later than today and no earlier than a known
+        DOB, plus a JPEG/PNG photo of at most 16 megapixels; it rejects registration
+        numbers and validity dates. All dates use YYYY-MM-DD. Files are raw base64,
+        not data URLs, and are limited to 4 MiB decoded. The display filename never
+        determines the storage path or trusted file type.
+      properties:
+        request_id: {type: string, format: uuid}
+        dog_id: {type: integer, minimum: 1}
+        kind: {$ref: '#/components/schemas/DocumentKind'}
+        registration_number: {type: string, maxLength: 100, description: Printable characters only; trimmed; optional when a registration PDF is supplied}
+        event_date: {type: string, format: date, nullable: true}
+        valid_from: {type: string, format: date, nullable: true}
+        valid_to: {type: string, format: date, nullable: true}
+        filename: {type: string, maxLength: 150}
+        file_base64: {type: string, format: byte, maxLength: 5592408}
+    DocumentValidationError:
+      oneOf:
+        - $ref: '#/components/schemas/Error'
+        - type: array
+          items: {type: string}
+      description: DRF field/detail object or a list of general validation messages
+    DocumentReceipt:
+      type: object
+      required: [submission, balance, awarded_points, created]
+      properties:
+        submission: {$ref: '#/components/schemas/DocumentSubmission'}
+        balance: {type: integer, minimum: 0, description: Wallet balance captured when the submission was created; identical retries replay this value}
+        awarded_points: {type: integer, enum: [0, 200, 300], description: Original award only; never apply it twice on a replay}
+        created: {type: boolean, enum: [true], description: Original stored receipt value; remains true on HTTP200 replay, so use status/idempotency rather than this field to detect a new award}
     WalkSample:
       type: object
       required: [latitude, longitude, recorded_at, accuracy_m]
