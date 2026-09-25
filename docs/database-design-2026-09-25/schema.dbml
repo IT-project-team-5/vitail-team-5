@@ -482,6 +482,8 @@ Table DocumentSubmission {
   request_fingerprint varchar(64) [not null]
   entitlement_id bigint [not null, ref: > DocumentEntitlement.id, note: 'Django on_delete=PROTECT']
   registration_number varchar(100) [not null]
+  council_name varchar(100) [not null]
+  registration_year smallint [note: 'nonnegative integer']
   event_date date
   valid_from date
   valid_to date

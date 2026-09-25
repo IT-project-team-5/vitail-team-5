@@ -6,7 +6,7 @@ older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
 
 Earlier Android, SwiftData, memory-only Walk, one-time-only streak, annual
-council, 60-point coffee and submission-immediately-awards proposals are
+council/microchip rewards, 60-point coffee and submission-immediately-awards proposals are
 superseded. Their full history remains in Git. Existing decision identifiers
 below are retained where other project documents cite them.
 
@@ -34,6 +34,8 @@ below are retained where other project documents cite them.
 | R52 | Use actual nullable dog birthdays; preserve legacy age-only records; birthday qualification is per dog/year |
 | R53 / R55 | Care rewards are per dog and self-reported. Submission reserves eligibility; explicit Collect credits once. Later spot checks replace up-front approval; audit tooling is separate work |
 | R56 | Up to four daily venue opportunities. Below the walking/check-in cap active rows remain; at the cap uncollected rows hide. Today's collected rows remain below until Melbourne midnight |
+| R57 | Registration Quests are fixed to one dog and document kind. Choose entered details or PDF/JPEG/PNG proof; Council details include council, animal reference and current registration year. Microchip numbers use 15 digits or the proof fallback. Submissions remain self-reported; no OCR or registry verification is implied |
+| R58 / O16 resolved | Microchip registration awards 300 points once per dog in its lifetime. No certificate start/end dates or annual renewal reward. Existing credits and receipts remain unchanged; previous microchip rewards prevent another credit |
 
 The database foundation normalizes Venue, keeps one PointEntry ledger and adds
 specific daily-goal, check-in, live-location, net-walk and friendship records.
@@ -55,8 +57,9 @@ placeholder dog-goal endpoint are removed. Enabling a QuestDefinition does not
 activate a missing calculator/provider.
 
 Council, microchip and vet entitlements preserve evidence versions and one
-credit per qualification. Microchip currently uses explicit annual validity
-periods. Private evidence and public profile/venue media remain separate.
+credit per qualification. Council and microchip each award once per dog; legacy
+microchip annual records are retained but do not reopen reward eligibility.
+Private evidence and public profile/venue media remain separate.
 
 The current cap service counts walking/check-in earnings, never wallet balance,
 admin grants, refunds or care/birthday rewards. Partial check-in awards are
@@ -76,7 +79,6 @@ its clock or fabricate venue opportunities.
 | O11 | Approved charity partners and how point donations are fulfilled | No donation feature or charity tables in this foundation |
 | O12 | Admin evidence/reason requirements, dispute actions and account-deletion/anonymization rules | Existing grants/refunds stay constrained; do not delete or rewrite ledger history to simulate deletion. Django admin logging alone is not a full audit workflow |
 | O13 | Release deadline and measurable product acceptance | Build/test results and physical-device checks are recorded separately; schema completion does not certify release readiness |
-| O16 | Annual microchip period: printed validity period or calendar year? | Current entitlement uses explicit validity dates; do not silently reinterpret prior awards |
 | O17 | Birthday treatment for 29 February in non-leap years | Actual anniversary only; no invented observed date |
 | O18 | Streak qualification, missed-day reset and whether seven-day rewards repeat for each new streak | Latest milestone amounts are recorded; no streak awards or placeholder task rows |
 | O19 | Net-walk proximity/time/consent, overlap calculation and cap membership; friend discovery/privacy/blocking behavior | Data foundations only. No matcher, exact live-position sharing or net-walk credit |

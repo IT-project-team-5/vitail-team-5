@@ -22,7 +22,7 @@
 | `DogDailyGoal` | 每狗每日凍結目標及最終結果的資料基礎；20 點／天已定，公式與資格判斷未定，因此不產生目標或發點。 |
 | `QuestDefinition`、`QuestAward` | Quest 目錄、生日資格與 Collect 已連接。模型可表達 goal／streak 資格，但沒有建立／領取這兩類的服務。開啟目錄不會啟動未實作規則。 |
 | `CheckIn` | 共用進度查詢／Collect、每日類別唯一性及 cap 保護；Map／Quest 共用 iOS store。Start／定位驗證及正式 provider 尚未連接，不顯示假的進度或可領任務。 |
-| `DocumentEntitlement`、`DocumentSubmission`、`EvidenceFingerprint` | 每狗私人文件、版本、證據重用保護、提交 READY → Collect 已連接。抽查／凍結欄位已建立，完整人工抽查與追回點數流程未交付。 |
+| `DocumentEntitlement`、`DocumentSubmission`、`EvidenceFingerprint` | 每狗私人文件、版本、證據重用保護、提交 READY → Collect 已連接；Council 名稱／有效年度與每狗晶片終身資格已對齊。抽查／凍結欄位已建立，完整人工抽查與追回點數流程未交付。 |
 | `Friendship`、`UserBlock` | canonical pair、邀請／回覆、雙向封鎖判斷的內部服務基礎；沒有朋友、搜尋、leaderboard 或位置公開 API／頁面。 |
 
 延後且**未建立**：`ExternalIdentity`（Apple）、`ChatMessage`（單對單聊天／nudge）、`Charity`＋`Donation`（捐點）、`PushDevice`＋`NotificationDelivery`（遠端通知）。這裡只保留需求落點，不刊登尚未實作的欄位作為現有 schema。
@@ -53,7 +53,7 @@
 
 沿用 Django Admin `LogEntry`，不新增 AuditEvent。但目前不能宣稱所有 café API 改價、點數處置、抽查都會自動寫入 admin log。文件已有 `audit_status`／review 欄位與 entitlement 凍結原因；尚無完整抽查服務。`PointEntry` 目前沒有 `ADMIN_DEBIT`，不要以直接改舊帳目冒充追回點數。
 
-其他未定項目集中在 [DECISIONS.md](../DECISIONS.md)：每日目標公式、streak 合格日／重啟、Net 同意與配對、microchip 年期及兌換門檻、2/29 替代日、保留／刪除、慈善及遠端通知。咖啡約 504 點只是換算提示，不自動更改商品或歷史訂單點價。
+其他未定項目集中在 [DECISIONS.md](../DECISIONS.md)：每日目標公式、streak 合格日／重啟、Net 同意與配對、晶片兌換門檻、2/29 替代日、保留／刪除、慈善及遠端通知。咖啡約 504 點只是換算提示，不自動更改商品或歷史訂單點價。
 
 ## 來源與衝突處理
 

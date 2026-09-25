@@ -15,7 +15,7 @@ amount does not mean its qualification engine is implemented.
 | Venue check-in | 12 points; at most one daily opportunity per type, four types total | Persisted collection/cap service and shared UI foundation; no production GPS provider or enabled iOS service |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points once per dog | Connected: submit evidence, then Collect |
-| Microchip registration | 300 points per annual registration period | Connected using explicit validity dates; calendar-year interpretation remains open |
+| Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
 | Vet check-up | 200 points per visit, at most two per visit calendar year and at least 60 days apart | Connected: evidence with actual visit date, then Collect |
 | Streak | 7 days: 20 points; 30/60/90… days: 100 points each | Not enabled: qualification/reset and repeat-seven-day policy still need agreement |
 | Net-walk | 2 points/km, maximum 10/day | Data foundation only; no proximity matcher or award implementation |
@@ -82,13 +82,24 @@ Council, microchip and vet evidence are self-reported per dog. An eligible
 submission reserves a DocumentEntitlement and preserves an immutable
 DocumentSubmission version with zero newly awarded points. Explicit Collect
 links the one canonical credit. Pending entitlements reserve quota; re-uploading
-proof for the same qualification does not create another reward.
+proof for the same qualification does not create another reward. Council and
+microchip each have a separate lifetime reward per dog. Prior microchip credits
+count toward this limit; old annual entitlements and receipts remain intact,
+and cannot produce another credit once any microchip reward was collected.
 
 Submission UUIDs replay their original response; a changed payload under the
 same UUID conflicts. Consult the live dashboard for current status. Repeated or
 simultaneous collection from Documents and Quest returns the existing credit,
 not another award. Account changes reject late client responses; confirmed
 success survives a failed refresh and queues the canonical wallet refresh.
+
+Each registration task opens its fixed dog/type directly, with official help
+links above an Enter details / Upload proof choice. Council details include
+issuing council, animal reference and the current Victorian registration year
+(10 April–9 April; API stores the ending year). Standard microchips use a
+15-digit number; other formats can use the proof route. Proof accepts PDF,
+JPEG and PNG without asking for duplicate typed details. This does not verify
+ownership, registration completion or document authenticity.
 
 Private original files remain owner/admin-readable for later checks. No
 up-front human review or authenticity guarantee is claimed. Retention and

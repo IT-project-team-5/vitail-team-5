@@ -93,7 +93,7 @@
 | US-03 Track a Walk with GPS（Must） | 已連接：手機記錄／暫停／Finish、`Walk`、`WalkDog`驗證。 | server session／GPS樣本表是基礎，未接持續上傳；保留期限及分享同意未定。 |
 | US-04 Earn and View Points（Must） | 已連接：`PointEntry` credit lot、到期、Walking來源及共享cap。 | Goal20/day只有數值定案，Net與Goal是否進72cap仍待定；多狗不倍增Walking點數。 |
 | US-05 Check In at a Place（Must） | 基礎：`Venue`、`CheckIn`、`LocationSample`與內部Collect。 | 正式GPS provider未接；目前共享72cap，部分發點不開放。不能靠新增地點繞過每日四類限制。 |
-| US-06 Vet and Registration Proof（Should） | 已連接：三個文件模型、私人檔案、READY→Collect。 | 舊事前核准／年度council已取代；完整抽查與處置服務未交付。Microchip按明確年期，固定曆年仍待定。 |
+| US-06 Vet and Registration Proof（Should） | 已連接：三個文件模型、私人檔案、READY→Collect。 | 舊事前核准／年度council已取代；完整抽查與處置服務未交付。Microchip 已改每狗終身一次；手填或 PDF／照片皆為 self-reported。 |
 | US-07 Use Points for Rewards（Must） | 已連接：Venue菜單、Reward有效期／配額、Redemption與ledger。 | Purchase扣點，swipe只確認取餐，取代舊swipe扣點。店內購買條件可展示但未驗證現金消費。 |
 | US-08 History and Charity Donations（Should） | 已連接：`Redemption`／`PointEntry`歷史；延後：`Charity`／`Donation`。 | 沒有捐點表或API；合作方、確認／退款／對帳規則待定，不預建支付結算系統。 |
 | US-09 Recommendations and Streaks（Should） | 基礎：`QuestDefinition`、`DogDailyGoal`、`QuestAward`。 | 沒有推薦引擎或streak發點。30/60/90…數值已定，合格日、7日重啟及領取期限待定。 |
@@ -115,7 +115,7 @@
 | Net-Walking可與非好友同行 | `NetWalkInterval`保存兩人各自距離與consent時間 | 無自動matching／net award；距離、時窗及公開規則未定。 |
 | 好友stats／leaderboard | 活動事實可供聚合，不建固定排名表 | SCRUM-46需求保留；本slice移除頁面，不代表功能被取消或已交付。 |
 | 簡單聊天／nudge與遠端通知 | 六個延後名稱中的ChatMessage、PushDevice、NotificationDelivery | 沒有表／API；訊息保留、頻率、鎖定畫面內容與安靜時段待定。 |
-| 晶片可稍後填、兌換前需補 | Dog晶片欄位；證明文件資格分開 | API gate與多狗選擇規則未接，15位／以9開頭不能硬寫成已定規則。 |
+| 晶片可稍後填、兌換前需補 | Dog晶片欄位；證明文件資格分開 | API gate與多狗選擇規則未接。文件 Quest 手填採15位數字、不限9開頭，其他格式可上傳證明；這不等於已實作兌換 gate。 |
 | Café曝光、Admin onboarding、自管商品 | Venue取代CafeProfile；Reward.venue唯一歸屬 | 公園不需帳號；無多分店組織／支付平台。API `cafe_id`是User ID，`venue_id`才是地點。 |
 | Puppuccino、最低消費、簡單取餐 | Reward條款／需店內購買旗標，Redemption價格／條款快照 | 咖啡提示504，實際商品價格不改；未驗證現金支付，顧客狗照片不證明狗在場。 |
 | 位置反作弊 | Walk upload驗證及validation摘要；LocationSample是基礎 | 持續定位、raw GPS保留／清除與個資刪除政策未完成。 |
@@ -140,7 +140,7 @@
 | 30/60/90…day streak | 同上 | 基礎；未發點。 |
 | Vet checkup | DocumentEntitlement事件日 → PointEntry | 已連接。 |
 | Council registration | 每狗lifetime entitlement → PointEntry | 已連接；不是每年重置。 |
-| Microchip certificate | 每狗明確登記期間 entitlement → PointEntry | 已連接；固定曆年與現行實際年期差異待定。 |
+| Microchip certificate | 每狗終身 entitlement → PointEntry | 已連接；舊年期／點數保留，歷史已領資格不能重領。 |
 | Dog birthday | Dog.date_of_birth、QuestAward → PointEntry | 已連接；每狗／年份唯一，跨轉移防重領。 |
 
 Walk＋Check-in共享72/day已在服務保護；Goal／Net是否納入待定。餘額、生日、文件及退款不代表該日活動收入。若剩餘不足12，現在拒絕check-in Collect；沒有先行實作尚未確認的部分發點。
