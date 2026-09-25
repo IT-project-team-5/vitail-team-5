@@ -46,8 +46,11 @@ class DeletedAccountServiceGuardsTests(TestCase):
         self.assertIsNone((user or self.owner).deleted_at)
 
     def document_data(self):
+        today = local_date(self.now)
         serializer = DocumentRequestSerializer(data={"request_id": str(uuid4()), "dog_id": self.dog.pk,
-            "kind": "COUNCIL_REGISTRATION", "registration_number": "Council ABC"})
+            "kind": "COUNCIL_REGISTRATION", "registration_number": "Council ABC",
+            "council_name": "City of Melbourne",
+            "registration_year": today.year + ((today.month, today.day) >= (4, 10))})
         serializer.is_valid(raise_exception=True)
         return serializer.validated_data
 

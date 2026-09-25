@@ -17,10 +17,10 @@ from rest_framework.test import APITestCase
 from dogs.models import Breed, Dog
 from evidence.models import DocumentEntitlement, DocumentSubmission, EvidenceFingerprint
 from evidence.storage import private_storage
-from evidence.services import collect_document, quest_tasks
+from evidence.services import collect_document, quest_tasks, request_fingerprint
 from quests.models import QuestDefinition
 from rewards.models import PointEntry
-from rewards.services import get_balance
+from rewards.services import credit_points, get_balance
 
 User = get_user_model()
 
@@ -65,6 +65,14 @@ class DocumentApiTests(APITestCase):
         data = {"request_id": str(uuid4()), "dog_id": self.dog.pk,
                 "kind": "COUNCIL_REGISTRATION", "registration_number": "Council ABC-42"}
         data.update(changes)
+        if "registration_number" not in changes:
+            if data.get("file_base64"):
+                data["registration_number"] = ""
+            elif data["kind"] == "MICROCHIP_REGISTRATION":
+                data["registration_number"] = "012345678901234"
+        if data["kind"] == "COUNCIL_REGISTRATION" and data["registration_number"] and not data.get("file_base64"):
+            data.setdefault("council_name", "City of Melbourne")
+            data.setdefault("registration_year", 2027)
         return data
 
     def post(self, data):
@@ -78,6 +86,35 @@ class DocumentApiTests(APITestCase):
                             filename="vet.jpg", file_base64=base64.b64encode(photo_file(color)).decode())
         data.update(changes)
         return data
+
+    def legacy_microchip(self, year, *, owner=None, paid=False, eligibility="ELIGIBLE"):
+        owner = owner or self.owner
+        data = {"request_id": uuid4(), "dog_id": self.dog.pk, "kind": "MICROCHIP_REGISTRATION",
+                "registration_number": f"legacy-{year}", "valid_from": date(year, 1, 1), "valid_to": date(year, 12, 31)}
+        entry = credit_points(user=owner, amount=300, type=PointEntry.Type.EARN,
+                              source_reference=f"legacy-microchip:{self.dog.pk}:{year}") if paid else None
+        entitlement = DocumentEntitlement.objects.create(
+            owner=owner, dog=self.dog, dog_id_snapshot=self.dog.pk, kind=data["kind"],
+            entitlement_key=f"period:{year}-01-01", promised_points=300,
+            valid_from=data["valid_from"], valid_to=data["valid_to"], point_entry=entry,
+            collected_at=datetime(2026, 9, 24, 1, tzinfo=dt_timezone.utc) if paid else None,
+            eligibility_status=eligibility, eligibility_reason="Audit outcome" if eligibility != "ELIGIBLE" else "",
+        )
+        submission = DocumentSubmission.objects.create(
+            owner=owner, dog=self.dog, dog_id_snapshot=self.dog.pk, dog_name_snapshot=self.dog.name,
+            kind=data["kind"], request_id=data["request_id"], request_fingerprint=request_fingerprint(data),
+            registration_number=data["registration_number"], entitlement=entitlement,
+            valid_from=data["valid_from"], valid_to=data["valid_to"],
+            response_snapshot={"legacy_year": year, "balance": 765, "awarded_points": 300 if paid else 0},
+        )
+        return entitlement, submission
+
+    def collect_id(self, entitlement):
+        return self.client.post(f"/api/quests/documents/entitlements/{entitlement.pk}/collect", {}, format="json")
+
+    def microchip_tasks(self):
+        return [row for row in quest_tasks(owner=self.owner, dogs=[self.dog], now=datetime(2026, 9, 25, 1, tzinfo=dt_timezone.utc))
+                if row["kind"] == "MICROCHIP_REGISTRATION"]
 
     def test_number_submission_credits_once_per_dog_and_reupload_preserves_versions(self, _today):
         first = self.post(self.payload())
@@ -109,6 +146,193 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(DocumentSubmission.objects.count(), 1)
         self.assertEqual(PointEntry.objects.count(), 1)
 
+    def test_council_manual_details_preserve_leading_zero_and_require_current_year(self, _today):
+        response = self.post(self.payload(registration_number="00042-AB"))
+        self.assertEqual(response.status_code, 201)
+        submission = response.data["submission"]
+        self.assertEqual(submission["registration_number"], "00042-AB")
+        self.assertEqual(submission["council_name"], "City of Melbourne")
+        self.assertEqual(submission["registration_year"], 2027)
+        self.assertIsNone(submission["valid_from"])
+        self.assertIsNone(submission["valid_to"])
+        for changes in ({"council_name": ""}, {"registration_year": None}, {"registration_year": 2026},
+                        {"registration_year": 2028}, {"registration_number": "ABC/42"},
+                        {"registration_number": "--"}, {"council_name": "Melbourne\nOther"}):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.post(self.payload(**changes)).status_code, 400)
+        self.assertEqual(DocumentSubmission.objects.count(), 1)
+
+    def test_council_registration_year_rolls_over_april_ten_in_melbourne_and_retry_survives(self, _today):
+        before = datetime(2026, 4, 9, 13, 59, tzinfo=dt_timezone.utc)
+        payload = self.payload(registration_year=2026)
+        with override_settings(TIME_ZONE="UTC"), patch("django.utils.timezone.localdate", wraps=actual_localdate):
+            with patch("django.utils.timezone.now", return_value=before):
+                receipt = self.post(payload)
+                self.assertEqual(receipt.status_code, 201)
+            with patch("django.utils.timezone.now", return_value=before + timedelta(minutes=1)):
+                self.assertEqual(self.post({**payload, "request_id": str(uuid4())}).status_code, 400)
+                self.assertEqual(self.post(self.payload(registration_year=2027)).status_code, 201)
+                replay = self.post(payload)
+                self.assertEqual(replay.status_code, 200)
+                self.assertEqual(replay.data, receipt.data)
+
+    def test_registration_modes_are_exclusive_and_upload_needs_no_manual_details(self, _today):
+        proof = base64.b64encode(pdf_file()).decode()
+        for payload in (
+            self.payload(registration_number="ABC42", file_base64=proof),
+            self.payload(registration_number=""),
+            self.payload(registration_number="", file_base64=proof, council_name="City of Melbourne"),
+            self.payload(registration_number="", file_base64=proof, registration_year=2027),
+        ):
+            self.assertEqual(self.post(payload).status_code, 400)
+        response = self.post(self.payload(file_base64=proof))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["submission"]["council_name"], "")
+        self.assertIsNone(response.data["submission"]["registration_year"])
+
+    def test_registration_photo_bytes_remain_private_and_filename_follows_actual_format(self, _today):
+        for image_format, expected_type, suffix in (("JPEG", "image/jpeg", ".jpg"), ("PNG", "image/png", ".png")):
+            with self.subTest(image_format=image_format):
+                buffer = io.BytesIO()
+                Image.new("RGB", (20, 20), "red").save(buffer, format=image_format)
+                original = buffer.getvalue()
+                response = self.post(self.payload(filename="../../proof.pdf", file_base64=base64.b64encode(original).decode()))
+                self.assertEqual(response.status_code, 201)
+                submission = DocumentSubmission.objects.get(pk=response.data["submission"]["id"])
+                self.assertEqual(submission.file_content_type, expected_type)
+                self.assertEqual(submission.filename, "proof" + suffix)
+                download = self.client.get(response.data["submission"]["file_url"])
+                self.assertEqual(download["Content-Type"], expected_type)
+                self.assertEqual(b"".join(download.streaming_content), original)
+                self.assertEqual(download["X-Content-Type-Options"], "nosniff")
+                self.client.force_authenticate(self.other)
+                self.assertEqual(self.client.get(response.data["submission"]["file_url"]).status_code, 404)
+                self.client.force_authenticate(self.owner)
+
+    def test_legacy_number_only_receipt_replays_without_new_council_fields(self, _today):
+        legacy = {"request_id": uuid4(), "dog_id": self.dog.pk,
+                  "kind": "COUNCIL_REGISTRATION", "registration_number": "Old / unstructured number"}
+        entitlement = DocumentEntitlement.objects.create(
+            owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk,
+            kind=legacy["kind"], entitlement_key="lifetime", promised_points=275,
+        )
+        receipt = {"balance": 1234, "awarded_points": 0, "created": True, "legacy": "unchanged"}
+        submission = DocumentSubmission.objects.create(
+            owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk, dog_name_snapshot=self.dog.name,
+            kind=legacy["kind"], request_id=legacy["request_id"], request_fingerprint=request_fingerprint(legacy),
+            registration_number=legacy["registration_number"], entitlement=entitlement, response_snapshot=receipt,
+        )
+        QuestDefinition.objects.filter(code="DOCUMENTS").update(is_enabled=False)
+        self.dog.delete()
+        replay = self.post({**legacy, "request_id": str(legacy["request_id"])})
+        self.assertEqual(replay.status_code, 200)
+        self.assertEqual(replay.data, receipt)
+        submission.refresh_from_db()
+        self.assertEqual(submission.response_snapshot, receipt)
+        self.assertEqual(submission.registration_number, legacy["registration_number"])
+        self.assertEqual(self.client.get("/api/quests/documents").data["submissions"][0]["reward_points"], 275)
+        self.assertEqual(DocumentSubmission.objects.count(), 1)
+        self.assertEqual(PointEntry.objects.count(), 0)
+
+    def test_legacy_number_and_pdf_retry_replays_unchanged_but_cannot_create_new_submission(self, _today):
+        from evidence.uploads import validate_upload
+
+        encoded = base64.b64encode(pdf_file()).decode()
+        legacy = {"request_id": uuid4(), "dog_id": self.dog.pk, "kind": "COUNCIL_REGISTRATION",
+                  "registration_number": "Legacy number", "upload": validate_upload(encoded, "legacy.pdf", "COUNCIL_REGISTRATION")}
+        entitlement = DocumentEntitlement.objects.create(
+            owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk,
+            kind=legacy["kind"], entitlement_key="lifetime", promised_points=300,
+        )
+        receipt = {"balance": 321, "awarded_points": 300, "created": True, "old": "receipt"}
+        DocumentSubmission.objects.create(
+            owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk, dog_name_snapshot=self.dog.name,
+            kind=legacy["kind"], request_id=legacy["request_id"], request_fingerprint=request_fingerprint(legacy),
+            registration_number=legacy["registration_number"], entitlement=entitlement, response_snapshot=receipt,
+        )
+        payload = {key: str(value) if key == "request_id" else value for key, value in legacy.items() if key != "upload"}
+        payload.update(filename="legacy.pdf", file_base64=encoded)
+        response = self.post(payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, receipt)
+        self.assertEqual(self.post({**payload, "request_id": str(uuid4())}).status_code, 400)
+        self.assertEqual(self.post({**payload, "registration_number": "Changed"}).status_code, 409)
+        self.assertEqual(list(Path(self.directory.name).rglob("*.pdf")), [])
+        self.assertEqual(DocumentSubmission.objects.count(), 1)
+
+    def test_legacy_expired_microchip_period_and_short_number_still_replay_original_receipt(self, _today):
+        legacy = {"request_id": uuid4(), "dog_id": self.dog.pk, "kind": "MICROCHIP_REGISTRATION",
+                  "registration_number": "OLD123", "valid_from": date(2025, 1, 1), "valid_to": date(2025, 12, 31)}
+        entitlement = DocumentEntitlement.objects.create(
+            owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk,
+            kind=legacy["kind"], entitlement_key="period:2025-01-01", promised_points=300,
+            valid_from=legacy["valid_from"], valid_to=legacy["valid_to"],
+        )
+        receipt = {"balance": 456, "awarded_points": 0, "created": True, "old": "annual receipt"}
+        submission = DocumentSubmission.objects.create(
+            owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk, dog_name_snapshot=self.dog.name,
+            kind=legacy["kind"], request_id=legacy["request_id"], request_fingerprint=request_fingerprint(legacy),
+            registration_number=legacy["registration_number"], entitlement=entitlement, response_snapshot=receipt,
+            valid_from=legacy["valid_from"], valid_to=legacy["valid_to"],
+        )
+        payload = {key: str(value) if key in {"request_id", "valid_from", "valid_to"} else value for key, value in legacy.items()}
+        response = self.post(payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, receipt)
+        self.assertEqual(self.post({**payload, "request_id": str(uuid4())}).status_code, 400)
+        submission.refresh_from_db()
+        self.assertEqual(submission.valid_from, date(2025, 1, 1))
+        self.assertEqual(submission.registration_number, "OLD123")
+        self.assertEqual(PointEntry.objects.count(), 0)
+
+    def test_encrypted_and_overlong_registration_pdfs_are_rejected_without_storage(self, _today):
+        for pages, password in ((1, "private"), (21, None)):
+            with self.subTest(pages=pages, encrypted=bool(password)):
+                buffer = io.BytesIO()
+                writer = PdfWriter()
+                for _ in range(pages):
+                    writer.add_blank_page(width=100, height=100)
+                if password:
+                    writer.encrypt(password)
+                writer.write(buffer)
+                response = self.post(self.payload(file_base64=base64.b64encode(buffer.getvalue()).decode()))
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(DocumentSubmission.objects.count(), 0)
+        self.assertEqual(list(Path(self.directory.name).rglob("*")), [])
+
+    def test_microchip_manual_number_normalizes_separators_preserves_zeroes_and_replays(self, _today):
+        payload = self.payload(kind="MICROCHIP_REGISTRATION", registration_number="000 123-456-789-012")
+        response = self.post(payload)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["submission"]["registration_number"], "000123456789012")
+        self.assertIsNone(response.data["submission"]["valid_from"])
+        self.assertIsNone(response.data["submission"]["valid_to"])
+        self.assertEqual(self.post(payload).data, response.data)
+        canonical_retry = self.post({**payload, "registration_number": "000123456789012"})
+        self.assertEqual(canonical_retry.status_code, 200)
+        self.assertEqual(canonical_retry.data, response.data)
+        for number in ("00012345678901", "0001234567890123", "00012345678901A", "０００１２３４５６７８９０１２", "000/123456789012"):
+            with self.subTest(number=number):
+                invalid = self.post(self.payload(kind="MICROCHIP_REGISTRATION", registration_number=number))
+                self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(DocumentSubmission.objects.count(), 1)
+        self.assertEqual(PointEntry.objects.count(), 0)
+
+    def test_microchip_proof_accepts_pdf_or_photo_without_number_or_dates(self, _today):
+        for original, filename in ((pdf_file(), "chip.pdf"), (photo_file(), "chip.jpg")):
+            with self.subTest(filename=filename):
+                response = self.post(self.payload(kind="MICROCHIP_REGISTRATION", filename=filename,
+                                                 file_base64=base64.b64encode(original).decode()))
+                self.assertEqual(response.status_code, 201)
+                submission = response.data["submission"]
+                self.assertEqual(submission["registration_number"], "")
+                self.assertEqual(submission["status"], "SELF_REPORTED")
+                self.assertIsNone(submission["registration_year"])
+                self.assertIsNone(submission["valid_from"])
+                self.assertIsNone(submission["valid_to"])
+        self.assertEqual(DocumentEntitlement.objects.count(), 1)
+        self.assertEqual(PointEntry.objects.count(), 0)
+
     def test_disabled_catalog_rejects_new_submissions_before_files_or_rewards(self, _today):
         QuestDefinition.objects.filter(code="DOCUMENTS").update(is_enabled=False)
         response = self.post(self.payload(file_base64=base64.b64encode(pdf_file()).decode()))
@@ -138,19 +362,128 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(PointEntry.objects.count(), 1)
         self.assertEqual(len(list(Path(self.directory.name).rglob("*.pdf"))), 1)
 
-    def test_microchip_annual_period_and_overlap_do_not_multiply_points(self, _today):
-        payload = self.payload(kind="MICROCHIP_REGISTRATION", valid_from="2026-01-01", valid_to="2026-12-31")
-        self.assertEqual(self.collect(self.post(payload)).data["points"], 300)
-        overlap = {**payload, "request_id": str(uuid4()), "valid_from": "2026-02-01", "valid_to": "2027-01-31"}
-        self.assertEqual(self.post(overlap).data["awarded_points"], 0)
-        short = {**payload, "request_id": str(uuid4()), "valid_from": "2026-09-01", "valid_to": "2026-09-30"}
-        self.assertEqual(self.post(short).status_code, 400)
+    def test_microchip_lifetime_reward_cannot_be_renewed_by_number_or_year_changes(self, _today):
+        payload = self.payload(kind="MICROCHIP_REGISTRATION")
+        first = self.post(payload)
+        self.assertEqual(self.collect(first).data["points"], 300)
+        self.assertEqual(DocumentEntitlement.objects.get().entitlement_key, "lifetime")
+        self.assertEqual(DocumentEntitlement.objects.get().rules_version, "microchip-lifetime-2026-09-25")
         with patch("django.utils.timezone.localdate", return_value=date(2027, 9, 25)):
-            next_year = {**payload, "request_id": str(uuid4()), "valid_from": "2027-01-01", "valid_to": "2027-12-31"}
-            self.assertEqual(self.collect(self.post(next_year)).data["points"], 300)
-            # A delayed retry does not fail because the original annual period expired.
-            self.assertEqual(self.post(payload).status_code, 200)
+            updated = self.post(self.payload(kind="MICROCHIP_REGISTRATION", registration_number="123456789012345"))
+            self.assertEqual(updated.data["entitlement_id"], first.data["entitlement_id"])
+            self.assertFalse(self.collect(updated).data["created"])
+            self.assertEqual(self.post(payload).data, first.data)
+        self.assertEqual(get_balance(self.owner), 300)
+        self.assertEqual(DocumentEntitlement.objects.count(), 1)
+        self.assertEqual(PointEntry.objects.count(), 1)
+
+    def test_multiple_legacy_pending_periods_have_one_collectible_lifetime_reservation(self, _today):
+        canonical, first_submission = self.legacy_microchip(2024)
+        superseded, second_submission = self.legacy_microchip(2025)
+        old_receipts = list(DocumentSubmission.objects.order_by("pk").values_list("response_snapshot", flat=True))
+        rows = {row["id"]: row for row in self.client.get("/api/quests/documents").data["entitlements"]}
+        self.assertTrue(rows[canonical.pk]["can_collect"])
+        self.assertFalse(rows[superseded.pk]["can_collect"])
+        self.assertEqual([(task["status"], task["entitlement_id"]) for task in self.microchip_tasks()], [("READY", canonical.pk)])
+        self.assertEqual(self.collect_id(superseded).status_code, 400)
+        self.assertTrue(self.collect_id(canonical).data["created"])
+        self.assertEqual(self.collect_id(superseded).status_code, 400)
+        self.assertFalse(self.collect_id(canonical).data["created"])
+        replacement = self.post(self.payload(kind="MICROCHIP_REGISTRATION"))
+        self.assertEqual(replacement.data["entitlement_id"], canonical.pk)
+        self.assertEqual(replacement.data["reward_status"], "COLLECTED")
+        self.assertEqual(PointEntry.objects.count(), 1)
+        self.assertEqual(get_balance(self.owner), 300)
+        self.assertEqual(list(DocumentSubmission.objects.filter(pk__in=[first_submission.pk, second_submission.pk]).order_by("pk").values_list("response_snapshot", flat=True)), old_receipts)
+        superseded.refresh_from_db()
+        self.assertIsNone(superseded.point_entry_id)
+        self.assertEqual(superseded.entitlement_key, "period:2025-01-01")
+        self.assertEqual(superseded.valid_from, date(2025, 1, 1))
+
+    def test_historical_microchip_award_wins_over_older_pending_and_reuses_proof_without_rewriting_fingerprint(self, _today):
+        pending, old_submission = self.legacy_microchip(2024)
+        collected, _ = self.legacy_microchip(2025, paid=True)
+        encoded = base64.b64encode(pdf_file()).decode()
+        from evidence.uploads import validate_upload
+        upload = validate_upload(encoded, "old-proof.pdf", "MICROCHIP_REGISTRATION")
+        fingerprint = EvidenceFingerprint.objects.create(
+            owner=self.owner, kind="MICROCHIP_REGISTRATION", fingerprint=upload["sha256"],
+            dog_id_snapshot=self.dog.pk, entitlement=pending, is_file=True,
+        )
+        original_entitlements = list(DocumentEntitlement.objects.order_by("pk").values())
+        original_receipts = list(DocumentSubmission.objects.order_by("pk").values_list("response_snapshot", flat=True))
+        original_entries = list(PointEntry.objects.values())
+        response = self.post(self.payload(kind="MICROCHIP_REGISTRATION", filename="old-proof.pdf", file_base64=encoded))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["entitlement_id"], collected.pk)
+        self.assertEqual(response.data["reward_status"], "COLLECTED")
+        self.assertEqual(self.collect_id(pending).status_code, 400)
+        self.assertFalse(self.collect_id(collected).data["created"])
+        self.assertEqual(self.microchip_tasks(), [])
+        self.assertTrue(all(not row["can_collect"] for row in self.client.get("/api/quests/documents").data["entitlements"]))
+        fingerprint.refresh_from_db()
+        self.assertEqual(fingerprint.entitlement_id, pending.pk)
+        self.assertEqual(list(DocumentEntitlement.objects.order_by("pk").values()), original_entitlements)
+        self.assertEqual(list(PointEntry.objects.values()), original_entries)
+        self.assertEqual(list(DocumentSubmission.objects.exclude(pk=response.data["submission"]["id"]).order_by("pk").values_list("response_snapshot", flat=True)), original_receipts)
+
+    def test_all_historical_microchip_awards_replay_without_allowing_pending_credit(self, _today):
+        first, _ = self.legacy_microchip(2023, paid=True)
+        second, _ = self.legacy_microchip(2024, paid=True)
+        pending, _ = self.legacy_microchip(2025)
+        for entitlement in (first, second):
+            self.assertFalse(self.collect_id(entitlement).data["created"])
+        self.assertEqual(self.collect_id(pending).status_code, 400)
+        self.assertEqual(PointEntry.objects.count(), 2)
         self.assertEqual(get_balance(self.owner), 600)
+
+    def test_transferred_legacy_microchip_requires_new_evidence_for_canonical_pending(self, _today):
+        canonical, _ = self.legacy_microchip(2024, owner=self.other)
+        later, _ = self.legacy_microchip(2025)
+        self.assertEqual([task["status"] for task in self.microchip_tasks()], ["IN_PROGRESS"])
+        self.assertEqual(self.collect_id(canonical).status_code, 404)
+        self.assertEqual(self.collect_id(later).status_code, 400)
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.collect_id(canonical).status_code, 404)
+        self.client.force_authenticate(self.owner)
+        submitted = self.post(self.payload(kind="MICROCHIP_REGISTRATION"))
+        self.assertEqual(submitted.data["entitlement_id"], canonical.pk)
+        self.assertTrue(self.collect(submitted).data["created"])
+        self.assertEqual(self.collect_id(later).status_code, 400)
+        self.assertEqual(get_balance(self.owner), 300)
+        self.assertEqual(get_balance(self.other), 0)
+        self.assertEqual(PointEntry.objects.count(), 1)
+
+    def test_transferred_dog_cannot_earn_again_after_former_owners_microchip_award(self, _today):
+        collected, _ = self.legacy_microchip(2024, owner=self.other, paid=True)
+        pending, _ = self.legacy_microchip(2025)
+        submitted = self.post(self.payload(kind="MICROCHIP_REGISTRATION"))
+        self.assertEqual(submitted.data["entitlement_id"], collected.pk)
+        self.assertEqual(submitted.data["reward_status"], "COLLECTED")
+        self.assertEqual(self.collect(submitted).status_code, 404)
+        self.assertEqual(self.collect_id(pending).status_code, 400)
+        self.assertEqual(self.microchip_tasks(), [])
+        self.assertTrue(all(not row["can_collect"] for row in self.client.get("/api/quests/documents").data["entitlements"]))
+        self.client.force_authenticate(self.other)
+        self.assertFalse(self.collect_id(collected).data["created"])
+        self.assertEqual(get_balance(self.other), 300)
+        self.assertEqual(get_balance(self.owner), 0)
+
+    def test_held_or_rejected_microchip_reservation_cannot_be_bypassed_by_another_period(self, _today):
+        canonical, _ = self.legacy_microchip(2024, eligibility="ON_HOLD")
+        later, _ = self.legacy_microchip(2025)
+        for status in ("ON_HOLD", "REJECTED"):
+            with self.subTest(status=status):
+                canonical.eligibility_status = status
+                canonical.save(update_fields=["eligibility_status"])
+                submitted = self.post(self.payload(kind="MICROCHIP_REGISTRATION"))
+                self.assertEqual(submitted.data["entitlement_id"], canonical.pk)
+                self.assertEqual(self.collect_id(canonical).status_code, 400)
+                self.assertEqual(self.collect_id(later).status_code, 400)
+                self.assertEqual(self.microchip_tasks(), [])
+                self.assertTrue(all(not row["can_collect"] for row in self.client.get("/api/quests/documents").data["entitlements"]))
+        self.assertEqual(PointEntry.objects.count(), 0)
+        self.assertEqual(DocumentEntitlement.objects.count(), 2)
 
     def test_vet_rewards_use_event_year_and_sixty_day_gap(self, _today):
         self.assertEqual(self.collect(self.post(self.vet("2026-01-01"))).data["points"], 200)
@@ -169,7 +502,7 @@ class DocumentApiTests(APITestCase):
 
     def test_forged_future_date_wrong_file_type_and_large_files_are_rejected(self, _today):
         bad = [self.vet("2026-09-26"), self.vet("2026-09-01", file_base64=base64.b64encode(pdf_file()).decode()),
-               self.payload(registration_number="", file_base64=base64.b64encode(photo_file()).decode()),
+               self.payload(registration_number="", file_base64=base64.b64encode(b"GIF89a").decode()),
                self.payload(registration_number="", file_base64="not base64"),
                self.payload(kind="MICROCHIP_REGISTRATION", valid_from="9999-01-01", valid_to="9999-12-31"),
                self.payload(registration_number="", file_base64=base64.b64encode(b"%PDF-FAKE").decode()),
@@ -402,9 +735,9 @@ class DocumentApiTests(APITestCase):
         self.assertFalse(any(row["kind"] == "COUNCIL_REGISTRATION" for row in tomorrow))
         self.assertEqual(len(self.client.get("/api/quests/documents").data["submissions"]), 1)
 
-    def test_tasks_hide_covered_annual_period_and_vet_gap_and_pending_duplicates(self, _today):
+    def test_tasks_hide_collected_microchip_and_vet_gap_and_pending_duplicates(self, _today):
         now = datetime(2026, 9, 25, 2, tzinfo=dt_timezone.utc)
-        micro = self.post(self.payload(kind="MICROCHIP_REGISTRATION", valid_from="2026-01-01", valid_to="2026-12-31"))
+        micro = self.post(self.payload(kind="MICROCHIP_REGISTRATION"))
         vet = self.post(self.vet("2026-09-01"))
         initial = quest_tasks(owner=self.owner, dogs=[self.dog], now=now)
         self.assertEqual([row["status"] for row in initial if row["kind"] == "MICROCHIP_REGISTRATION"], ["READY"])
@@ -434,8 +767,7 @@ class DocumentApiTests(APITestCase):
         with override_settings(TIME_ZONE="UTC"), patch("django.utils.timezone.localdate", wraps=actual_localdate), patch("django.utils.timezone.now", return_value=melbourne_just_after_midnight):
             self.assertEqual(self.post(self.vet("2026-09-25")).status_code, 201)
             self.assertEqual(self.post(self.vet("2026-09-26", "blue")).status_code, 400)
-            annual = self.payload(kind="MICROCHIP_REGISTRATION", valid_from="2026-09-25", valid_to="2027-09-24")
-            self.assertEqual(self.post(annual).status_code, 201)
+            self.assertEqual(self.post(self.payload(kind="MICROCHIP_REGISTRATION")).status_code, 201)
             expired = self.payload(dog_id=self.second_dog.pk, kind="MICROCHIP_REGISTRATION", valid_from="2025-09-25", valid_to="2026-09-24")
             self.assertEqual(self.post(expired).status_code, 400)
 
@@ -451,6 +783,12 @@ from rest_framework.test import APIClient
 @skipUnless(connection.vendor == "mysql", "Requires MySQL row-lock semantics")
 class DocumentConcurrencyTests(TransactionTestCase):
     def test_simultaneous_submissions_credit_one_per_dog_entitlement(self):
+        self.concurrent_registration("COUNCIL_REGISTRATION")
+
+    def test_simultaneous_microchip_submissions_credit_one_lifetime_reward(self):
+        self.concurrent_registration("MICROCHIP_REGISTRATION")
+
+    def concurrent_registration(self, kind):
         QuestDefinition.objects.update_or_create(code="DOCUMENTS", defaults={"title": "Documents", "is_enabled": True})
         owner = User.objects.create_user(email="concurrent-evidence@example.com", display_name="Owner")
         breed = Breed.objects.create(name="Concurrent evidence breed", energy_level="LOW", default_size="SMALL")
@@ -464,7 +802,8 @@ class DocumentConcurrencyTests(TransactionTestCase):
                 barrier.wait(timeout=10)
                 submitted = client.post("/api/quests/documents", {
                     "request_id": str(uuid4()), "dog_id": dog.pk,
-                    "kind": "COUNCIL_REGISTRATION", "registration_number": "One entitlement",
+                    "kind": kind, "registration_number": "012345678901234",
+                    **({"council_name": "City of Melbourne", "registration_year": 2027} if kind == "COUNCIL_REGISTRATION" else {}),
                 }, format="json")
                 return client.post(f"/api/quests/documents/entitlements/{submitted.data['entitlement_id']}/collect", {}, format="json")
             finally:
@@ -475,6 +814,43 @@ class DocumentConcurrencyTests(TransactionTestCase):
         self.assertEqual(sorted(result.data["created"] for result in results), [False, True])
         self.assertEqual(DocumentEntitlement.objects.count(), 1)
         self.assertEqual(PointEntry.objects.count(), 1)
+        self.assertEqual(DocumentSubmission.objects.count(), 2)
+
+    def test_simultaneous_legacy_microchip_collections_cannot_credit_two_periods(self):
+        QuestDefinition.objects.update_or_create(code="DOCUMENTS", defaults={"title": "Documents", "is_enabled": True})
+        owner = User.objects.create_user(email="legacy-concurrent-evidence@example.com", display_name="Owner")
+        breed = Breed.objects.create(name="Legacy concurrent evidence breed", energy_level="LOW", default_size="SMALL")
+        dog = Dog.objects.create(owner=owner, name="Coco", breed=breed, age_months=12, size="SMALL", is_brachycephalic=False)
+        entitlements = []
+        for year in (2024, 2025):
+            entitlement = DocumentEntitlement.objects.create(
+                owner=owner, dog=dog, dog_id_snapshot=dog.pk, kind="MICROCHIP_REGISTRATION",
+                entitlement_key=f"period:{year}-01-01", promised_points=300,
+                valid_from=date(year, 1, 1), valid_to=date(year, 12, 31),
+            )
+            DocumentSubmission.objects.create(
+                owner=owner, dog=dog, dog_id_snapshot=dog.pk, dog_name_snapshot=dog.name,
+                kind="MICROCHIP_REGISTRATION", request_id=uuid4(), request_fingerprint=str(year) * 16,
+                registration_number=f"old-{year}", entitlement=entitlement, response_snapshot={"year": year},
+            )
+            entitlements.append(entitlement)
+        barrier = Barrier(2)
+
+        def collect(entitlement):
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.force_authenticate(owner)
+                barrier.wait(timeout=10)
+                return client.post(f"/api/quests/documents/entitlements/{entitlement.pk}/collect", {}, format="json")
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(collect, entitlements))
+        self.assertEqual([result.status_code for result in results], [200, 400])
+        self.assertEqual(PointEntry.objects.count(), 1)
+        self.assertEqual(DocumentEntitlement.objects.filter(point_entry__isnull=False).count(), 1)
         self.assertEqual(DocumentSubmission.objects.count(), 2)
 
 
@@ -498,6 +874,8 @@ class DocumentCollectionMigrationTests(TransactionTestCase):
             self.assertEqual(DocumentEntitlement.objects.get(pk=credited.pk).collected_at, entry.created_at)
             self.assertIsNone(DocumentEntitlement.objects.get(pk=pending.pk).collected_at)
             self.assertEqual(DocumentSubmission.objects.get().response_snapshot, saved_receipt)
+            self.assertEqual(DocumentSubmission.objects.get().council_name, "")
+            self.assertIsNone(DocumentSubmission.objects.get().registration_year)
             self.assertEqual(PointEntry.objects.count(), 1)
             self.assertEqual(PointEntry.objects.get().amount, 300)
         finally:

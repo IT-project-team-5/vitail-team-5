@@ -6,13 +6,20 @@ a UUID `request_id`, `dog_id`, and `kind`, with the fields below. Submission
 records `SELF_REPORTED` evidence and reserves a `READY` entitlement. It awards
 zero points. This does not verify a certificate or imply that an audit occurred.
 
-- `COUNCIL_REGISTRATION`: 300 points once per dog. A bounded registration number,
-  a PDF, or both. No inferred document date.
-- `MICROCHIP_REGISTRATION`: 300 points per annual registration period. Number or
-  PDF, plus `valid_from` and `valid_to`. The end must be the first anniversary or
-  its preceding day; a new reservation's period must cover today. Overlapping
-  annual periods use the existing entitlement. Adjacent anniversary periods are
-  distinct. The February 29 anniversary clamps to February 28.
+- `COUNCIL_REGISTRATION`: 300 points once per dog. Enter `registration_number`,
+  `council_name` and `registration_year`, or upload proof. Manual numbers allow
+  ASCII letters/digits, spaces and hyphens (1–100 characters, including at least
+  one letter/digit). Leading zeroes are preserved. Council names allow up to 100
+  printable characters. The year is the ending year of the current Victorian
+  registration period (10 April–9 April), evaluated in Melbourne time: e.g.
+  `2027` represents 10 April 2026–9 April 2027. This describes the evidence's
+  validity, not an annual Vitail reward.
+- `MICROCHIP_REGISTRATION`: 300 points once per dog. Enter a 15-digit
+  `registration_number`, or upload proof (including older/overseas chip formats).
+  Whitespace and hyphens are removed from typed numbers; all remaining characters
+  must be ASCII digits. Leading zeroes are preserved and no prefix is required.
+  No registration dates are requested or inferred. New entitlements use the
+  `microchip-lifetime-2026-09-25` rules version.
 - `VET_CHECKUP`: 200 points per actual `event_date`, maximum twice in its calendar
   year, with at least 60 days between reserved event dates across year boundaries.
   A JPEG/PNG photo is required. Future dates and visits before a known birthday
@@ -43,10 +50,21 @@ is marked verified.
 
 Re-uploading preserves another version of the original entitlement and never
 creates a second reward. Conflicting request-ID reuse returns 409. Per-dog file
-fingerprints cannot support a different entitlement; the same registration number
-may be renewed in a later annual period. A family certificate/photo can support
+fingerprints cannot support a different vet visit. A family certificate/photo can support
 several dogs. Disabling Documents blocks new submissions and uncollected rewards
 with 409; successful request/collection retries, history and downloads remain.
+
+Historical microchip annual entitlements are retained unchanged. Lifetime
+selection uses the oldest already-collected entitlement, or otherwise the oldest
+pending entitlement, including any held/rejected reservation. Only that pending
+entitlement may become collectible. The collect endpoint enforces this under the
+dog lock, so multiple legacy periods cannot produce another credit. Existing
+paid receipts continue to replay for their original recipients, with no points
+removed. Superseded pending rows remain in document history with
+`can_collect:false`, and are omitted from Quest tasks. Transfers do not reset the
+lifetime limit; a new owner must submit evidence against an existing pending
+entitlement before collecting it. An old microchip file can be attached to the
+canonical entitlement without changing the historic file fingerprint or award.
 
 `evidence.services.quest_tasks(owner=...,dogs=...,request=...,now=...)` returns
 compact IN_PROGRESS, READY and COLLECTED task rows. Pending rewards suppress
@@ -54,9 +72,18 @@ additional tasks of that dog/type. COLLECTED tasks are shown only on their
 collection's Melbourne date, while document history remains available. Former
 owners see their evidence's dog-name snapshot, not the transferred dog's profile.
 
+Registration submissions use exactly one path: manual details or a PDF/JPEG/PNG
+proof upload. Uploads require no manually transcribed registration details or
+dates. Both paths remain self-reported, with no government/database lookup or
+automatic certificate verification. Historical exact request retries are checked
+before new semantic rules, so previously accepted number-only or number-and-PDF
+requests still replay their original receipts. New requests cannot reuse the old
+validation rules.
+
 JSON uploads are bounded at 4 MiB decoded and the request parser at 6 MiB. PDFs
-must parse, have 1–20 pages and be unencrypted. Vet photos must decode as JPEG or
-PNG and be at most 16 megapixels. Files are not OCR-checked. Submitted bytes remain
+must parse, have 1–20 pages and be unencrypted. All photos must decode as JPEG or
+PNG and be at most 16 megapixels. Vet uploads remain photo-only. Files are not
+OCR-checked. Submitted bytes remain
 unchanged under generated names in `PRIVATE_MEDIA_ROOT`, never public
 `MEDIA_ROOT`; the database and private files must be backed up together. Partial
 write failures remove only the newly created file and database work rolls back.

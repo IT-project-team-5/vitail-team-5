@@ -48,6 +48,8 @@ class DocumentSubmission(models.Model):
     request_fingerprint = models.CharField(max_length=64)
     entitlement = models.ForeignKey(DocumentEntitlement, on_delete=models.PROTECT)
     registration_number = models.CharField(max_length=100, blank=True)
+    council_name = models.CharField(max_length=100, blank=True)
+    registration_year = models.PositiveSmallIntegerField(null=True, blank=True)
     event_date = models.DateField(null=True, blank=True)
     valid_from = models.DateField(null=True, blank=True)
     valid_to = models.DateField(null=True, blank=True)

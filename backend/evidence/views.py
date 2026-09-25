@@ -32,7 +32,7 @@ class DocumentListCreateView(APIView):
         })
 
     def post(self, request):
-        serializer = DocumentRequestSerializer(data=request.data)
+        serializer = DocumentRequestSerializer(data=request.data, context={"owner": request.user})
         serializer.is_valid(raise_exception=True)
         receipt, created = submit_document(owner=request.user, data=serializer.validated_data)
         return Response(receipt, status=201 if created else 200)

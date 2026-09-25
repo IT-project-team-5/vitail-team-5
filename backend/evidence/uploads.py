@@ -31,10 +31,8 @@ def validate_upload(value, filename, kind):
         raise serializers.ValidationError({"file_base64": "Choose a valid file."}) from exc
     if not data or len(data) > MAX_BYTES:
         raise serializers.ValidationError({"file_base64": "Choose a file up to 4 MB."})
-    if kind in {"COUNCIL_REGISTRATION", "MICROCHIP_REGISTRATION"}:
+    if kind in {"COUNCIL_REGISTRATION", "MICROCHIP_REGISTRATION"} and data.startswith(b"%PDF-"):
         try:
-            if not data.startswith(b"%PDF-"):
-                raise ValueError("Not PDF")
             pdf = PdfReader(io.BytesIO(data), strict=True)
             if pdf.is_encrypted or not 1 <= len(pdf.pages) <= 20:
                 raise ValueError("Unsupported PDF")

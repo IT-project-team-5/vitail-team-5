@@ -1,5 +1,4 @@
 import hashlib
-import json
 import uuid
 
 from django.contrib.auth import get_user_model
@@ -18,7 +17,8 @@ from rewards.policy import DOCUMENT_POINTS as POINTS, MELBOURNE, local_date as _
 from rewards.services import credit_points, get_balance
 
 from .models import DocumentEntitlement, DocumentKind, DocumentSubmission, EvidenceFingerprint
-from .serializers import DocumentSubmissionSerializer, first_anniversary
+from .fingerprints import request_fingerprint
+from .serializers import DocumentSubmissionSerializer
 from .storage import private_storage
 
 
@@ -33,30 +33,26 @@ class DocumentsUnavailable(APIException):
     default_code = "quest_disabled"
 
 
-def request_fingerprint(data):
-    fields = {key: value for key, value in data.items() if key not in {"request_id", "upload"}}
-    upload = data.get("upload")
-    if upload:
-        fields["upload"] = {key: upload[key] for key in ("sha256", "filename", "content_type")}
-    return hashlib.sha256(json.dumps(fields, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
+def _lifetime_entitlement(rows):
+    """Use historical awards first; never bypass an older held reservation."""
+    return min(rows, key=lambda row: (row.point_entry_id is None, row.pk), default=None)
+
+
+def _microchip_canonical_ids(rows):
+    grouped = {}
+    for row in rows:
+        if row.kind == DocumentKind.MICROCHIP:
+            grouped.setdefault(row.dog_id_snapshot, []).append(row)
+    return {dog_id: _lifetime_entitlement(items).pk for dog_id, items in grouped.items()}
 
 
 def _entitlement(owner, dog, data):
     kind = data["kind"]
     existing = list(DocumentEntitlement.objects.filter(dog_id_snapshot=dog.pk, kind=kind))
-    if kind == DocumentKind.COUNCIL:
+    if kind in {DocumentKind.COUNCIL, DocumentKind.MICROCHIP}:
         if existing:
-            return existing[0], False
+            return _lifetime_entitlement(existing), False
         key = "lifetime"
-    elif kind == DocumentKind.MICROCHIP:
-        start, end = data["valid_from"], data["valid_to"]
-        for item in existing:
-            if item.valid_from < first_anniversary(start) and start < first_anniversary(item.valid_from):
-                # Small changes to a submitted annual window never create another reward.
-                return item, False
-        if not start <= timezone.localdate(timezone=MELBOURNE) <= end:
-            raise ValidationError("The annual registration period must cover today.")
-        key = f"period:{start.isoformat()}"
     else:
         event = data["event_date"]
         same_visit = next((item for item in existing if item.event_date == event), None)
@@ -70,6 +66,7 @@ def _entitlement(owner, dog, data):
     return DocumentEntitlement.objects.create(
         owner=owner, dog=dog, dog_id_snapshot=dog.pk, kind=kind, entitlement_key=key,
         promised_points=POINTS[kind],
+        rules_version="microchip-lifetime-2026-09-25" if kind == DocumentKind.MICROCHIP else "documents-2026-09-25",
         event_date=data.get("event_date"), valid_from=data.get("valid_from"), valid_to=data.get("valid_to"),
     ), True
 
@@ -109,7 +106,7 @@ def submit_document(*, owner, data):
                     defaults={"entitlement": entitlement, "is_file": is_file},
                 )
                 if not created:
-                    if is_file and proof.entitlement_id != entitlement.pk:
+                    if is_file and proof.entitlement_id != entitlement.pk and data["kind"] != DocumentKind.MICROCHIP:
                         raise ValidationError("This file already supported an earlier reward. Add evidence for the new registration period or visit.")
             awarded = 0
             if upload:
@@ -120,6 +117,7 @@ def submit_document(*, owner, data):
                 owner=owner, dog=dog, dog_id_snapshot=dog.pk, dog_name_snapshot=dog.name,
                 kind=data["kind"], request_id=data["request_id"], request_fingerprint=fingerprint,
                 entitlement=entitlement, registration_number=data["registration_number"],
+                council_name=data.get("council_name", ""), registration_year=data.get("registration_year"),
                 event_date=data.get("event_date"), valid_from=data.get("valid_from"), valid_to=data.get("valid_to"),
                 file=stored_name or "", filename=upload["filename"] if upload else "",
                 file_content_type=upload["content_type"] if upload else "",
@@ -171,6 +169,14 @@ def collect_document(*, owner, entitlement_id, now=None):
         raise DocumentsUnavailable()
     if entitlement.eligibility_status != "ELIGIBLE":
         raise ValidationError("This document reward is unavailable pending a review outcome.")
+    if entitlement.kind == DocumentKind.MICROCHIP:
+        # The dog lock serializes all legacy annual reservations as one lifetime
+        # qualification, including reservations submitted by a former owner.
+        canonical = _lifetime_entitlement(DocumentEntitlement.objects.filter(
+            dog_id_snapshot=entitlement.dog_id_snapshot, kind=DocumentKind.MICROCHIP,
+        ))
+        if canonical.pk != entitlement.pk:
+            raise ValidationError("Microchip registration earns one reward per dog. This historical reservation cannot be collected.")
     entitlement.point_entry = credit_points(
         user=owner, amount=entitlement.promised_points, type=PointEntry.Type.EARN,
         source_reference=f"document-entitlement:{entitlement.pk}",
@@ -194,12 +200,17 @@ def _name(row, owner):
 
 
 def entitlements_for(owner):
-    rows = DocumentEntitlement.objects.filter(documentsubmission__owner=owner).distinct().select_related("dog", "point_entry").prefetch_related("documentsubmission_set")
+    rows = list(DocumentEntitlement.objects.filter(documentsubmission__owner=owner).distinct().select_related("dog", "point_entry").prefetch_related("documentsubmission_set"))
+    canonical_ids = _microchip_canonical_ids(DocumentEntitlement.objects.filter(
+        dog_id_snapshot__in={row.dog_id_snapshot for row in rows}, kind=DocumentKind.MICROCHIP,
+    ))
     enabled = QuestDefinition.objects.filter(code="DOCUMENTS", is_enabled=True).exists()
     return [{"id": row.pk, "dog_id": row.dog_id_snapshot, "dog_name": _name(row, owner), "kind": row.kind,
              "reward_status": "COLLECTED" if row.point_entry_id else "READY", "reward_points": row.promised_points,
              "collected_at": _iso(row.collected_at),
-             "can_collect": bool(enabled and row.eligibility_status == "ELIGIBLE" and not row.point_entry_id and row.dog_id and row.dog.owner_id == owner.pk)}
+             "can_collect": bool(enabled and row.eligibility_status == "ELIGIBLE" and not row.point_entry_id
+                                 and row.dog_id and row.dog.owner_id == owner.pk
+                                 and (row.kind != DocumentKind.MICROCHIP or canonical_ids.get(row.dog_id_snapshot) == row.pk))}
             for row in rows]
 
 
@@ -214,12 +225,14 @@ def eligibility_for(owner, dogs):
             pending = len(reserved) - len(earned)
             remaining = None
             can_earn = None
-            if kind == DocumentKind.COUNCIL:
+            if kind in {DocumentKind.COUNCIL, DocumentKind.MICROCHIP}:
+                canonical = _lifetime_entitlement(reserved)
+                pending = int(bool(canonical and not canonical.point_entry_id))
                 can_earn = not reserved
                 message = "300 points once per dog. Submit evidence, then collect." if not reserved else (
                     "Ready to collect. Updated evidence will use the same reward." if pending else "Reward already collected. Updated evidence earns no extra points.")
-            elif kind == DocumentKind.MICROCHIP:
-                message = "300 points per annual registration period. Submit evidence, then collect. Overlapping periods use the same reward."
+                if pending and canonical.eligibility_status != "ELIGIBLE":
+                    message = "This reward is unavailable pending a review outcome."
             else:
                 remaining = max(0, 2 - sum(row.event_date.year == today.year for row in reserved))
                 message = f"{remaining} of 2 slots remaining for {today.year}, including pending rewards. Visits must be at least 60 days apart."
@@ -237,9 +250,10 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
     rows = list(DocumentEntitlement.objects.filter(
         Q(dog_id_snapshot__in=dog_by_id) | Q(owner=owner, point_entry__isnull=False)
     ).select_related("dog", "point_entry").prefetch_related("documentsubmission_set"))
+    canonical_ids = _microchip_canonical_ids(rows)
     details = {
-        DocumentKind.COUNCIL: "Submit your dog's council registration number or PDF, then collect 300 points once per dog.",
-        DocumentKind.MICROCHIP: "Submit the registration number or PDF and its full annual period, then collect 300 points. Overlapping periods share one reward.",
+        DocumentKind.COUNCIL: "Enter your dog's current Council registration details or upload proof, then collect 300 points once per dog.",
+        DocumentKind.MICROCHIP: "Enter the 15-digit microchip number or upload proof, then collect 300 points once per dog.",
         DocumentKind.VET: "Submit a photo and the check-up date, then collect 200 points. Up to two visits per calendar year, at least 60 days apart.",
     }
 
@@ -259,20 +273,25 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
         if row.point_entry_id:
             if row.point_entry.user_id == owner.pk and row.collected_at and row.collected_at.astimezone(MELBOURNE).date() == today:
                 tasks.append(task(dog, row.kind, "COLLECTED", row))
-        elif dog and row.eligibility_status == "ELIGIBLE" and _has_submission(row, owner):
+        elif (dog and row.eligibility_status == "ELIGIBLE" and _has_submission(row, owner)
+              and (row.kind != DocumentKind.MICROCHIP or canonical_ids.get(row.dog_id_snapshot) == row.pk)):
             tasks.append(task(dog, row.kind, "READY", row))
     for dog in dogs:
         for kind in DocumentKind.values:
             reserved = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            if kind == DocumentKind.MICROCHIP:
+                canonical = _lifetime_entitlement(reserved)
+                if canonical:
+                    if canonical.point_entry_id or canonical.eligibility_status != "ELIGIBLE":
+                        continue
+                    reserved = [canonical]
             if any(not row.point_entry_id and _has_submission(row, owner) for row in reserved):
                 continue
             # A current owner can resubmit after a transfer to make an existing
             # unclaimed entitlement collectible without creating a second reward.
             transferred_pending = any(not row.point_entry_id for row in reserved)
-            if kind == DocumentKind.COUNCIL:
+            if kind in {DocumentKind.COUNCIL, DocumentKind.MICROCHIP}:
                 eligible = not reserved or transferred_pending
-            elif kind == DocumentKind.MICROCHIP:
-                eligible = transferred_pending or not any(row.valid_from <= today < first_anniversary(row.valid_from) for row in reserved)
             else:
                 eligible = transferred_pending or (sum(row.event_date.year == today.year for row in reserved) < 2
                             and all(abs((today - row.event_date).days) >= 60 for row in reserved))
