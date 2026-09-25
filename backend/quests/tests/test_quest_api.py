@@ -64,17 +64,18 @@ class QuestApiTests(APITestCase):
             self.assertEqual(self.client.get("/api/quests/").status_code, 403)
             self.assertEqual(self.collect().status_code, 403)
 
-    def test_new_owner_receives_only_the_compact_envelope_without_fake_tasks(self):
+    def test_new_owner_receives_compact_envelope_with_idle_streak(self):
         fresh = User.objects.create_user(email="quest-new@example.com", password="QuestTest572!", display_name="New")
         self.client.force_authenticate(fresh)
         data = self.dashboard()
         self.assertEqual(set(data), {"server_time", "timezone", "local_date", "next_reset_at", "tasks"})
-        self.assertEqual(data["tasks"], [])
+        self.assertEqual([task["kind"] for task in data["tasks"]], ["STREAK"])
+        self.assertEqual(data["tasks"][0]["current_days"], 0)
         self.assertFalse(QuestAward.objects.exists())
         self.assertFalse(PointEntry.objects.exists())
 
     def test_catalogue_can_disable_a_capability_without_changing_qualification_rules(self):
-        QuestDefinition.objects.filter(code__in=["DAILY_GOAL", "BIRTHDAY", "DOCUMENTS"]).update(is_enabled=False)
+        QuestDefinition.objects.filter(code__in=["DAILY_GOAL", "BIRTHDAY", "DOCUMENTS", "STREAK"]).update(is_enabled=False)
         self.assertEqual(self.dashboard()["tasks"], [])
         self.assertEqual(self.collect().data["code"], "QUEST_DISABLED")
         self.assertFalse(PointEntry.objects.exists())
@@ -288,7 +289,7 @@ class QuestApiTests(APITestCase):
         self.assertTrue(rows)
         self.assertEqual({task["photo"] for task in rows}, {expected})
 
-    def test_tasks_show_only_today_birthday_and_omit_unavailable_goal_and_streak_actions(self):
+    def test_tasks_show_today_birthday_and_streak_but_omit_unavailable_goal(self):
         tasks = self.dashboard()["tasks"]
         birthday = [task for task in tasks if task["kind"] == "BIRTHDAY"]
         self.assertEqual(len(birthday), 1)
@@ -299,7 +300,7 @@ class QuestApiTests(APITestCase):
         self.assertIsNone(birthday[0]["progress"])
         self.assertIsNone(birthday[0]["collected_at"])
         self.assertNotIn("DAILY_GOAL", {task["kind"] for task in tasks})
-        self.assertNotIn("STREAK", {task["kind"] for task in tasks})
+        self.assertEqual(len([task for task in tasks if task["kind"] == "STREAK"]), 1)
         self.assertNotIn(self.other_dog.pk, {task["dog_id"] for task in tasks})
         self.assertEqual(len({task["id"] for task in tasks}), len(tasks))
         Dog.objects.filter(pk=self.dog.pk).update(date_of_birth=date(2020, 9, 26))
@@ -342,7 +343,7 @@ class QuestApiTests(APITestCase):
         self.assertFalse(any(task["kind"] == "BIRTHDAY" for task in self.dashboard()["tasks"]))
 
     def test_disabled_capabilities_do_not_offer_actionable_task_rows(self):
-        QuestDefinition.objects.filter(code__in=["BIRTHDAY", "DOCUMENTS"]).update(is_enabled=False)
+        QuestDefinition.objects.filter(code__in=["BIRTHDAY", "DOCUMENTS", "STREAK"]).update(is_enabled=False)
         self.assertEqual(self.dashboard()["tasks"], [])
 
     def test_document_submission_becomes_ready_until_explicit_collect_and_only_today_receipt_remains(self):

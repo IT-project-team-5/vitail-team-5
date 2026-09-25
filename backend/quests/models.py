@@ -35,7 +35,7 @@ class QuestDefinition(models.Model):
 
 
 class QuestAward(models.Model):
-    """Typed qualification; only confirmed birthday rules currently issue awards."""
+    """Typed qualifications for explicit birthday and walking-streak collection."""
 
     class Kind(models.TextChoices):
         BIRTHDAY = "BIRTHDAY", "Birthday"

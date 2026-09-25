@@ -741,8 +741,14 @@ class DocumentApiTests(APITestCase):
         vet = self.post(self.vet("2026-09-01"))
         initial = quest_tasks(owner=self.owner, dogs=[self.dog], now=now)
         self.assertEqual([row["status"] for row in initial if row["kind"] == "MICROCHIP_REGISTRATION"], ["READY"])
-        self.collect(micro)
-        self.collect(vet)
+        # Collection timestamps must use the same fixture clock as the dashboard;
+        # freezing localdate alone does not freeze timezone.now().
+        with patch("django.utils.timezone.now", return_value=now):
+            self.assertEqual(self.collect(micro).status_code, 200)
+            self.assertEqual(self.collect(vet).status_code, 200)
+        collected_today = quest_tasks(owner=self.owner, dogs=[self.dog], now=now)
+        self.assertEqual({row["kind"] for row in collected_today if row["status"] == "COLLECTED"},
+                         {"MICROCHIP_REGISTRATION", "VET_CHECKUP"})
         tasks = quest_tasks(owner=self.owner, dogs=[self.dog], now=now + timedelta(days=1))
         self.assertFalse(any(row["kind"] in {"MICROCHIP_REGISTRATION", "VET_CHECKUP"} for row in tasks))
 

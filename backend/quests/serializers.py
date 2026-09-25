@@ -16,6 +16,9 @@ class QuestTaskSerializer(serializers.Serializer):
     dog_id = serializers.IntegerField(allow_null=True)
     entitlement_id = serializers.IntegerField(allow_null=True)
     collected_at = serializers.DateTimeField(allow_null=True)
+    current_days = serializers.IntegerField(required=False)
+    milestone_days = serializers.IntegerField(required=False)
+    run_start_date = serializers.DateField(required=False, allow_null=True)
 
 
 class QuestDashboardSerializer(serializers.Serializer):
@@ -37,5 +40,25 @@ class BirthdayAwardSerializer(serializers.Serializer):
 
 class BirthdayCollectionSerializer(serializers.Serializer):
     award = BirthdayAwardSerializer()
+    balance = serializers.IntegerField()
+    created = serializers.BooleanField()
+
+
+class StreakCollectionRequestSerializer(serializers.Serializer):
+    run_start_date = serializers.DateField()
+    milestone_days = serializers.IntegerField()
+
+
+class StreakAwardSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+    run_start_date = serializers.DateField()
+    milestone_days = serializers.IntegerField()
+    points = serializers.IntegerField(source="point_entry.amount")
+    awarded_at = serializers.DateTimeField()
+
+
+class StreakCollectionSerializer(serializers.Serializer):
+    award = StreakAwardSerializer()
     balance = serializers.IntegerField()
     created = serializers.BooleanField()

@@ -3,8 +3,9 @@ from rest_framework.views import APIView
 
 from rewards.permissions import IsOwnerRole
 
-from .serializers import BirthdayCollectionSerializer, QuestDashboardSerializer
+from .serializers import BirthdayCollectionSerializer, QuestDashboardSerializer, StreakCollectionRequestSerializer, StreakCollectionSerializer
 from .services import BirthdayClaimError, collect_birthday, quest_dashboard
+from .streaks import StreakClaimError, collect_streak
 
 
 class QuestDashboardView(APIView):
@@ -23,3 +24,17 @@ class BirthdayCollectionView(APIView):
         except BirthdayClaimError as exc:
             return Response({"code": exc.code, "message": exc.message}, status=exc.status_code)
         return Response(BirthdayCollectionSerializer(result).data, status=201 if result["created"] else 200)
+
+
+class StreakCollectionView(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def post(self, request):
+        serializer = StreakCollectionRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"code": "INVALID_STREAK_REQUEST", "message": "Provide a run start date and an integer milestone."}, status=400)
+        try:
+            result = collect_streak(owner=request.user, **serializer.validated_data)
+        except StreakClaimError as exc:
+            return Response({"code": exc.code, "message": exc.message}, status=exc.status_code)
+        return Response(StreakCollectionSerializer(result).data, status=201 if result["created"] else 200)

@@ -142,6 +142,9 @@ def quest_dashboard(*, owner, request=None, now=None):
     enabled = set(QuestDefinition.objects.filter(is_enabled=True).values_list("code", flat=True))
     dogs = list(Dog.objects.filter(owner=owner))
     tasks = []
+    if QuestDefinition.Code.STREAK in enabled:
+        from .streaks import streak_task
+        tasks.append(streak_task(owner=owner, now=now))
     if QuestDefinition.Code.BIRTHDAY in enabled:
         claimed = set(QuestAward.objects.filter(kind="BIRTHDAY", year=today.year,
             dog_id_snapshot__in=[dog.pk for dog in dogs], point_entry__isnull=False
