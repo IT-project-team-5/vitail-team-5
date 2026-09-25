@@ -1,6 +1,6 @@
 # Quest and Point Policy
 
-Canonical reward reference, updated 25 September 2026. Latest source:
+Canonical reward reference, updated 26 September 2026. Latest source:
 [New Point Retrieval / Calculation](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation),
 24 September, plus subsequent confirmed collection/UI decisions.
 [Open questions](DECISIONS.md#open-decisions) remain explicit; a published reward
@@ -17,7 +17,7 @@ amount does not mean its qualification engine is implemented.
 | Council registration | 300 points once per dog | Connected: submit evidence, then Collect |
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
 | Vet check-up | 200 points per visit, at most two per visit calendar year and at least 60 days apart | Connected: evidence with actual visit date, then Collect |
-| Streak | 7 days: 20 points; 30/60/90… days: 100 points each | Not enabled: qualification/reset and repeat-seven-day policy still need agreement |
+| Streak | Each consecutive run: 7 days earns 20 points; 30/60/90… days earn 100 points each | Connected: validated walking days, one progress bar and explicit Collect |
 | Net-walk | 2 points/km, maximum 10/day | Data foundation only; no proximity matcher or award implementation |
 
 The implemented shared activity cap is **72 points per Melbourne day for walking
@@ -61,8 +61,13 @@ tab/endpoint in this delivery; its feature belongs to another teammate.
 Quest uses compact horizontal avatar/venue rows with detail sheets. READY rows
 are highlighted first, IN_PROGRESS rows follow, and COLLECTED rows are muted at
 the bottom. Collection happens in the detail sheet. Base walking is not a task
-row. Unavailable birthdays, ineligible documents and unimplemented goal/streak
+row. Unavailable birthdays, ineligible documents and unimplemented goal
 rewards produce no placeholder rows or invented percentage.
+
+Streak uses one progress bar with only `x / 7`, `x / 30`, `x / 60` and later
+30-day milestones. A completed milestone fills and highlights the bar; tapping
+opens its details and Collect. Collection advances to the next available target
+instead of adding another collected streak row.
 
 A collected row remains only on its **Melbourne collection date**. Hiding it at
 midnight does not delete evidence, qualification or ledger history. The client
@@ -75,6 +80,29 @@ birthdays. Known birthdays determine age. The observed non-leap-year date for
 29 February is undecided, so only the actual anniversary qualifies. Per-dog/year
 uniqueness survives ownership changes; an old recipient can replay their own
 receipt without giving a new owner another award.
+
+## Walking streaks
+
+A qualifying day has at least one server-validated walk with actual movement.
+Use the walk's Melbourne end date, count each date once per account, and count
+valid walks even if rounding or the daily activity cap gave them zero points.
+Stationary, simulated, rejected, local-only and unverified legacy records do not
+qualify. Daily Goal completion is not required, and multiple dogs do not multiply
+the day count.
+
+Yesterday's run remains current while today is still in progress. A full missed
+Melbourne day breaks the run; the next qualifying day starts again at one. Each
+new run can earn its own seven-day reward, then the 30/60/90… milestones.
+Already earned, uncollected milestones remain available after a break; the
+single bar shows the oldest uncollected milestone first. No claim expiry is
+introduced. Existing verified walks can establish progress without creating
+credits on reads.
+
+The server recomputes eligibility before collection and locks the owner's
+account. `QuestAward` identifies owner, run start and milestone, and links one
+canonical ledger credit. Repeated or simultaneous requests return the same
+award. Streak credits do not consume the walking/check-in daily cap. No new
+progress table or client-generated qualification is used.
 
 ## Evidence: submit, then collect
 
@@ -116,6 +144,7 @@ also permit ADMIN.
 |---|---|---|
 | GET | `/api/quests` | `server_time`, `timezone`, `local_date`, `next_reset_at`, `tasks` |
 | POST | `/api/quests/birthdays/{dog_id}/collect` | Existing or newly created birthday credit receipt and balance |
+| POST | `/api/quests/streaks/collect` | Collect one server-qualified run/milestone; replay returns its existing credit |
 | GET | `/api/quests/documents` | Dogs, evidence versions, current entitlements and eligibility |
 | POST | `/api/quests/documents` | Saved evidence and reserved entitlement; no new credit |
 | POST | `/api/quests/documents/entitlements/{id}/collect` | One entitlement's collection receipt and balance |
@@ -171,6 +200,6 @@ collection, account changes, stale responses, midnight, cap presentation and
 wallet refresh races, with light/dark/large-text snapshots.
 
 These tests do not certify a real check-in provider, physical GPS behavior,
-social/location APIs or unimplemented goal/streak/net rewards. Record actual
+social/location APIs or unimplemented goal/net rewards. Record actual
 run results with the build under test; use [feature status](FEATURES.md) and
 [Walk device tests](WALK_TESTING.md) for remaining acceptance work.

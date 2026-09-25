@@ -9,7 +9,7 @@
 
 ## 已連接與僅有資料基礎
 
-「有表」不等於「功能可用」。目前沒有社交／GPS ingestion 公開 API、同行配對引擎，亦未啟用每日目標、streak 或 net-walking 發點。
+「有表」不等於「功能可用」。目前沒有社交／GPS ingestion 公開 API、同行配對引擎，亦未啟用每日目標或 net-walking 發點。Streak 已接上有效散步日計算、進度條與 Collect。
 
 | 表 | 現況與邊界 |
 |---|---|
@@ -20,7 +20,7 @@
 | `Walk`、`WalkDog` | Finish 後驗證上傳、距離／有效活動秒數、參與狗、重試與走路發點已連接。舊資料未知的秒數／快照維持 null。 |
 | `WalkSession`、`LocationSample`、`NetWalkInterval` | 即時狀態、有限 GPS 證據與同行區間的模型／內部服務基礎。現行手機散步上傳不寫這些表；沒有持續 GPS 上傳、對外位置共享或 matching。 |
 | `DogDailyGoal` | 每狗每日凍結目標及最終結果的資料基礎；20 點／天已定，公式與資格判斷未定，因此不產生目標或發點。 |
-| `QuestDefinition`、`QuestAward` | Quest 目錄、生日資格與 Collect 已連接。模型可表達 goal／streak 資格，但沒有建立／領取這兩類的服務。開啟目錄不會啟動未實作規則。 |
+| `QuestDefinition`、`QuestAward` | Quest 目錄、生日與 streak 資格及 Collect 已連接；streak 沿用 Walk 與 QuestAward，不另建進度表。Goal 資格仍待公式。開啟目錄不會啟動未實作規則。 |
 | `CheckIn` | 共用進度查詢／Collect、每日類別唯一性及 cap 保護；Map／Quest 共用 iOS store。Start／定位驗證及正式 provider 尚未連接，不顯示假的進度或可領任務。 |
 | `DocumentEntitlement`、`DocumentSubmission`、`EvidenceFingerprint` | 每狗私人文件、版本、證據重用保護、提交 READY → Collect 已連接；Council 名稱／有效年度與每狗晶片終身資格已對齊。抽查／凍結欄位已建立，完整人工抽查與追回點數流程未交付。 |
 | `Friendship`、`UserBlock` | canonical pair、邀請／回覆、雙向封鎖判斷的內部服務基礎；沒有朋友、搜尋、leaderboard 或位置公開 API／頁面。 |
@@ -53,7 +53,7 @@
 
 沿用 Django Admin `LogEntry`，不新增 AuditEvent。但目前不能宣稱所有 café API 改價、點數處置、抽查都會自動寫入 admin log。文件已有 `audit_status`／review 欄位與 entitlement 凍結原因；尚無完整抽查服務。`PointEntry` 目前沒有 `ADMIN_DEBIT`，不要以直接改舊帳目冒充追回點數。
 
-其他未定項目集中在 [DECISIONS.md](../DECISIONS.md)：每日目標公式、streak 合格日／重啟、Net 同意與配對、晶片兌換門檻、2/29 替代日、保留／刪除、慈善及遠端通知。咖啡約 504 點只是換算提示，不自動更改商品或歷史訂單點價。
+其他未定項目集中在 [DECISIONS.md](../DECISIONS.md)：每日目標公式、Net 同意與配對、晶片兌換門檻、2/29 替代日、保留／刪除、慈善及遠端通知。咖啡約 504 點只是換算提示，不自動更改商品或歷史訂單點價。
 
 ## 來源與衝突處理
 

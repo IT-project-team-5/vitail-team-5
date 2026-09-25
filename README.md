@@ -81,8 +81,10 @@ No-dog walks remain local with zero points. Protected local drafts/history,
 paused recovery and stable upload IDs preserve work without duplicate awards.
 Only server receipts confirm points. See [Walk integration](docs/WALK_INTEGRATION.md).
 
-Quest shows actionable birthday and document tasks, with explicit Collect.
-Collected rows leave the list after Melbourne midnight; their history remains.
+Quest shows actionable birthday and document tasks, plus one walking-streak
+progress bar, with explicit Collect. Collected birthday/document rows leave
+the list after Melbourne midnight; their history remains. Streak advances to
+its next milestone after collection.
 The map and Quest share a check-in presentation/store, but **no production
 location provider or iOS check-in service is enabled yet**.
 
@@ -94,7 +96,7 @@ those same orders and cannot collect them for the owner.
 The database now has a normalized Venue and foundations for daily goals,
 check-ins, live sessions/location samples, net-walking and friendships. These
 schema changes **do not deliver social APIs, location ingestion, matching,
-leaderboards, goal/streak rewards, chat, notifications or charity donations**.
+leaderboards, daily-goal rewards, chat, notifications or charity donations**.
 See [feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check

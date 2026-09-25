@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 25 September 2026. The latest confirmed conversation and
+Current as of 26 September 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -36,6 +36,7 @@ below are retained where other project documents cite them.
 | R56 | Up to four daily venue opportunities. Below the walking/check-in cap active rows remain; at the cap uncollected rows hide. Today's collected rows remain below until Melbourne midnight |
 | R57 | Registration Quests are fixed to one dog and document kind. Choose entered details or PDF/JPEG/PNG proof; Council details include council, animal reference and current registration year. Microchip numbers use 15 digits or the proof fallback. Submissions remain self-reported; no OCR or registry verification is implied |
 | R58 / O16 resolved | Microchip registration awards 300 points once per dog in its lifetime. No certificate start/end dates or annual renewal reward. Existing credits and receipts remain unchanged; previous microchip rewards prevent another credit |
+| R59 / O18 resolved | Streak counts valid walking days per account in Melbourne. A missed day breaks the run; each new run can earn seven-day points, then 30/60/90… milestones. One progress bar shows only x / target, stays full until explicit Collect, then advances |
 
 The database foundation normalizes Venue, keeps one PointEntry ledger and adds
 specific daily-goal, check-in, live-location, net-walk and friendship records.
@@ -80,7 +81,6 @@ its clock or fabricate venue opportunities.
 | O12 | Admin evidence/reason requirements, dispute actions and account-deletion/anonymization rules | Existing grants/refunds stay constrained; do not delete or rewrite ledger history to simulate deletion. Django admin logging alone is not a full audit workflow |
 | O13 | Release deadline and measurable product acceptance | Build/test results and physical-device checks are recorded separately; schema completion does not certify release readiness |
 | O17 | Birthday treatment for 29 February in non-leap years | Actual anniversary only; no invented observed date |
-| O18 | Streak qualification, missed-day reset and whether seven-day rewards repeat for each new streak | Latest milestone amounts are recorded; no streak awards or placeholder task rows |
 | O19 | Net-walk proximity/time/consent, overlap calculation and cap membership; friend discovery/privacy/blocking behavior | Data foundations only. No matcher, exact live-position sharing or net-walk credit |
 | O20 | Minimum café purchase/offer duration and daily inventory policy | Preserve configured product prices and historical terms; no fiat checkout or automatic merchant settlement |
 

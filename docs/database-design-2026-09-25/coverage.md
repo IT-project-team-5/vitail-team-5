@@ -75,8 +75,8 @@
 | [SCRUM-41](https://group5-vitail-project.atlassian.net/browse/SCRUM-41) | Test Current MVP and Resolve Identified Bugs | In Review | 文件／流程 | 測試／修正工作；測試資料與結果不成為產品業務表。資料一致性測試需涵蓋重試、並行扣點／領點、角色隔離及日期界線。 |
 | [SCRUM-42](https://group5-vitail-project.atlassian.net/browse/SCRUM-42) | Venue check-in | To Do | 基礎 | 與 SCRUM-43 共用 `Venue`、`CheckIn`、`LocationSample`、`PointEntry`，不建立第二套打卡表；provider 尚未連接。 |
 | [SCRUM-43](https://group5-vitail-project.atlassian.net/browse/SCRUM-43) | Venue check-in | To Do | 基礎＋待整合 | `CheckIn` 保存類別／日期唯一 slot、attempt、圈域／時長快照、已驗證秒數及唯一 ledger FK。內部服務與共享 UI store 存在，沒有公開 GPS ingestion／正式定位 provider。 |
-| [SCRUM-44](https://group5-vitail-project.atlassian.net/browse/SCRUM-44) | Task system | To Do | 已連接＋基礎 | `QuestDefinition` 與任務投影；生日 `QuestAward`、文件三表及 Collect 已連接。Check-in 僅基礎，goal／streak 未啟用；不建立通用 QuestProgress。 |
-| [SCRUM-45](https://group5-vitail-project.atlassian.net/browse/SCRUM-45) | Daily goals & rewards | To Do | 基礎＋待公式 | `DogDailyGoal`／`WalkDog`／`QuestAward` 有資料落點；20/day 已定，目標公式與 streak 合格日未定。未生成 goal 或發 goal／streak 點數，15 分鐘示例不是公式。 |
+| [SCRUM-44](https://group5-vitail-project.atlassian.net/browse/SCRUM-44) | Task system | To Do | 已連接＋基礎 | `QuestDefinition` 與任務投影；生日 `QuestAward`、文件三表及 Collect 已連接。Check-in 僅基礎，goal 未啟用；streak 已用 Walk 驗證日期與 QuestAward 接通，不建立通用 QuestProgress。 |
+| [SCRUM-45](https://group5-vitail-project.atlassian.net/browse/SCRUM-45) | Daily goals & rewards | To Do | 基礎＋待公式 | `DogDailyGoal`／`WalkDog`／`QuestAward` 有資料落點；20/day 已定，目標公式未定。未生成 goal 或發 goal 點數，15 分鐘示例不是公式；streak 按有效散步日獨立計算。 |
 | [SCRUM-46](https://group5-vitail-project.atlassian.net/browse/SCRUM-46) | Statistics & leaderboard | To Do | 基礎＋待政策 | `Friendship`／`UserBlock` 可供未來篩選，`Walk`／`DogDailyGoal`／`QuestAward` 可供彙總。没有 leaderboard 表、API 或頁面；指標／週期與隊友整合待定。 |
 | [SCRUM-47](https://group5-vitail-project.atlassian.net/browse/SCRUM-47) | Friends system, show friends location on map | To Do | 基礎 | 關係、封鎖及 User 分享偏好已建模；內部關係服務有鎖及同意判斷。沒有好友搜尋／位置共享 API；`WalkSession`／`LocationSample`／`NetWalkInterval` 尚未接 matching。 |
 | [SCRUM-48](https://group5-vitail-project.atlassian.net/browse/SCRUM-48) | UI & sharing | To Do | UI 已連接；分享待整合 | 使用既有摘要與照片，不建 Sharing／Post 表。公開分享、位置脫敏及撤銷要求尚未形成完整流程。 |
@@ -96,7 +96,7 @@
 | US-06 Vet and Registration Proof（Should） | 已連接：三個文件模型、私人檔案、READY→Collect。 | 舊事前核准／年度council已取代；完整抽查與處置服務未交付。Microchip 已改每狗終身一次；手填或 PDF／照片皆為 self-reported。 |
 | US-07 Use Points for Rewards（Must） | 已連接：Venue菜單、Reward有效期／配額、Redemption與ledger。 | Purchase扣點，swipe只確認取餐，取代舊swipe扣點。店內購買條件可展示但未驗證現金消費。 |
 | US-08 History and Charity Donations（Should） | 已連接：`Redemption`／`PointEntry`歷史；延後：`Charity`／`Donation`。 | 沒有捐點表或API；合作方、確認／退款／對帳規則待定，不預建支付結算系統。 |
-| US-09 Recommendations and Streaks（Should） | 基礎：`QuestDefinition`、`DogDailyGoal`、`QuestAward`。 | 沒有推薦引擎或streak發點。30/60/90…數值已定，合格日、7日重啟及領取期限待定。 |
+| US-09 Recommendations and Streaks（Should） | 基礎：`QuestDefinition`、`DogDailyGoal`、`QuestAward`。 | 沒有推薦引擎；streak 已接有效散步日、漏日歸零及每段7／30／60／90…領點，已達標未領資格保留。 |
 | US-10 Notifications（Should） | 基礎：`User.notification_preferences`空JSON容器。 | 尚未定義完整偏好格式、安靜時段與投遞流程；`PushDevice`／`NotificationDelivery`未建立。 |
 | US-11 Photos, Sharing and Walking Together（Could） | 已連接：人／狗／地點照片；基礎：關係、位置與Net區間。 | 沒有分享／matching／net發點流程。分享精確位置需明確同意；未來對區間取聯集，不能按人數倍增。 |
 | US-12 Manage Merchants and Offers（Must） | 已連接：Admin建帳、café自管Venue／Reward及orders。 | 舊無店家管理頁已被取代；API改價未全面接LogEntry，多分店／員工權限未在範圍。 |
@@ -108,9 +108,9 @@
 | 方向 | 目前落點 | 仍未完成的部分 |
 |---|---|---|
 | Map／Quest 共用進度、最多四類打卡 | `CheckIn`、內部服務、iOS共享store／detail | GPS引擎與provider整合；現在不能靠本機倒數宣布達標。 |
-| READY優先、當日COLLECTED置底 | Quest的真實生日／文件tasks及伺服器日期 | 過午夜從主列表隱藏，不刪歷史；未知goal／streak不顯示placeholder。 |
+| READY優先、當日COLLECTED置底 | Quest的真實生日／文件tasks及伺服器日期 | 過午夜從主列表隱藏，不刪歷史；未知goal不顯示placeholder；streak以單一進度條顯示真實天數。 |
 | 文件提交與Collect分開 | 三個文件模型與私人存取 | pending占資格；抽查、爭議、追回政策待定。 |
-| 生日、每狗目標、streak | Birthday60已連接；goal與streak有模型 | 不由舊age猜DOB；2/29目前只在實際日期領，替代日未定；goal公式／streak資格待定。 |
+| 生日、每狗目標、streak | Birthday60與streak已連接；goal有模型 | 不由舊age猜DOB；2/29目前只在實際日期領，替代日未定；goal公式待定；streak按每日有效散步判定。 |
 | 朋友、虛擬頭貼、即時位置 | canonical Friendship、directional UserBlock、User偏好、session位置expiry | 搜尋／頭貼選擇器／位置共享API未接。 |
 | Net-Walking可與非好友同行 | `NetWalkInterval`保存兩人各自距離與consent時間 | 無自動matching／net award；距離、時窗及公開規則未定。 |
 | 好友stats／leaderboard | 活動事實可供聚合，不建固定排名表 | SCRUM-46需求保留；本slice移除頁面，不代表功能被取消或已交付。 |
@@ -136,8 +136,8 @@
 | Restaurant check-in | 同上，以category_slot區分 | 同上。 |
 | Park check-in | 同上，以category_slot區分 | 同上。 |
 | Vet check-in | 同上；不同於vet文件 | 同上。 |
-| 7-day streak | QuestAward.run_start_date／milestone_days | 基礎；資格與重啟政策待定。 |
-| 30/60/90…day streak | 同上 | 基礎；未發點。 |
+| 7-day streak | Walk驗證日期 → QuestAward.run_start_date／milestone_days → PointEntry | 已連接；每段新streak可重新達標，Collect防重領。 |
+| 30/60/90…day streak | 同上 | 已連接；單一進度條等待Collect後切換下個目標。 |
 | Vet checkup | DocumentEntitlement事件日 → PointEntry | 已連接。 |
 | Council registration | 每狗lifetime entitlement → PointEntry | 已連接；不是每年重置。 |
 | Microchip certificate | 每狗終身 entitlement → PointEntry | 已連接；舊年期／點數保留，歷史已領資格不能重領。 |
@@ -149,7 +149,7 @@ Walk＋Check-in共享72/day已在服務保護；Goal／Net是否納入待定。�
 
 - 最新決定取代舊一狗／兩狗限制、council年度獎勵、咖啡60提示、事前文件核准及swipe扣點；完整現行規則見[QUESTS.md](../QUESTS.md)。目前最多10狗，walking仍按帳戶計分。
 - Daily goal20/day不是未知金額；未知的是個人化公式／資格。舊15分鐘例子不能直接作目標，舊「72包含goal」不能覆蓋新Walk＋Check-in範圍。
-- 30/60/90…獎勵並非終身只給一次；7日重啟、streak合格日與Net規則仍需定案。DogDailyGoal／QuestAward可保存結果，不代表引擎存在。
+- Streak已定案為有效散步日、漏日重置，每段7日與30/60/90…可領；已達標未領保留。Net規則與DailyGoal公式仍需定案，資料表不代表引擎存在。
 - User刪除／Dog封存欄位、文件audit欄位及LogEntry不等於完整刪除／抽查／稽核流程；保存、匿名化及點數追回待政策。六個延後模型不以假欄位冒充完成。
 
 **37張可見Jira與14條User Story均保留落點；22張表是現有模型，6張表未建立。資料覆蓋不等於所有功能已可交付。**

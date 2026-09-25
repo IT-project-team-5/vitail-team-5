@@ -208,7 +208,9 @@ paths:
         pending confirmation of decision O7. Awards also respect the shared
         72-point walking/check-in cap. Day is the Melbourne local end date.
         No goal/check-in/streak points are awarded by this endpoint; uploaded
-        samples do not populate the live-location foundation tables. Repeating the
+        walks with validated movement can qualify a streak day, whose milestone
+        reward is collected separately from Quest. Samples do not populate the
+        live-location foundation tables. Repeating the
         same UUID and payload returns the original result without a second award.
       requestBody:
         required: true
@@ -575,11 +577,14 @@ paths:
         the Australia/Melbourne calendar, including daylight-saving changes.
         Tasks are ordered READY, IN_PROGRESS, then COLLECTED with stable IDs.
         Only eligible document tasks, pending entitlements, today's available
-        birthdays and the owner's rewards collected today appear. Previous-day
+        birthdays, one streak progress task and the owner's rewards collected today appear. Previous-day
         collected rows disappear while their history remains stored. Disabled
         capabilities omit their rows; unknown kinds/states and null progress
         must never enable collection or imply zero-percent completion.
-        No base walking row, unimplemented goal/streak award or check-in provider
+        STREAK uses validated walking days and exposes the oldest earned uncollected
+        milestone, otherwise the current run's next target. Earned claims survive
+        a broken run. There are no separate collected streak rows.
+        No base walking row, unimplemented goal award or check-in provider
         is fabricated. Empty tasks is valid. Legacy dashboard section projections
         are removed; evidence/history use the documents endpoint. Read requests
         never create a credit.
@@ -636,6 +641,48 @@ paths:
               schema: {$ref: '#/components/schemas/Error'}
         '409':
           description: BIRTHDAY_NOT_TODAY, BIRTHDAY_ALREADY_CLAIMED or QUEST_DISABLED
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/quests/streaks/collect:
+    post:
+      summary: Collect one walking streak milestone (OWNER only)
+      description: >-
+        The server verifies consecutive Melbourne dates from persisted validated
+        walks with actual movement. Same-day walks count once, including valid
+        walks earning zero points due to rounding or the daily cap. A missed
+        day breaks the run; each run earns 20 points at seven days and 100 points
+        at each 30-day milestone. Earned claims remain collectible after a break.
+        New collections must match the displayed oldest unclaimed milestone.
+        The owner, run start and milestone identify the reward, so no request
+        UUID is required. Collection locks the owner and creates one canonical
+        ledger credit. A retry returns the existing award and current balance,
+        including after the streak capability is disabled. These rewards do not
+        consume the walking/check-in daily cap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StreakCollectionRequest'}
+      responses:
+        '201':
+          description: New streak award; created is true
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreakCollection'}
+        '200':
+          description: Existing award; created is false
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreakCollection'}
+        '400':
+          description: INVALID_STREAK_REQUEST or INVALID_STREAK_MILESTONE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: STREAK_NOT_READY, QUEST_DISABLED or QUALIFICATION_UNAVAILABLE
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -881,23 +928,28 @@ components:
         dog_id to collect, and READY document rows use entitlement_id. COLLECTED
         rows cannot be claimed again and remain only for their Melbourne
         collection date. Unknown kinds or states must not enable an action.
-        DAILY_GOAL and STREAK are reserved kinds and are currently omitted,
-        because their award rules are not enabled.
+        STREAK has no dog or document entitlement; its current_days,
+        milestone_days and run_start_date identify the single progress bar.
+        Clamp its displayed numerator to the milestone while READY. Idle state
+        is zero of seven with a null run start. DAILY_GOAL remains reserved and omitted.
       properties:
-        id: {type: string, description: 'Stable row identity; birthday dog/year, document dog/kind before submission, or reserved entitlement ID'}
+        id: {type: string, description: 'Stable row identity; birthday dog/year, document dog/kind or entitlement ID, streak run/milestone, or streak:idle:7'}
         kind: {type: string, enum: [BIRTHDAY, COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION, VET_CHECKUP, DAILY_GOAL, STREAK]}
         status: {type: string, enum: [IN_PROGRESS, READY, COLLECTED]}
         title: {type: string}
         subtitle: {type: string}
-        subject_name: {type: string, description: Dog name visible to this owner; preserved name snapshot for historical ownership}
+        subject_name: {type: string, description: Dog name or account-level task subject; preserved dog name snapshot for historical ownership}
         photo: {type: string, nullable: true}
         icon: {type: string, description: Suggested SF Symbol name}
         detail: {type: string, description: Qualification and collection explanation}
         reward_points: {type: integer, minimum: 0, description: Collectible amount or the actual collected award; not a wallet balance}
         progress: {type: number, minimum: 0, maximum: 1, nullable: true, description: Null when numeric progress is not defined; do not display as zero percent}
         dog_id: {type: integer, minimum: 1, nullable: true, description: Dog identity or immutable ID snapshot}
-        entitlement_id: {type: integer, minimum: 1, nullable: true, description: Reserved document reward ID; null for birthday and unsubmitted document tasks}
+        entitlement_id: {type: integer, minimum: 1, nullable: true, description: Reserved document reward ID; null for non-document and unsubmitted document tasks}
         collected_at: {type: string, format: date-time, nullable: true, description: Actual award time; null before collection}
+        current_days: {type: integer, minimum: 0, description: STREAK only; verified consecutive days in the represented run}
+        milestone_days: {type: integer, minimum: 7, description: STREAK only; seven or a positive multiple of thirty}
+        run_start_date: {type: string, format: date, nullable: true, description: STREAK only; null when no run or earned milestone is available}
     QuestDashboard:
       type: object
       required: [server_time, timezone, local_date, next_reset_at, tasks]
@@ -931,6 +983,29 @@ components:
         award: {$ref: '#/components/schemas/BirthdayAward'}
         balance: {type: integer, minimum: 0, description: 'Current authoritative wallet balance, including on replay'}
         created: {type: boolean, description: True only when this request created the award; false on replay}
+    StreakCollectionRequest:
+      type: object
+      required: [run_start_date, milestone_days]
+      properties:
+        run_start_date: {type: string, format: date}
+        milestone_days: {type: integer, minimum: 7, description: Seven or a positive multiple of thirty}
+    StreakAward:
+      type: object
+      required: [id, kind, run_start_date, milestone_days, points, awarded_at]
+      properties:
+        id: {type: integer, minimum: 1}
+        kind: {type: string, enum: [STREAK]}
+        run_start_date: {type: string, format: date}
+        milestone_days: {type: integer, minimum: 7}
+        points: {type: integer, enum: [20, 100]}
+        awarded_at: {type: string, format: date-time}
+    StreakCollection:
+      type: object
+      required: [award, balance, created]
+      properties:
+        award: {$ref: '#/components/schemas/StreakAward'}
+        balance: {type: integer, minimum: 0, description: Current authoritative wallet balance}
+        created: {type: boolean}
     DocumentKind:
       type: string
       enum: [COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION, VET_CHECKUP]
