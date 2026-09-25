@@ -14,13 +14,6 @@ enum DocumentKind: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
     var points: Int { self == .vet ? 200 : 300 }
-    var guidance: String {
-        switch self {
-        case .council: return "300 points once per dog. Enter the registration number or attach a PDF."
-        case .microchip: return "300 points per annual registration period. Enter the registration number or attach a PDF and the dates printed on the registration."
-        case .vet: return "200 points per check-up, up to twice per calendar year. Rewarded visits must be at least 60 days apart. Add a photo of the visit evidence."
-        }
-    }
 }
 
 struct DocumentDog: Decodable, Identifiable, Equatable, Sendable {
@@ -65,6 +58,8 @@ struct DocumentSubmission: Decodable, Identifiable, Sendable {
     var rewardStatus: DocumentRewardStatus? = nil
     var rewardPoints: Int? = nil
     var collectedAt: String? = nil
+    var councilName: String? = nil
+    var registrationYear: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, kind, status, filename
@@ -80,6 +75,7 @@ struct DocumentSubmission: Decodable, Identifiable, Sendable {
         case submittedAt = "submitted_at"
         case entitlementID = "entitlement_id", rewardStatus = "reward_status"
         case rewardPoints = "reward_points", collectedAt = "collected_at"
+        case councilName = "council_name", registrationYear = "registration_year"
     }
 }
 
@@ -88,6 +84,20 @@ struct DocumentDashboard: Decodable, Sendable {
     let submissions: [DocumentSubmission]
     let eligibility: [DocumentEligibility]
     var entitlements: [DocumentEntitlement]? = nil
+
+    func latestPendingSubmission(dogID: Int, kind: DocumentKind) -> DocumentSubmission? {
+        submissions.filter { submission in
+            guard submission.dogID == dogID, submission.kind == kind else { return false }
+            if let entitlements {
+                guard let entitlement = entitlements.first(where: { $0.id == submission.entitlementID }) else {
+                    return false
+                }
+                return entitlement.rewardStatus == .ready && entitlement.canCollect
+            }
+            // Compatibility with snapshots from before the entitlement list was added.
+            return submission.rewardStatus == .ready
+        }.max { $0.id < $1.id }
+    }
 }
 
 struct DocumentReceipt: Decodable, Sendable {
@@ -147,10 +157,87 @@ struct DocumentDraft: Equatable, Sendable {
     let kind: DocumentKind
     let registrationNumber: String
     let eventDate: String?
-    let validFrom: String?
-    let validTo: String?
     let filename: String?
     let fileData: Data?
+    var councilName: String? = nil
+    var registrationYear: Int? = nil
+
+    static func registration(dogID: Int, kind: DocumentKind, method: DocumentEvidenceMethod,
+                             number: String, councilName: String, registrationYear: Int,
+                             filename: String?, fileData: Data?, today: Date = Date()) throws -> DocumentDraft {
+        guard kind != .vet else { throw DocumentInputError.invalidKind }
+        if method == .upload {
+            guard let fileData, !fileData.isEmpty, let filename, !filename.isEmpty else {
+                throw DocumentInputError.attachmentRequired
+            }
+            // Switching methods must not submit hidden, stale text fields.
+            return DocumentDraft(dogID: dogID, kind: kind, registrationNumber: "", eventDate: nil,
+                                 filename: filename, fileData: fileData)
+        }
+        let normalized = kind == .microchip ? DocumentRegistration.normalizedMicrochip(number)
+            : number.trimmingCharacters(in: .whitespacesAndNewlines)
+        if kind == .microchip {
+            guard normalized.utf8.count == 15,
+                  normalized.utf8.allSatisfy({ (48...57).contains($0) }) else {
+                throw DocumentInputError.microchipNumber
+            }
+        } else {
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -")
+            guard !normalized.isEmpty, normalized.count <= 100,
+                  normalized.unicodeScalars.allSatisfy(allowed.contains),
+                  normalized.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else {
+                throw DocumentInputError.councilNumber
+            }
+            let council = councilName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !council.isEmpty, council.count <= 100,
+                  !council.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+                throw DocumentInputError.councilName
+            }
+            guard registrationYear == DocumentRegistration.currentCouncilYear(on: today) else {
+                throw DocumentInputError.councilYear
+            }
+            return DocumentDraft(dogID: dogID, kind: kind, registrationNumber: normalized, eventDate: nil,
+                                 filename: nil, fileData: nil, councilName: council, registrationYear: registrationYear)
+        }
+        return DocumentDraft(dogID: dogID, kind: kind, registrationNumber: normalized,
+                             eventDate: nil, filename: nil, fileData: nil)
+    }
+}
+
+enum DocumentEvidenceMethod: String, CaseIterable, Identifiable {
+    case details = "Enter details", upload = "Upload proof"
+    var id: Self { self }
+}
+
+enum DocumentRegistration {
+    static func normalizedMicrochip(_ value: String) -> String {
+        value.filter { !$0.isWhitespace && $0 != "-" }
+    }
+
+    /// Victorian council registration years end on 9 April, in Melbourne time.
+    static func currentCouncilYear(on date: Date = Date()) -> Int {
+        let parts = DogBirthday.calendar.dateComponents([.year, .month, .day], from: date)
+        let hasRenewed = parts.month! > 4 || (parts.month! == 4 && parts.day! >= 10)
+        return parts.year! + (hasRenewed ? 1 : 0)
+    }
+
+    static func councilYearLabel(_ endYear: Int) -> String {
+        "\(endYear - 1)–\(String(format: "%02d", endYear % 100))"
+    }
+}
+
+enum DocumentInputError: LocalizedError {
+    case invalidKind, attachmentRequired, microchipNumber, councilNumber, councilName, councilYear
+    var errorDescription: String? {
+        switch self {
+        case .invalidKind: return "Choose the document Quest again."
+        case .attachmentRequired: return "Choose a PDF, JPG or PNG as proof."
+        case .microchipNumber: return "Enter the 15-digit microchip number. For an older or overseas format, upload your registry certificate."
+        case .councilNumber: return "Enter the Animal ID or registration number using letters, digits, spaces or hyphens (up to 100 characters). For another format, upload your proof."
+        case .councilName: return "Enter the council name (up to 100 characters)."
+        case .councilYear: return "Use your current registration year, or upload your proof."
+        }
+    }
 }
 
 struct DocumentRequest: Encodable, Sendable {
@@ -159,10 +246,10 @@ struct DocumentRequest: Encodable, Sendable {
     let kind: DocumentKind
     let registrationNumber: String?
     let eventDate: String?
-    let validFrom: String?
-    let validTo: String?
     let filename: String?
     let fileBase64: String?
+    let councilName: String?
+    let registrationYear: Int?
 
     init(draft: DocumentDraft, requestID: UUID = UUID()) {
         self.requestID = requestID
@@ -170,10 +257,10 @@ struct DocumentRequest: Encodable, Sendable {
         kind = draft.kind
         registrationNumber = draft.registrationNumber.isEmpty ? nil : draft.registrationNumber
         eventDate = draft.eventDate
-        validFrom = draft.validFrom
-        validTo = draft.validTo
         filename = draft.filename
         fileBase64 = draft.fileData?.base64EncodedString()
+        councilName = draft.councilName
+        registrationYear = draft.registrationYear
     }
 
     enum CodingKeys: String, CodingKey {
@@ -182,8 +269,7 @@ struct DocumentRequest: Encodable, Sendable {
         case dogID = "dog_id"
         case registrationNumber = "registration_number"
         case eventDate = "event_date"
-        case validFrom = "valid_from"
-        case validTo = "valid_to"
         case fileBase64 = "file_base64"
+        case councilName = "council_name", registrationYear = "registration_year"
     }
 }

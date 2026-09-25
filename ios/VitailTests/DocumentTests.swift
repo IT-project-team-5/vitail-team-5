@@ -1,23 +1,107 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Vitail
 
 final class DocumentTests: XCTestCase {
-    func testRequestPreservesDateOnlyValuesAndEncodesFileInBase64() throws {
-        let draft = DocumentDraft(
-            dogID: 7, kind: .microchip, registrationNumber: "ABC-42",
-            eventDate: nil, validFrom: "2026-01-01", validTo: "2026-12-31",
-            filename: "Registration.pdf", fileData: Data([1, 2, 3])
-        )
+    func testUploadRequestOmitsHiddenManualFieldsAndInventedDates() throws {
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .microchip, method: .upload,
+            number: "not a chip number", councilName: "stale council", registrationYear: 2020,
+            filename: "Registration.pdf", fileData: Data([1, 2, 3]))
         let id = UUID()
         let request = DocumentRequest(draft: draft, requestID: id)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
         XCTAssertEqual(json["dog_id"] as? Int, 7)
         XCTAssertEqual(json["kind"] as? String, "MICROCHIP_REGISTRATION")
-        XCTAssertEqual(json["valid_from"] as? String, "2026-01-01")
-        XCTAssertEqual(json["valid_to"] as? String, "2026-12-31")
         XCTAssertEqual(json["file_base64"] as? String, "AQID")
         XCTAssertEqual((json["request_id"] as? String).flatMap(UUID.init(uuidString:)), id)
-        XCTAssertNil(json["event_date"])
+        for key in ["registration_number", "council_name", "registration_year", "event_date", "valid_from", "valid_to"] {
+            XCTAssertNil(json[key], "Upload included hidden \(key)")
+        }
+    }
+
+    func testTypedMicrochipPreservesLeadingZeroAndNormalizesSeparators() throws {
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .microchip, method: .details,
+            number: " 012-345 678 901 234 ", councilName: "", registrationYear: 2027,
+            filename: "hidden.jpg", fileData: Data([1]))
+        XCTAssertEqual(draft.registrationNumber, "012345678901234")
+        XCTAssertNil(draft.fileData)
+        XCTAssertNil(draft.filename)
+        for value in ["1234", "９12345678901234", "91234567890123A", "9123456789012345"] {
+            XCTAssertThrowsError(try DocumentDraft.registration(dogID: 7, kind: .microchip, method: .details,
+                number: value, councilName: "", registrationYear: 2027, filename: nil, fileData: nil))
+        }
+    }
+
+    func testCouncilRequestPreservesIdentifierAndEncodesCurrentYear() throws {
+        let today = try XCTUnwrap(DogBirthday.date(from: "2026-09-25"))
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .council, method: .details,
+            number: " 000-ABC 42 ", councilName: " City of Melbourne ", registrationYear: 2027,
+            filename: nil, fileData: nil, today: today)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(DocumentRequest(draft: draft))) as? [String: Any])
+        XCTAssertEqual(json["registration_number"] as? String, "000-ABC 42")
+        XCTAssertEqual(json["council_name"] as? String, "City of Melbourne")
+        XCTAssertEqual(json["registration_year"] as? Int, 2027)
+        XCTAssertNil(json["valid_from"])
+        XCTAssertNil(json["valid_to"])
+        for (number, council, year) in [("123", "", 2027), ("123", "Yarra", 2026), ("---", "Yarra", 2027), ("ABC/12", "Yarra", 2027)] {
+            XCTAssertThrowsError(try DocumentDraft.registration(dogID: 7, kind: .council, method: .details,
+                number: number, councilName: council, registrationYear: year, filename: nil, fileData: nil, today: today))
+        }
+    }
+
+    func testCouncilYearUsesMelbourneRolloverOnAprilTen() throws {
+        let formatter = ISO8601DateFormatter()
+        let before = try XCTUnwrap(formatter.date(from: "2026-04-09T13:59:59Z"))
+        let after = try XCTUnwrap(formatter.date(from: "2026-04-09T14:00:00Z"))
+        XCTAssertEqual(DocumentRegistration.currentCouncilYear(on: before), 2026)
+        XCTAssertEqual(DocumentRegistration.currentCouncilYear(on: after), 2027)
+        XCTAssertEqual(DocumentRegistration.councilYearLabel(2027), "2026–27")
+    }
+
+    func testPendingSubmissionNeverFallsBackToAnotherDogOrDocumentKindOrCollectedHistory() throws {
+        func submission(_ id: Int, dog: Int, kind: DocumentKind) -> DocumentSubmission {
+            DocumentSubmission(id: id, requestID: UUID(), dogID: dog, dogName: "Dog", kind: kind,
+                status: "SELF_REPORTED", registrationNumber: "123", eventDate: nil, validFrom: nil,
+                validTo: nil, filename: "", fileURL: nil, awardedPoints: 0, submittedAt: "2026-09-25T00:00:00Z",
+                entitlementID: id, rewardStatus: .ready)
+        }
+        var collectedVisit = submission(5, dog: 7, kind: .vet)
+        collectedVisit.rewardStatus = .collected
+        let staleReadyVisit = submission(6, dog: 7, kind: .vet)
+        let dashboard = DocumentDashboard(dogs: [], submissions: [submission(1, dog: 7, kind: .council),
+            submission(2, dog: 7, kind: .council), submission(3, dog: 8, kind: .council),
+            submission(4, dog: 7, kind: .microchip), collectedVisit, staleReadyVisit], eligibility: [],
+            entitlements: (1...4).map { id in
+                DocumentEntitlement(id: id, dogID: id == 3 ? 8 : 7, dogName: "Dog", kind: id == 4 ? .microchip : .council,
+                    rewardStatus: .ready, rewardPoints: 300, collectedAt: nil, canCollect: true)
+            } + [DocumentEntitlement(id: 6, dogID: 7, dogName: "Dog", kind: .vet,
+                rewardStatus: .collected, rewardPoints: 200, collectedAt: "2026-09-25T00:00:00Z", canCollect: false)])
+        XCTAssertEqual(dashboard.latestPendingSubmission(dogID: 7, kind: .council)?.id, 2)
+        XCTAssertNil(dashboard.latestPendingSubmission(dogID: 9, kind: .council))
+        XCTAssertNil(dashboard.latestPendingSubmission(dogID: 7, kind: .vet))
+        XCTAssertEqual(dashboard.latestPendingSubmission(dogID: 7, kind: .microchip)?.id, 4)
+    }
+
+    func testPendingMicrochipSelectsCanonicalEntitlementAndHidesSupersededRewards() {
+        let submissions = [10, 11].map { id in
+            DocumentSubmission(id: id, requestID: UUID(), dogID: 7, dogName: "Coco", kind: .microchip,
+                status: "SELF_REPORTED", registrationNumber: "012345678901234", eventDate: nil,
+                validFrom: nil, validTo: nil, filename: "", fileURL: nil, awardedPoints: 0,
+                submittedAt: "2026-09-25T00:00:00Z", entitlementID: id, rewardStatus: .ready)
+        }
+        let canonical = DocumentEntitlement(id: 10, dogID: 7, dogName: "Coco", kind: .microchip,
+            rewardStatus: .ready, rewardPoints: 300, collectedAt: nil, canCollect: true)
+        let superseded = DocumentEntitlement(id: 11, dogID: 7, dogName: "Coco", kind: .microchip,
+            rewardStatus: .ready, rewardPoints: 300, collectedAt: nil, canCollect: false)
+        var dashboard = DocumentDashboard(dogs: [], submissions: submissions, eligibility: [],
+            entitlements: [canonical, superseded])
+        XCTAssertEqual(dashboard.latestPendingSubmission(dogID: 7, kind: .microchip)?.id, 10)
+        dashboard.entitlements = [DocumentEntitlement(id: 10, dogID: 7, dogName: "Coco", kind: .microchip,
+            rewardStatus: .collected, rewardPoints: 300, collectedAt: "2026-09-25T00:00:00Z", canCollect: false), superseded]
+        XCTAssertNil(dashboard.latestPendingSubmission(dogID: 7, kind: .microchip))
+        dashboard.entitlements = []
+        XCTAssertNil(dashboard.latestPendingSubmission(dogID: 7, kind: .microchip))
     }
 
     func testSelfReportedReceiptDecodesWithoutVerifiedState() throws {
@@ -143,6 +227,31 @@ final class DocumentTests: XCTestCase {
         let succeeded = await model.submit(makeDraft(number: "ABC-42"))
         XCTAssertTrue(succeeded)
         XCTAssertEqual(model.receipt?.awardedPoints, 0)
+    }
+
+    @MainActor
+    func testTypedCouncilReceiptMatchesSubmittedIdentifierCouncilAndYear() async throws {
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .council, method: .details,
+            number: "000123", councilName: "City of Melbourne", registrationYear: 2027,
+            filename: nil, fileData: nil, today: XCTUnwrap(DogBirthday.date(from: "2026-09-25")))
+        let model = DocumentViewModel(service: DocumentControlledService())
+        let succeeded = await model.submit(draft)
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(model.receipt?.submission.registrationNumber, "000123")
+        XCTAssertEqual(model.receipt?.submission.councilName, "City of Melbourne")
+        XCTAssertEqual(model.receipt?.submission.registrationYear, 2027)
+    }
+
+    @MainActor
+    func testUploadReceiptAcceptsBackendEmptyCouncilNameWithoutManualFields() async throws {
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .microchip, method: .upload,
+            number: "", councilName: "", registrationYear: 2027,
+            filename: "certificate.png", fileData: Data([1]))
+        let model = DocumentViewModel(service: DocumentControlledService())
+        let succeeded = await model.submit(draft)
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(model.receipt?.submission.councilName, "")
+        XCTAssertNil(model.receipt?.submission.registrationYear)
     }
 
     @MainActor
@@ -272,6 +381,61 @@ final class DocumentTests: XCTestCase {
         XCTAssertTrue(model.confirmedCollections.isEmpty)
     }
 
+    @MainActor
+    func testFixedDocumentEntryAppearanceSnapshots() async throws {
+        let service = DocumentControlledService()
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            try await snapshot(DocumentSubmissionView(service: service, initialDogID: 7, initialKind: .council),
+                name: "Document-Council-\(mode)", dark: dark)
+            try await snapshot(DocumentSubmissionView(service: service, initialDogID: 7, initialKind: .microchip),
+                name: "Document-Microchip-\(mode)", dark: dark)
+            try await snapshot(DocumentSubmissionView(service: service, initialDogID: 7,
+                initialKind: .council, initialMethod: .upload), name: "Document-Upload-\(mode)", dark: dark, bottom: true)
+        }
+        try await snapshot(DocumentSubmissionView(service: service, initialDogID: 7, initialKind: .council)
+            .environment(\.dynamicTypeSize, .accessibility3), name: "Document-Council-Large-Text", dark: false, bottom: true)
+        try await snapshot(DocumentSubmissionView(service: service, initialDogID: 999, initialKind: .microchip),
+            name: "Document-Missing-Dog", dark: false)
+    }
+
+    @MainActor
+    private func snapshot<Content: View>(_ content: Content, name: String, dark: Bool, bottom: Bool = false) async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let host = UIHostingController(rootView: NavigationStack { content }
+            .vitailAppearance().preferredColorScheme(dark ? .dark : .light))
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+        window.overrideUserInterfaceStyle = dark ? .dark : .light
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        host.view.frame = window.bounds
+        host.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 250_000_000)
+        if bottom, let scroll = firstScrollView(in: host.view) {
+            scroll.setContentOffset(CGPoint(x: 0, y: max(0, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)), animated: false)
+            host.view.layoutIfNeeded()
+        }
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            XCTAssertTrue(window.drawHierarchy(in: window.bounds, afterScreenUpdates: true))
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    private func firstScrollView(in view: UIView) -> UIScrollView? {
+        if let scroll = view as? UIScrollView { return scroll }
+        for child in view.subviews {
+            if let scroll = firstScrollView(in: child) { return scroll }
+        }
+        return nil
+    }
+
     private func makeEntitlement() -> DocumentEntitlement {
         DocumentEntitlement(id: 91, dogID: 7, dogName: "Coco", kind: .council,
             rewardStatus: .ready, rewardPoints: 300, collectedAt: nil, canCollect: true)
@@ -286,7 +450,7 @@ final class DocumentTests: XCTestCase {
 
     private func makeDraft(number: String) -> DocumentDraft {
         DocumentDraft(dogID: 7, kind: .council, registrationNumber: number,
-                      eventDate: nil, validFrom: nil, validTo: nil, filename: nil, fileData: nil)
+                      eventDate: nil, filename: nil, fileData: nil)
     }
 }
 
@@ -309,7 +473,7 @@ private actor DocumentAuthFixture: AuthServing {
 }
 
 private enum DocumentReceiptFault: CaseIterable, Sendable {
-    case id, request, dog, kind, status, date, amount, submissionAmount, balance
+    case id, request, dog, kind, status, date, number, council, year, amount, submissionAmount, balance
 }
 
 private enum DocumentCollectionFault: CaseIterable, Sendable { case id, dog, kind, amount, balance, date }
@@ -351,14 +515,16 @@ private actor DocumentControlledService: DocumentServing {
             dogID: fault == .dog ? 8 : request.dogID, dogName: "Coco",
             kind: fault == .kind ? .vet : request.kind,
             status: fault == .status ? "VERIFIED" : "SELF_REPORTED",
-            registrationNumber: request.registrationNumber ?? "",
+            registrationNumber: fault == .number ? "different" : (request.registrationNumber ?? ""),
             eventDate: fault == .date ? "2026-01-01" : request.eventDate,
-            validFrom: request.validFrom, validTo: request.validTo,
+            validFrom: nil, validTo: nil,
             filename: "", fileURL: nil,
             awardedPoints: fault == .submissionAmount ? 0 : amount,
             submittedAt: "2026-09-25T01:00:00Z",
             entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
-            rewardPoints: readySubmission ? 300 : nil
+            rewardPoints: readySubmission ? 300 : nil,
+            councilName: fault == .council ? "Wrong council" : (request.councilName ?? ""),
+            registrationYear: fault == .year ? 2099 : request.registrationYear
         ), balance: fault == .balance ? -1 : 300, awardedPoints: amount, created: true,
            entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
            rewardPoints: readySubmission ? 300 : nil)

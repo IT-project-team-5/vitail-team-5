@@ -244,7 +244,9 @@ final class DocumentViewModel: ObservableObject {
               submission.dogID == request.dogID, submission.kind == request.kind,
               submission.status == "SELF_REPORTED",
               submission.eventDate == request.eventDate,
-              submission.validFrom == request.validFrom, submission.validTo == request.validTo,
+              submission.registrationNumber == (request.registrationNumber ?? ""),
+              (submission.councilName ?? "") == (request.councilName ?? ""),
+              submission.registrationYear == request.registrationYear,
               submission.awardedPoints == result.awardedPoints,
               result.awardedPoints == 0 || result.awardedPoints == request.kind.points,
               result.balance >= 0 else { throw APIError.invalidResponse }

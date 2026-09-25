@@ -8,108 +8,106 @@ import UIKit
 struct DocumentSubmissionView: View {
     @Environment(\.isPresented) private var isPresented
     @StateObject private var model: DocumentViewModel
-    private let initialDogID: Int?
+    private let dogID: Int
+    private let kind: DocumentKind
     private let onSubmitted: () async -> Void
     private let onChanged: () async -> Void
-    @State private var dogID: Int?
-    @State private var kind: DocumentKind = .council
+    @State private var method: DocumentEvidenceMethod = .details
     @State private var registrationNumber = ""
+    @State private var councilName = ""
+    @State private var registrationYear = DocumentRegistration.currentCouncilYear()
     @State private var eventDate = Date()
-    @State private var validFrom = Date()
-    @State private var validTo = Date()
-    @State private var hasSelectedDates = false
     @State private var importingFile = false
     @State private var photoSelection: PhotosPickerItem?
+    @State private var attachmentGeneration = UUID()
     @State private var fileData: Data?
     @State private var filename: String?
     @State private var validationMessage: String?
+    @State private var isEditing = false
     @State private var preview: DocumentPreviewFile?
     @State private var previewDirectory: URL?
     @State private var isDownloading = false
     @State private var isVisible = true
 
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil,
-         initialDogID: Int? = nil, initialKind: DocumentKind = .council,
+         initialDogID: Int, initialKind: DocumentKind,
+         initialMethod: DocumentEvidenceMethod = .details,
          onSubmitted: @escaping () async -> Void = {}, onChanged: @escaping () async -> Void = {}) {
         _model = StateObject(wrappedValue: DocumentViewModel(service: service, session: session))
-        _kind = State(initialValue: initialKind)
-        self.initialDogID = initialDogID
+        _method = State(initialValue: initialMethod)
+        dogID = initialDogID
+        kind = initialKind
         self.onSubmitted = onSubmitted
         self.onChanged = onChanged
     }
 
-    var body: some View {
-        Form {
-            if let dashboard = model.dashboard {
-                if dashboard.dogs.isEmpty {
-                    Section { Text("Add a dog to your account before submitting documents.") }
-                } else {
-                    submissionForm(dashboard)
-                }
-                if let receipt = model.receipt {
-                    Section {
-                        if let entitlement = model.entitlement(for: receipt.submission) {
-                            rewardRow(entitlement)
-                        } else {
-                            Label("Submitted", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(AppColors.success)
-                            Text("Your evidence has been saved.")
-                        }
-                        Text("Your submission is self-reported and may be checked later.")
-                            .font(.footnote).foregroundStyle(AppColors.secondaryText)
-                    }
-                    .listRowBackground(AppColors.surface)
-                }
-                if !dashboard.submissions.isEmpty {
-                    Section("Your submissions") {
-                        ForEach(dashboard.submissions) { submission in
-                            submissionRow(submission)
-                        }
-                    }
-                    .listRowBackground(AppColors.surface)
-                }
-            } else if model.isLoading {
-                ProgressView("Loading documents…")
-            } else {
-                Button("Try Again") { Task { await model.load() } }
-            }
-            if let message = validationMessage ?? model.errorMessage {
-                Section { Text(message).foregroundStyle(AppColors.error) }
-                    .listRowBackground(AppColors.surface)
-            }
+    private var currentSubmission: DocumentSubmission? {
+        if let receipt = model.receipt, receipt.submission.dogID == dogID, receipt.submission.kind == kind {
+            return receipt.submission
         }
-        .scrollContentBackground(.hidden)
+        return model.dashboard?.latestPendingSubmission(dogID: dogID, kind: kind)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: AppSpacing.large) {
+                if let dashboard = model.dashboard {
+                    if let dog = dashboard.dogs.first(where: { $0.id == dogID }) {
+                        HStack(spacing: AppSpacing.small) {
+                            AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
+                            Text(dog.name).font(.headline)
+                        }
+                        tutorial
+                        if let submission = currentSubmission, !isEditing {
+                            submissionCard(submission)
+                            Button(kind == .vet ? "Add another check-up" : "Update submission") {
+                                isEditing = true
+                            }
+                        } else {
+                            submissionForm
+                        }
+                    } else {
+                        Text("This dog is no longer available. Close this page and refresh your Quests.")
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                } else if model.isLoading {
+                    ProgressView("Loading…")
+                } else {
+                    Button("Try again") { Task { await model.load() } }
+                }
+                if let message = validationMessage ?? model.errorMessage {
+                    Text(message).font(.footnote).foregroundStyle(AppColors.error)
+                    if model.errorMessage != nil, model.dashboard != nil {
+                        Button("Refresh") { Task { await model.load() } }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.large)
+        }
         .background(AppColors.background)
-        .navigationTitle("Documents")
+        .foregroundStyle(AppColors.primaryText)
+        .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.inline)
         .disabled(model.isSubmitting || model.collectingID != nil || !model.isActive)
-        .task {
-            await model.load()
-            if dogID == nil {
-                dogID = model.dashboard?.dogs.first(where: { $0.id == initialDogID })?.id
-                    ?? model.dashboard?.dogs.first?.id
-            }
-        }
-        .onChange(of: kind) { _, _ in
-            fileData = nil
-            filename = nil
-            photoSelection = nil
-            registrationNumber = ""
-            hasSelectedDates = false
+        .task { await model.load() }
+        .onChange(of: method) { _, _ in
+            clearAttachment()
             validationMessage = nil
         }
-        .fileImporter(isPresented: $importingFile, allowedContentTypes: [.pdf]) { result in
+        .fileImporter(isPresented: $importingFile, allowedContentTypes: [.pdf, .jpeg, .png]) { result in
             guard model.isActive else { return }
-            do { try importPDF(result.get()) }
+            do { try importFile(result.get()) }
             catch { validationMessage = error.localizedDescription }
         }
         .onChange(of: photoSelection) { _, selected in
             guard let selected else { return }
-            Task { await importPhoto(selected) }
+            let generation = UUID()
+            attachmentGeneration = generation
+            Task { await importPhoto(selected, generation: generation) }
         }
         .sheet(item: $preview, onDismiss: clearPreview) { file in
-            DocumentPreviewController(url: file.url)
-                .ignoresSafeArea()
+            DocumentPreviewController(url: file.url).ignoresSafeArea()
         }
         .onAppear { isVisible = true }
         .onChange(of: isPresented) { _, presented in
@@ -125,141 +123,183 @@ struct DocumentSubmissionView: View {
         }
     }
 
-    @ViewBuilder
-    private func submissionForm(_ dashboard: DocumentDashboard) -> some View {
-        Section {
-            Picker("Dog", selection: $dogID) {
-                ForEach(dashboard.dogs) { dog in Text(dog.name).tag(Optional(dog.id)) }
-            }
-            Picker("Document", selection: $kind) {
-                ForEach(DocumentKind.allCases) { item in Text(item.title).tag(item) }
-            }
-            Text(kind.guidance).font(.footnote).foregroundStyle(AppColors.secondaryText)
-            if let eligibility = dashboard.eligibility.first(where: { $0.dogID == dogID && $0.kind == kind }) {
-                Text(eligibility.message).font(.footnote).foregroundStyle(AppColors.secondaryText)
-            }
-        }
-        .listRowBackground(AppColors.surface)
-
-        Section("Evidence") {
-            if kind != .vet {
-                TextField("Registration number (or attach PDF)", text: $registrationNumber)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                Button { importingFile = true } label: { Label("Choose PDF", systemImage: "doc.badge.plus") }
-            } else {
-                PhotosPicker(selection: $photoSelection, matching: .images) {
-                    Label("Choose check-up photo", systemImage: "photo.badge.plus")
+    private var tutorial: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            switch kind {
+            case .council:
+                guide("Already registered?", "Find the Animal ID or registration number on your council's current certificate or registration confirmation. Ask your council for a copy if it is missing. Do not use a payment reference or tag number.")
+                guide("Not registered yet?", "Microchip your dog, then apply online or by paper form to the council where your dog lives. Wait for its completed-registration confirmation before submitting here.")
+                Link("Find your council", destination: URL(string: "https://www.vec.vic.gov.au/electoral-boundaries/which-boundaries-cover-where-i-live")!)
+                Link("City of Melbourne: apply or contact the council", destination: URL(string: "https://ablis.business.gov.au/service/vic/registration-of-cats-and-dogs-city-of-melbourne/28570")!)
+            case .microchip:
+                guide("Already microchipped?", "Find the number in your pet's records or ask a vet to scan your dog. Use Pet Address to find the registry. For a certificate: CAR → My Animals → your dog → Generate Certificate; AAR → sign in → print registration certificate.")
+                Link("Find your registry with Pet Address", destination: URL(string: "https://www.petaddress.com.au/")!)
+                HStack(spacing: AppSpacing.large) {
+                    Link("CAR help", destination: URL(string: "https://car.com.au/apps/help-center")!)
+                    Link("AAR pet owners", destination: URL(string: "https://www.aar.org.au/pet-owners/")!)
                 }
-            }
-            if let filename, let fileData {
-                Label(filename, systemImage: kind == .vet ? "photo" : "doc")
-                Text(ByteCountFormatter.string(fromByteCount: Int64(fileData.count), countStyle: .file))
-                    .font(.caption).foregroundStyle(AppColors.secondaryText)
-                Button("Remove attachment", role: .destructive) {
-                    self.fileData = nil; self.filename = nil; photoSelection = nil
-                }
+                guide("Not registered yet?", "Book a vet for microchipping and registration. Already has a chip? Ask the registry to register or transfer it to you. Finish any required verification or transfer before submitting.")
+                Link("Victoria's microchipping guide", destination: URL(string: "https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/microchipping-of-dogs-and-cats")!)
+            case .vet:
+                guide("After your check-up", "Add a photo of your dog's vet visit evidence and the visit date. You can earn 200 points for up to two check-ups per year, at least 60 days apart.")
             }
         }
-        .listRowBackground(AppColors.surface)
-
-        if kind != .council {
-            Section(kind == .vet ? "Visit date" : "Annual registration period") {
-                if kind == .vet {
-                    DatePicker("Check-up date", selection: $eventDate, in: ...Date(), displayedComponents: .date)
-                } else {
-                    DatePicker("Valid from", selection: $validFrom, in: ...Date(), displayedComponents: .date)
-                    DatePicker("Valid until", selection: $validTo, displayedComponents: .date)
-                    Text("Enter a full annual period covering today. The end date should be the first anniversary or the day before.")
-                        .font(.footnote).foregroundStyle(AppColors.secondaryText)
-                }
-                Toggle("I confirm these dates match my evidence", isOn: $hasSelectedDates)
-                    .font(.footnote)
-            }
-            .environment(\.calendar, DogBirthday.calendar)
-            .environment(\.timeZone, DogBirthday.timeZone)
-            .listRowBackground(AppColors.surface)
-        }
-        Section {
-            Button {
-                Task { await submit() }
-            } label: {
-                HStack {
-                    if model.isSubmitting { ProgressView() }
-                    Text(model.isSubmitting ? "Submitting…" : "Submit")
-                        .fontWeight(.semibold)
-                }.frame(maxWidth: .infinity)
-            }
-            Text("Submit your evidence, then collect the reward. Updated evidence uses the same reward and adds no extra points.")
-                .font(.footnote).foregroundStyle(AppColors.secondaryText)
-        }
-        .listRowBackground(AppColors.surface)
+        .font(.subheadline)
     }
 
-    private func submissionRow(_ submission: DocumentSubmission) -> some View {
+    private func guide(_ title: String, _ body: String) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
-            Text(submission.kind.title).font(.headline)
-            Text("\(submission.dogName) · Submitted")
-                .font(.subheadline).foregroundStyle(AppColors.secondaryText)
-            if let entitlement = model.entitlement(for: submission), model.receipt?.submission.id != submission.id {
-                rewardRow(entitlement)
+            Text(title).font(.headline)
+            Text(body).foregroundStyle(AppColors.secondaryText)
+        }
+    }
+
+    private var submissionForm: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            if kind != .vet {
+                Picker("Submission method", selection: $method) {
+                    ForEach(DocumentEvidenceMethod.allCases) { method in Text(method.rawValue).tag(method) }
+                }
+                .pickerStyle(.segmented)
             }
-            if !submission.registrationNumber.isEmpty { Text(submission.registrationNumber).font(.footnote) }
-            if let date = submission.eventDate { Text(DogBirthday.display(date)).font(.footnote) }
-            if let start = submission.validFrom, let end = submission.validTo {
-                Text("\(DogBirthday.display(start)) – \(DogBirthday.display(end))").font(.footnote)
+            if kind != .vet && method == .details {
+                if kind == .council {
+                    entryField("Council name", text: $councilName)
+                    entryField("Animal ID / registration number", text: $registrationNumber)
+                    Picker("Registration year", selection: $registrationYear) {
+                        let year = DocumentRegistration.currentCouncilYear()
+                        ForEach([year - 1, year, year + 1], id: \.self) { value in
+                            Text(DocumentRegistration.councilYearLabel(value)).tag(value)
+                        }
+                    }
+                    Text("Use the current year shown on your completed registration. For other formats, choose Upload proof.")
+                        .font(.caption).foregroundStyle(AppColors.secondaryText)
+                } else {
+                    entryField("15-digit microchip number", text: $registrationNumber)
+                        .keyboardType(.numbersAndPunctuation)
+                    Text("Spaces and hyphens are OK. For an older or overseas number, choose Upload proof.")
+                        .font(.caption).foregroundStyle(AppColors.secondaryText)
+                }
+            } else {
+                attachmentPicker
             }
+            if kind == .vet {
+                DatePicker("Visit date", selection: $eventDate, in: ...Date(), displayedComponents: .date)
+                    .environment(\.calendar, DogBirthday.calendar)
+                    .environment(\.timeZone, DogBirthday.timeZone)
+            }
+            PrimaryButton(title: model.isSubmitting ? "Submitting…" : "Submit",
+                          isLoading: model.isSubmitting) {
+                Task { await submit() }
+            }
+            Text("Submitted details are self-reported and may be checked later.")
+                .font(.caption).foregroundStyle(AppColors.secondaryText)
+            if isEditing {
+                Button("Cancel") { isEditing = false; validationMessage = nil }
+            }
+        }
+        .padding(AppSpacing.medium)
+        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+    }
+
+    private func entryField(_ title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
+            Text(title).font(.subheadline.weight(.medium))
+            TextField(title, text: text)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+    }
+
+    private var attachmentPicker: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Text(kind == .vet ? "Upload visit evidence" : "Upload proof").font(.headline)
+            if kind != .vet {
+                Text(kind == .council
+                     ? "Show the council, your dog, registration number and current registration year on a certificate or completed-registration email."
+                     : "Show the registry, microchip number and dog or owner details on your registration certificate.")
+                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                Button { importingFile = true } label: { Label("Choose file", systemImage: "doc.badge.plus") }
+            }
+            PhotosPicker(selection: $photoSelection, matching: .images) {
+                Label("Choose photo", systemImage: "photo.badge.plus")
+            }
+            Text(kind == .vet ? "A clear photo, up to 4 MB." : "PDF, JPG or PNG · up to 4 MB. Photos and screenshots are welcome.")
+                .font(.caption).foregroundStyle(AppColors.secondaryText)
+            if let filename {
+                Label(filename, systemImage: "paperclip").font(.subheadline)
+                Button("Remove attachment", role: .destructive, action: clearAttachment)
+            }
+        }
+    }
+
+    private func submissionCard(_ submission: DocumentSubmission) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Label("Submitted", systemImage: "checkmark.circle.fill").foregroundStyle(AppColors.success)
+            if let entitlement = model.entitlement(for: submission) { rewardRow(entitlement) }
+            if !submission.registrationNumber.isEmpty {
+                Text(submission.registrationNumber).font(.subheadline).textSelection(.enabled)
+            }
+            if let council = submission.councilName, !council.isEmpty { Text(council).font(.subheadline) }
+            if let year = submission.registrationYear {
+                Text(DocumentRegistration.councilYearLabel(year)).font(.subheadline)
+            }
+            if let date = submission.eventDate { Text(DogBirthday.display(date)).font(.subheadline) }
             if submission.fileURL != nil {
                 Button { Task { await open(submission) } } label: {
                     Label("View attachment", systemImage: "doc.text.magnifyingglass")
                 }.disabled(isDownloading)
             }
         }
-        .padding(.vertical, AppSpacing.small)
+        .padding(AppSpacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
     }
 
     @ViewBuilder
     private func rewardRow(_ entitlement: DocumentEntitlement) -> some View {
         if model.isCollected(entitlement) {
-            Label("Collected · \(entitlement.rewardPoints) points", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(AppColors.success)
-        } else {
-            Text("Ready to collect · \(entitlement.rewardPoints) points").font(.headline)
-            if entitlement.canCollect {
-                Button {
-                    Task {
-                        if await model.collect(entitlement), model.isActive, isVisible { await onSubmitted() }
-                    }
-                } label: {
-                    HStack {
-                        if model.collectingID == entitlement.id { ProgressView() }
-                        Text(model.collectingID == entitlement.id ? "Collecting…" : "Collect \(entitlement.rewardPoints) points")
-                    }
-                }.disabled(!model.canCollect(entitlement))
+            Text("Collected · \(entitlement.rewardPoints) points").foregroundStyle(AppColors.secondaryText)
+        } else if entitlement.canCollect {
+            PrimaryButton(title: "Collect \(entitlement.rewardPoints) points",
+                          isLoading: model.collectingID == entitlement.id,
+                          isDisabled: !model.canCollect(entitlement)) {
+                Task {
+                    if await model.collect(entitlement), model.isActive, isVisible { await onSubmitted() }
+                }
             }
+        } else {
+            Text("Reward unavailable").foregroundStyle(AppColors.secondaryText)
         }
     }
 
     private func submit() async {
         validationMessage = nil
-        guard let dogID else { validationMessage = "Choose a dog."; return }
-        let number = registrationNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard kind == .vet ? fileData != nil : (!number.isEmpty || fileData != nil) else {
-            validationMessage = kind == .vet ? "Choose a check-up photo." : "Enter the registration number or attach a PDF."
+        guard model.dashboard?.dogs.contains(where: { $0.id == dogID }) == true else {
+            validationMessage = "This dog is no longer available. Refresh your Quests."
             return
         }
-        guard kind == .council || hasSelectedDates else { validationMessage = "Confirm the dates shown on your evidence."; return }
-        let draft = DocumentDraft(
-            dogID: dogID, kind: kind, registrationNumber: kind == .vet ? "" : number,
-            eventDate: kind == .vet ? DogBirthday.string(from: eventDate) : nil,
-            validFrom: kind == .microchip ? DogBirthday.string(from: validFrom) : nil,
-            validTo: kind == .microchip ? DogBirthday.string(from: validTo) : nil,
-            filename: filename, fileData: fileData
-        )
-        if await model.submit(draft), model.isActive, isVisible { await onChanged() }
+        do {
+            let draft: DocumentDraft
+            if kind == .vet {
+                guard let fileData, let filename else { throw DocumentInputError.attachmentRequired }
+                draft = DocumentDraft(dogID: dogID, kind: kind, registrationNumber: "",
+                                      eventDate: DogBirthday.string(from: eventDate), filename: filename, fileData: fileData)
+            } else {
+                draft = try DocumentDraft.registration(dogID: dogID, kind: kind, method: method,
+                    number: registrationNumber, councilName: councilName, registrationYear: registrationYear,
+                    filename: filename, fileData: fileData)
+            }
+            if await model.submit(draft), model.isActive, isVisible {
+                isEditing = false
+                clearAttachment()
+                await onChanged()
+            }
+        } catch { validationMessage = error.localizedDescription }
     }
 
-    private func importPDF(_ url: URL) throws {
+    private func importFile(_ url: URL) throws {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         if let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 4 * 1024 * 1024 {
@@ -267,13 +307,24 @@ struct DocumentSubmissionView: View {
         }
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         guard data.count <= 4 * 1024 * 1024 else { throw DocumentFileError.tooLarge }
-        guard data.starts(with: Data("%PDF-".utf8)) else { throw DocumentFileError.invalidFile }
+        if !data.starts(with: Data("%PDF-".utf8)) {
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let type = CGImageSourceGetType(source) as String?,
+                  [UTType.jpeg.identifier, UTType.png.identifier].contains(type),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Int,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Int,
+                  width > 0, height > 0, width <= 16_000_000 / height else {
+                throw DocumentFileError.invalidFile
+            }
+        }
+        clearAttachment()
         fileData = data
         filename = String(url.lastPathComponent.prefix(150))
         validationMessage = nil
     }
 
-    private func importPhoto(_ item: PhotosPickerItem) async {
+    private func importPhoto(_ item: PhotosPickerItem, generation: UUID) async {
         do {
             guard let original = try await item.loadTransferable(type: Data.self),
                   let source = CGImageSourceCreateWithData(original as CFData, nil),
@@ -284,13 +335,23 @@ struct DocumentSubmissionView: View {
                   ] as CFDictionary), let data = UIImage(cgImage: image).jpegData(compressionQuality: 0.9)
             else { throw DocumentFileError.invalidFile }
             guard data.count <= 4 * 1024 * 1024 else { throw DocumentFileError.tooLarge }
-            guard kind == .vet, model.isActive, !Task.isCancelled else { return }
+            guard attachmentGeneration == generation, model.isActive, !Task.isCancelled,
+                  kind == .vet || method == .upload else { return }
             fileData = data
-            filename = "Vet check-up.jpg"
+            filename = "\(kind.title).jpg"
             validationMessage = nil
         } catch {
-            if model.isActive, !Task.isCancelled { validationMessage = error.localizedDescription }
+            if attachmentGeneration == generation, model.isActive, !Task.isCancelled {
+                validationMessage = error.localizedDescription
+            }
         }
+    }
+
+    private func clearAttachment() {
+        attachmentGeneration = UUID()
+        fileData = nil
+        filename = nil
+        photoSelection = nil
     }
 
     private func open(_ submission: DocumentSubmission) async {
@@ -308,9 +369,7 @@ struct DocumentSubmissionView: View {
             preview = DocumentPreviewFile(url: url)
         } catch {
             clearPreview()
-            if model.isActive, isVisible, !(error is CancellationError) {
-                validationMessage = error.localizedDescription
-            }
+            if model.isActive, isVisible, !(error is CancellationError) { validationMessage = error.localizedDescription }
         }
     }
 
@@ -322,10 +381,9 @@ struct DocumentSubmissionView: View {
     private func clearSensitiveData() {
         preview = nil
         clearPreview()
-        fileData = nil
-        filename = nil
-        photoSelection = nil
+        clearAttachment()
         registrationNumber = ""
+        councilName = ""
         validationMessage = nil
     }
 
@@ -340,7 +398,7 @@ private enum DocumentFileError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .tooLarge: return "Choose a file up to 4 MB."
-        case .invalidFile: return "The selected file could not be read. Please choose another."
+        case .invalidFile: return "Choose a readable PDF, JPG or PNG. Images must be no larger than 16 megapixels."
         }
     }
 }

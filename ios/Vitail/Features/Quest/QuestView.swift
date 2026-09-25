@@ -62,7 +62,14 @@ struct QuestView: View {
 
     private func taskRows(_ tasks: [QuestTask]) -> some View {
         ForEach(tasks) { task in
-            Button { selectedTask = task } label: { QuestTaskRow(task: task) }
+            Button {
+                if task.status == .inProgress, let kind = task.documentKind,
+                   let dogID = task.dogID, let onOpenDocuments {
+                    onOpenDocuments(dogID, kind)
+                } else {
+                    selectedTask = task
+                }
+            } label: { QuestTaskRow(task: task) }
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens task details")
         }
