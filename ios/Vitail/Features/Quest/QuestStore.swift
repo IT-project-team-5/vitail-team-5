@@ -41,6 +41,10 @@ final class QuestStore: ObservableObject {
     var visibleTasks: [QuestTask] {
         allTasks.filter { task in
             guard task.isSupported else { return false }
+            if task.isStreak {
+                // Earned rewards survive a break; cached live progress must await a new-day snapshot.
+                return task.status == .ready || (task.status == .inProgress && snapshot?.localDate == displayDate)
+            }
             if task.status == .collected {
                 guard let date = task.collectedAt.flatMap(QuestCalendar.parse) else { return false }
                 return QuestCalendar.dateString(date) == displayDate
@@ -59,15 +63,16 @@ final class QuestStore: ObservableObject {
             !serverTasks.contains { $0.id == confirmed.id && $0.status == .collected }
         }
         let filtered = serverTasks.filter { task in
+            if task.isStreak && confirmedCollections[task.id] != nil { return false }
             // A delayed pre-submission row must not offer the same upload again
             // while its entitlement collection is awaiting a fresh server view.
-            task.status != .inProgress || !unacknowledged.contains {
+            return task.status != .inProgress || !unacknowledged.contains {
                 $0.documentKind != nil && $0.kind == task.kind && $0.dogID == task.dogID
                     && $0.collectedAt.flatMap(QuestCalendar.parse).map(QuestCalendar.dateString) == displayDate
             }
         }
         var tasks = Dictionary(filtered.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        for (id, task) in confirmedCollections { tasks[id] = task }
+        for (id, task) in confirmedCollections where !task.isStreak { tasks[id] = task }
         return Array(tasks.values)
     }
     private var displayDate: String? {
@@ -75,10 +80,13 @@ final class QuestStore: ObservableObject {
         return QuestCalendar.dateString(serverDate.addingTimeInterval(max(0, now().timeIntervalSince(receivedAt))))
     }
     func task(id: String) -> QuestTask? { visibleTasks.first { $0.id == id } }
+    func detailTask(id: String) -> QuestTask? {
+        task(id: id) ?? confirmedCollections[id].flatMap { $0.isStreak ? $0 : nil }
+    }
     func canCollect(_ task: QuestTask) -> Bool {
         guard isActive, isCurrentOwner, !isRefreshing, collectingTaskID == nil,
-              self.task(id: task.id)?.status == .ready, task.isSupported,
-              let dogID = task.dogID, dogID > 0 else { return false }
+              self.task(id: task.id) == task, task.status == .ready, task.isSupported else { return false }
+        if task.isStreak { return true }
         return task.rewardPoints == (task.isBirthday ? 60 : task.documentKind?.points)
     }
 
@@ -98,7 +106,7 @@ final class QuestStore: ObservableObject {
     }
 
     func collect(taskID: String) async {
-        guard let selected = task(id: taskID), canCollect(selected), let dogID = selected.dogID else { return }
+        guard let selected = task(id: taskID), canCollect(selected) else { return }
         let requestGeneration = generation
         let expectedYear = snapshot.flatMap { Int($0.localDate.prefix(4)) }
         collectingTaskID = taskID
@@ -107,7 +115,19 @@ final class QuestStore: ObservableObject {
             guard let self else { return }
             do {
                 let receipt: QuestAwardReceipt
-                if selected.isBirthday {
+                if selected.isStreak {
+                    guard let runStartDate = selected.runStartDate, let milestoneDays = selected.milestoneDays else {
+                        throw APIError.invalidResponse
+                    }
+                    let request = StreakCollectRequest(runStartDate: runStartDate, milestoneDays: milestoneDays)
+                    let result = try await service.collectStreak(request)
+                    guard result.award.id > 0, result.award.kind == "STREAK",
+                          result.award.runStartDate == runStartDate, result.award.milestoneDays == milestoneDays,
+                          result.award.points == selected.rewardPoints else { throw APIError.invalidResponse }
+                    receipt = QuestAwardReceipt(kind: result.award.kind, dogID: nil, points: result.award.points,
+                                                balance: result.balance, collectedAt: result.award.awardedAt, created: result.created)
+                } else if selected.isBirthday {
+                    guard let dogID = selected.dogID else { throw APIError.invalidResponse }
                     let result = try await service.collectBirthday(dogID: dogID)
                     guard result.award.id > 0, result.award.dogID == dogID,
                           result.award.year == expectedYear, result.award.kind == "BIRTHDAY",
@@ -115,7 +135,7 @@ final class QuestStore: ObservableObject {
                     receipt = QuestAwardReceipt(kind: result.award.kind, dogID: dogID, points: result.award.points,
                                                 balance: result.balance, collectedAt: result.award.awardedAt, created: result.created)
                 } else {
-                    guard let entitlementID = selected.entitlementID else { throw APIError.invalidResponse }
+                    guard let dogID = selected.dogID, let entitlementID = selected.entitlementID else { throw APIError.invalidResponse }
                     let result = try await service.collectDocument(entitlementID: entitlementID)
                     guard result.entitlementID == entitlementID, result.dogID == dogID,
                           result.kind == selected.documentKind, result.points == selected.rewardPoints else { throw APIError.invalidResponse }
@@ -125,6 +145,14 @@ final class QuestStore: ObservableObject {
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
                 guard receipt.balance >= 0, receipt.points > 0,
                       QuestCalendar.parse(receipt.collectedAt) != nil else { throw APIError.invalidResponse }
+                if selected.isStreak {
+                    guard let run = selected.runStartDate.flatMap(DogBirthday.date),
+                          let awarded = QuestCalendar.parse(receipt.collectedAt), let milestone = selected.milestoneDays,
+                          let days = DogBirthday.calendar.dateComponents([.day],
+                              from: DogBirthday.calendar.startOfDay(for: run),
+                              to: DogBirthday.calendar.startOfDay(for: awarded)).day,
+                          days >= milestone - 1 else { throw APIError.invalidResponse }
+                }
                 confirmedCollections[taskID] = selected.collected(at: receipt.collectedAt)
                 await onAward?(receipt)
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
@@ -168,6 +196,11 @@ final class QuestStore: ObservableObject {
             guard let timestamp = QuestCalendar.parse(result.serverTime), result.timezone == "Australia/Melbourne",
                   QuestCalendar.dateString(timestamp) == result.localDate,
                   Set(result.tasks.map(\.id)).count == result.tasks.count else { throw APIError.invalidResponse }
+            let streakTasks = result.tasks.filter(\.isStreak)
+            guard streakTasks.count <= 1, streakTasks.allSatisfy({ task in
+                task.isSupported && (task.status == .ready || task.status == .inProgress)
+                    && (task.runStartDate.map { $0 <= result.localDate } ?? true)
+            }) else { throw APIError.invalidResponse }
             guard serverDate.map({ timestamp >= $0 }) ?? true,
                   displayDate.map({ result.localDate >= $0 }) ?? true else { return }
             for task in result.tasks where task.status == .collected && task.isSupported {

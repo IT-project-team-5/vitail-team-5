@@ -4,6 +4,7 @@ protocol QuestServing: Sendable {
     func fetchQuests() async throws -> QuestSnapshot
     func collectBirthday(dogID: Int) async throws -> BirthdayCollectResponse
     func collectDocument(entitlementID: Int) async throws -> DocumentCollectionReceipt
+    func collectStreak(_ request: StreakCollectRequest) async throws -> StreakCollectResponse
 }
 
 actor QuestService: QuestServing {
@@ -23,5 +24,9 @@ actor QuestService: QuestServing {
 
     func collectDocument(entitlementID: Int) async throws -> DocumentCollectionReceipt {
         try await apiClient.post("/api/quests/documents/entitlements/\(entitlementID)/collect/", body: EmptyRequestBody())
+    }
+
+    func collectStreak(_ request: StreakCollectRequest) async throws -> StreakCollectResponse {
+        try await apiClient.post("/api/quests/streaks/collect/", body: request)
     }
 }

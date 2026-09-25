@@ -1,5 +1,38 @@
 import SwiftUI
 
+/// The compact progress row stays passive; its parent opens the milestone details.
+struct StreakProgressView: View {
+    let currentDays: Int
+    let targetDays: Int
+    var isReady = false
+
+    var body: some View {
+        if let progress = StreakProgressValue(currentDays: currentDays, targetDays: targetDays) {
+            VStack(alignment: .leading, spacing: AppSpacing.small) {
+                Text(progress.label)
+                    .font(.headline)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+                ProgressView(value: progress.fraction)
+                    .progressViewStyle(.linear)
+                    .tint(AppColors.brand)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppSpacing.medium)
+            .foregroundStyle(AppColors.primaryText)
+            .background(isReady ? AppColors.brand.opacity(0.12) : AppColors.surface,
+                        in: RoundedRectangle(cornerRadius: AppRadius.card))
+            .overlay {
+                if isReady { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Streak progress")
+            .accessibilityValue(progress.accessibilityValue)
+        }
+    }
+}
+
 struct QuestView: View {
     @ObservedObject var store: QuestStore
     @ObservedObject var checkIns: CheckInProgressStore
@@ -69,7 +102,14 @@ struct QuestView: View {
                 } else {
                     selectedTask = task
                 }
-            } label: { QuestTaskRow(task: task) }
+            } label: {
+                if task.isStreak, let progress = task.streakProgress {
+                    StreakProgressView(currentDays: progress.currentDays, targetDays: progress.targetDays,
+                                       isReady: task.status == .ready)
+                } else {
+                    QuestTaskRow(task: task)
+                }
+            }
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens task details")
         }
@@ -137,12 +177,18 @@ struct QuestDetailView: View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.large) {
-                    if let task = store.task(id: taskID) {
-                        HStack(spacing: AppSpacing.medium) {
-                            AvatarView(url: task.photo, name: task.subjectName, systemImage: "dog.fill", size: 64)
-                            Text(task.subjectName).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+                    if let task = store.detailTask(id: taskID) {
+                        if !task.isStreak {
+                            HStack(spacing: AppSpacing.medium) {
+                                AvatarView(url: task.photo, name: task.subjectName, systemImage: "dog.fill", size: 64)
+                                Text(task.subjectName).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         Text(task.title).font(.title2.bold())
+                        if task.isStreak, let progress = task.streakProgress {
+                            StreakProgressView(currentDays: progress.currentDays, targetDays: progress.targetDays,
+                                               isReady: task.status == .ready)
+                        }
                         Text(task.detail).foregroundStyle(AppColors.secondaryText)
                         if task.status == .collected {
                             Label("Collected · \(task.rewardPoints) points", systemImage: "checkmark.circle.fill")

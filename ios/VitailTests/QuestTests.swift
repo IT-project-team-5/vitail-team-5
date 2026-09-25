@@ -6,6 +6,233 @@ import XCTest
 
 @MainActor
 final class QuestTests: XCTestCase {
+    func testStreakProgressSupportsSevenThenThirtyDayMilestones() throws {
+        for (current, target) in [(0, 7), (3, 7), (7, 7), (8, 30), (29, 30), (30, 30), (45, 60), (60, 60), (89, 90)] {
+            let progress = try XCTUnwrap(StreakProgressValue(currentDays: current, targetDays: target))
+            XCTAssertEqual(progress.label, "\(current) / \(target)")
+            XCTAssertEqual(progress.fraction, Double(current) / Double(target), accuracy: 0.000_001)
+            XCTAssertEqual(progress.accessibilityValue, "\(current) of \(target) days")
+        }
+    }
+
+    func testStreakProgressClampsDaysAndRejectsInvalidMilestones() throws {
+        let negative = try XCTUnwrap(StreakProgressValue(currentDays: Int.min, targetDays: 7))
+        XCTAssertEqual(negative.label, "0 / 7")
+        XCTAssertEqual(negative.fraction, 0)
+        let ready = try XCTUnwrap(StreakProgressValue(currentDays: Int.max, targetDays: 60))
+        XCTAssertEqual(ready.label, "60 / 60")
+        XCTAssertEqual(ready.fraction, 1)
+        let largeTarget = Int.max / 30 * 30
+        let large = try XCTUnwrap(StreakProgressValue(currentDays: Int.max, targetDays: largeTarget))
+        XCTAssertTrue(large.fraction.isFinite)
+        XCTAssertEqual(large.fraction, 1)
+        for invalid in [Int.min, -30, -7, 0, 1, 6, 8, 29, 31, 59, Int.max] {
+            XCTAssertNil(StreakProgressValue(currentDays: 3, targetDays: invalid))
+        }
+    }
+
+    func testStreakProgressAppearanceSnapshots() async throws {
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            try await snapshot(streakSamples, name: "Quest-Streak-Progress-\(mode)", dark: dark)
+        }
+        try await snapshot(streakSamples.environment(\.dynamicTypeSize, .accessibility3),
+            name: "Quest-Streak-Progress-Large-Text", dark: false)
+    }
+
+    func testStreakTaskDecodesExplicitDaysAndEnforcesMilestoneContract() throws {
+        let task = try JSONDecoder().decode(QuestTask.self, from: Data(QuestFixture.streakTaskJSON.utf8))
+        XCTAssertTrue(task.isSupported)
+        XCTAssertEqual(task.currentDays, 8)
+        XCTAssertEqual(task.milestoneDays, 7)
+        XCTAssertEqual(task.runStartDate, "2026-09-01")
+        XCTAssertEqual(task.streakProgress?.label, "7 / 7")
+        XCTAssertTrue(QuestFixture.streak(current: 0, run: nil, status: .inProgress).isSupported)
+        XCTAssertTrue(QuestFixture.streak(current: 29, milestone: 30, status: .inProgress).isSupported)
+        for invalid in [QuestFixture.streak(current: -1), QuestFixture.streak(milestone: 10),
+                        QuestFixture.streak(current: 6), QuestFixture.streak(run: "not-a-date"),
+                        QuestFixture.streak(run: nil), QuestFixture.streak(current: 7, status: .inProgress),
+                        QuestFixture.streak(points: 100)] {
+            XCTAssertFalse(invalid.isSupported, "Accepted invalid streak \(invalid)")
+        }
+    }
+
+    func testStreakProgressWaitsForNewDayRefreshWhileEarnedRewardRemainsVisible() async {
+        let session = await makeSession()
+        var clock = Date(timeIntervalSince1970: 0)
+        let service = QuestFixture(tasks: [QuestFixture.streak(current: 3, status: .inProgress)],
+                                   serverTime: "2026-09-25T13:59:00Z")
+        let store = QuestStore(ownerID: 1, session: session, service: service, now: { clock })
+        await store.refresh()
+        XCTAssertEqual(store.inProgressTasks.count, 1)
+        clock = clock.addingTimeInterval(61)
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        await service.setServerTime("2026-09-25T14:01:00Z")
+        await service.setTasks([QuestFixture.streak(current: 0, run: nil, status: .inProgress)])
+        await store.refresh()
+        XCTAssertEqual(store.inProgressTasks.first?.streakProgress?.label, "0 / 7")
+        await service.setTasks([QuestFixture.streak()])
+        await store.refresh()
+        clock = clock.addingTimeInterval(24 * 60 * 60)
+        XCTAssertEqual(store.readyTasks.count, 1)
+    }
+
+    func testStreakClaimKeepsOnlyFreshNextBarAndSheetFeedbackAfterRefreshFailure() async {
+        let session = await makeSession()
+        let selected = QuestFixture.streak()
+        let service = QuestFixture(tasks: [selected])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        await service.failNextFetch()
+        var awards: [QuestAwardReceipt] = []
+        store.onAward = { awards.append($0) }
+        await store.collect(taskID: selected.id)
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        XCTAssertEqual(store.detailTask(id: selected.id)?.status, .collected)
+        XCTAssertTrue(store.collectedTodayTasks.isEmpty)
+        XCTAssertEqual(awards.count, 1)
+        XCTAssertNil(awards.first?.dogID)
+        XCTAssertEqual(awards.first?.points, 20)
+        XCTAssertNotNil(store.errorMessage)
+        await store.refresh() // A stale READY response must not revive the old reward.
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        await store.collect(taskID: selected.id)
+        XCTAssertEqual(awards.count, 1)
+        await service.setTasks([QuestFixture.streak(current: 7, milestone: 30, status: .inProgress)])
+        await store.refresh()
+        XCTAssertEqual(store.visibleTasks.filter(\.isStreak).count, 1)
+        XCTAssertEqual(store.inProgressTasks.first?.streakProgress?.label, "7 / 30")
+        XCTAssertEqual(store.detailTask(id: selected.id)?.status, .collected)
+    }
+
+    func testStreakLostResponseRetriesTheSameRunAndMilestone() async {
+        let session = await makeSession()
+        let selected = QuestFixture.streak(current: 60, milestone: 60, run: "2026-06-01")
+        let service = QuestFixture(tasks: [selected])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        await service.failNextClaim()
+        var awards: [QuestAwardReceipt] = []
+        store.onAward = { awards.append($0) }
+        await store.collect(taskID: selected.id)
+        XCTAssertTrue(awards.isEmpty)
+        XCTAssertTrue(store.canCollect(selected))
+        await store.collect(taskID: selected.id)
+        let calls = await service.calls
+        XCTAssertEqual(calls, [selected.id, selected.id])
+        XCTAssertEqual(awards.first?.points, 100)
+        XCTAssertEqual(awards.first?.created, false)
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+    }
+
+    func testStreakCollectionSerializesWithOtherQuestsAndRejectsLateOwnerResponse() async throws {
+        let session = await makeSession()
+        let selected = QuestFixture.streak()
+        let service = QuestFixture(tasks: [selected] + QuestFixture.tasks)
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        await service.suspendClaim()
+        var callbacks = 0
+        store.onAward = { _ in callbacks += 1 }
+        let claim = Task { await store.collect(taskID: selected.id) }
+        await service.waitForClaim()
+        await store.collect(taskID: selected.id)
+        await store.collect(taskID: "birthday:7:2026")
+        await session.logout()
+        try await session.login(email: "other@example.com", password: "unused", expectedRole: .owner)
+        await service.releaseClaim()
+        await claim.value
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        XCTAssertNil(store.snapshot)
+        XCTAssertNil(store.detailTask(id: selected.id))
+        XCTAssertTrue(store.confirmedCollections.isEmpty)
+        XCTAssertEqual(callbacks, 0)
+        let calls = await service.calls
+        XCTAssertEqual(calls, [selected.id])
+    }
+
+    func testInvalidStreakReceiptsNeverConfirmOrRefreshWallet() async {
+        let cases: [(Int, String, String, Int, Int, Int, String)] = [
+            (0, "STREAK", "2026-09-01", 7, 20, 120, QuestFixture.timestamp),
+            (1, "BIRTHDAY", "2026-09-01", 7, 20, 120, QuestFixture.timestamp),
+            (1, "STREAK", "2026-09-02", 7, 20, 120, QuestFixture.timestamp),
+            (1, "STREAK", "2026-09-01", 30, 20, 120, QuestFixture.timestamp),
+            (1, "STREAK", "2026-09-01", 7, 100, 120, QuestFixture.timestamp),
+            (1, "STREAK", "2026-09-01", 7, 20, -1, QuestFixture.timestamp),
+            (1, "STREAK", "2026-09-01", 7, 20, 120, "2026-09-05T00:00:00Z"),
+            (1, "STREAK", "2026-09-01", 7, 20, 120, "invalid")
+        ]
+        for (id, kind, run, milestone, points, balance, date) in cases {
+            let session = await makeSession()
+            let selected = QuestFixture.streak()
+            let service = QuestFixture(tasks: [selected])
+            let store = QuestStore(ownerID: 1, session: session, service: service)
+            await store.refresh()
+            await service.overrideStreak(StreakCollectResponse(award: StreakAward(id: id, kind: kind,
+                runStartDate: run, milestoneDays: milestone, points: points, awardedAt: date), balance: balance, created: true))
+            var callbacks = 0
+            store.onAward = { _ in callbacks += 1 }
+            await store.collect(taskID: selected.id)
+            XCTAssertEqual(callbacks, 0)
+            XCTAssertTrue(store.confirmedCollections.isEmpty)
+            XCTAssertTrue(store.canCollect(selected))
+            XCTAssertNotNil(store.errorMessage)
+            let fetchCount = await service.fetchCount
+            XCTAssertEqual(fetchCount, 1)
+        }
+    }
+
+    func testMultipleOrInvalidStreakRowsNeverReplaceValidSnapshot() async {
+        let session = await makeSession()
+        let selected = QuestFixture.streak()
+        let service = QuestFixture(tasks: [selected])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        for invalid in [[selected, QuestFixture.streak(current: 14, milestone: 30, status: .inProgress)],
+                        [QuestFixture.streak(milestone: 8)],
+                        [QuestFixture.streak(run: "2027-01-01")],
+                        [selected.collected(at: QuestFixture.timestamp)]] {
+            await service.setTasks(invalid)
+            await store.refresh()
+            XCTAssertEqual(store.visibleTasks.filter(\.isStreak), [selected])
+            XCTAssertNotNil(store.errorMessage)
+        }
+    }
+
+    func testIntegratedStreakAppearanceSnapshots() async throws {
+        let session = await makeSession()
+        let selected = QuestFixture.streak(current: 8, run: "2026-09-18")
+        let service = QuestFixture(tasks: [selected] + QuestFixture.tasks)
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        let checkIns = CheckInProgressStore(ownerID: 1)
+        await store.refresh()
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            try await snapshot(QuestView(store: store, checkIns: checkIns), name: "Quest-Streak-Integrated-\(mode)", dark: dark)
+            try await snapshot(QuestDetailView(store: store, taskID: selected.id), name: "Quest-Streak-Detail-\(mode)", dark: dark)
+        }
+        await store.collect(taskID: selected.id)
+        try await snapshot(QuestDetailView(store: store, taskID: selected.id), name: "Quest-Streak-Collected", dark: false)
+        await service.setTasks([QuestFixture.streak(current: 8, milestone: 30, run: "2026-09-18", status: .inProgress)] + QuestFixture.tasks)
+        await store.refresh()
+        XCTAssertEqual(store.visibleTasks.filter(\.isStreak).count, 1)
+        try await snapshot(QuestView(store: store, checkIns: checkIns), name: "Quest-Streak-In-Progress", dark: false)
+    }
+
+    private var streakSamples: some View {
+        ScrollView {
+            VStack(spacing: AppSpacing.small) {
+                StreakProgressView(currentDays: 0, targetDays: 7)
+                StreakProgressView(currentDays: 3, targetDays: 7)
+                StreakProgressView(currentDays: 7, targetDays: 7)
+                StreakProgressView(currentDays: 14, targetDays: 30)
+                StreakProgressView(currentDays: 30, targetDays: 30)
+                StreakProgressView(currentDays: 42, targetDays: 60)
+                StreakProgressView(currentDays: 85, targetDays: 60)
+            }.padding(AppSpacing.medium)
+        }.background(AppColors.background)
+    }
+
     func testTaskListDecodesWithoutLegacyDashboardProjectionsOrUnusedPresentationFields() throws {
         let data = Data(QuestFixture.json.utf8)
         var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -256,6 +483,13 @@ final class QuestTests: XCTestCase {
                 XCTAssertEqual(request.httpMethod, "POST"); return (201, QuestFixture.awardJSON)
             case "/api/quests/documents/entitlements/10/collect/":
                 XCTAssertEqual(request.httpMethod, "POST"); return (200, QuestFixture.documentJSON)
+            case "/api/quests/streaks/collect/":
+                XCTAssertEqual(request.httpMethod, "POST")
+                let body = try? questRequestBody(request)
+                XCTAssertEqual(body?["run_start_date"] as? String, "2026-09-01")
+                XCTAssertEqual(body?["milestone_days"] as? Int, 7)
+                XCTAssertEqual(body?.count, 2)
+                return (201, QuestFixture.streakAwardJSON)
             default:
                 XCTFail("Unexpected endpoint: \(request.url?.absoluteString ?? "missing")"); return (404, "{}")
             }
@@ -264,10 +498,13 @@ final class QuestTests: XCTestCase {
         let dashboard = try await service.fetchQuests()
         let birthday = try await service.collectBirthday(dogID: 7)
         let document = try await service.collectDocument(entitlementID: 10)
+        let streak = try await service.collectStreak(StreakCollectRequest(runStartDate: "2026-09-01", milestoneDays: 7))
         XCTAssertEqual(dashboard.tasks.count, 4)
         XCTAssertEqual(birthday.balance, 180)
         XCTAssertEqual(document.balance, 420)
         XCTAssertEqual(document.kind, .council)
+        XCTAssertEqual(streak.award.kind, "STREAK")
+        XCTAssertEqual(streak.award.points, 20)
     }
 
     func testCompactRowsAndDetailsAppearanceSnapshots() async throws {
@@ -313,7 +550,10 @@ final class QuestTests: XCTestCase {
 private actor QuestAuthFixture: AuthServing {
     nonisolated let credentialEvents = AsyncStream<CredentialEvent> { _ in }
     func restoreUser() async throws -> User? { User(id: 1, email: "owner@example.com", displayName: "Chien", role: .owner) }
-    func login(email: String, password: String) async throws -> AuthResponse { throw APIError.invalidResponse }
+    func login(email: String, password: String) async throws -> AuthResponse {
+        AuthResponse(access: "unused", refresh: "unused", user: User(id: email == "other@example.com" ? 2 : 1,
+            email: email, displayName: "Owner", role: .owner))
+    }
     func register(email: String, password: String, displayName: String) async throws -> AuthResponse { throw APIError.invalidResponse }
     func persist(_ tokens: AuthTokens) async throws {}
     func clearSession() async throws {}
@@ -328,6 +568,7 @@ private actor QuestFixture: QuestServing {
     private var failFetch = false, failClaim = false, pauseFetch = false, pauseClaim = false
     private var birthdayOverride: BirthdayCollectResponse?
     private var documentOverride: DocumentCollectionReceipt?
+    private var streakOverride: StreakCollectResponse?
     private var fetchContinuation: CheckedContinuation<Void, Never>?, claimContinuation: CheckedContinuation<Void, Never>?
     private var fetchStarted: CheckedContinuation<Void, Never>?, claimStarted: CheckedContinuation<Void, Never>?
     init(tasks: [QuestTask] = QuestFixture.tasks, serverTime: String = QuestFixture.timestamp) {
@@ -352,6 +593,14 @@ private actor QuestFixture: QuestServing {
         return DocumentCollectionReceipt(entitlementID: entitlementID, kind: .council, dogID: 7, points: 300,
                                        balance: 420, collectedAt: Self.timestamp, created: calls.count == 1)
     }
+    func collectStreak(_ request: StreakCollectRequest) async throws -> StreakCollectResponse {
+        calls.append("streak:\(request.runStartDate):\(request.milestoneDays)")
+        try await claimGate()
+        if let streakOverride { return streakOverride }
+        return StreakCollectResponse(award: StreakAward(id: 5, kind: "STREAK", runStartDate: request.runStartDate,
+            milestoneDays: request.milestoneDays, points: request.milestoneDays == 7 ? 20 : 100, awardedAt: Self.timestamp),
+            balance: 120, created: calls.count == 1)
+    }
     private func claimGate() async throws {
         if pauseClaim { await withCheckedContinuation { claimContinuation = $0; claimStarted?.resume(); claimStarted = nil } }
         if failClaim { failClaim = false; throw APIError.network("Response interrupted") }
@@ -362,6 +611,7 @@ private actor QuestFixture: QuestServing {
     func failNextClaim() { failClaim = true }
     func overrideBirthday(_ value: BirthdayCollectResponse) { birthdayOverride = value }
     func overrideDocument(_ value: DocumentCollectionReceipt) { documentOverride = value }
+    func overrideStreak(_ value: StreakCollectResponse) { streakOverride = value }
     func suspendFetch() { pauseFetch = true }
     func suspendClaim() { pauseClaim = true }
     func waitForFetch() async { if fetchContinuation != nil { return }; await withCheckedContinuation { fetchStarted = $0 } }
@@ -374,9 +624,19 @@ private actor QuestFixture: QuestServing {
                   photo: nil, icon: "doc.text", detail: "Add a photo of the visit evidence.", rewardPoints: 200, progress: nil,
                   dogID: 8, entitlementID: nil, collectedAt: collectedAt)
     }
+    nonisolated static func streak(current: Int = 7, milestone: Int = 7, run: String? = "2026-09-01",
+                                   status: QuestTaskStatus = .ready, points: Int? = nil) -> QuestTask {
+        QuestTask(id: "streak:\(run ?? "idle"):\(milestone)", kind: "STREAK", status: status,
+            title: "Walking streak", subjectName: "Walking streak", photo: nil, icon: "flame.fill",
+            detail: "Finish and upload a qualifying walk each day. Missing a day starts a new streak. Earn 20 points at 7 days and 100 at 30 days, then every 30 days. Collect each milestone to see the next one.",
+            rewardPoints: points ?? (milestone == 7 ? 20 : 100), progress: nil, dogID: nil, entitlementID: nil,
+            collectedAt: nil, currentDays: current, milestoneDays: milestone, runStartDate: run)
+    }
     nonisolated static var tasks: [QuestTask] { try! JSONDecoder().decode(QuestSnapshot.self, from: Data(json.utf8)).tasks }
     nonisolated static let awardJSON = #"{"award":{"id":4,"kind":"BIRTHDAY","dog_id":7,"year":2026,"points":60,"awarded_at":"2026-09-25T01:00:00Z"},"balance":180,"created":true}"#
     nonisolated static let documentJSON = #"{"entitlement_id":10,"kind":"COUNCIL_REGISTRATION","dog_id":7,"points":300,"balance":420,"collected_at":"2026-09-25T01:00:00Z","created":true}"#
+    nonisolated static let streakAwardJSON = #"{"award":{"id":5,"kind":"STREAK","run_start_date":"2026-09-01","milestone_days":7,"points":20,"awarded_at":"2026-09-25T01:00:00Z"},"balance":120,"created":true}"#
+    nonisolated static let streakTaskJSON = #"{"id":"streak:2026-09-01:7","kind":"STREAK","status":"READY","title":"Walking streak","subject_name":"Walking streak","photo":null,"icon":"flame.fill","detail":"Finish and upload a qualifying walk each day.","reward_points":20,"progress":1,"dog_id":null,"entitlement_id":null,"collected_at":null,"current_days":8,"milestone_days":7,"run_start_date":"2026-09-01"}"#
     nonisolated static let json = #"""
     {"server_time":"2026-09-25T01:00:00Z","timezone":"Australia/Melbourne","local_date":"2026-09-25","next_reset_at":"2026-09-25T14:00:00Z","tasks":[
     {"id":"birthday:7:2026","kind":"BIRTHDAY","status":"READY","title":"Birthday treat","subtitle":"Ready to collect","subject_name":"Milo","photo":null,"icon":"birthday.cake","detail":"Celebrate Milo's birthday with 60 points. One birthday treat each year.","reward_points":60,"progress":1,"dog_id":7,"entitlement_id":null,"collected_at":null},
@@ -384,6 +644,20 @@ private actor QuestFixture: QuestServing {
     {"id":"document:8:VET_CHECKUP","kind":"VET_CHECKUP","status":"IN_PROGRESS","title":"Vet check-up","subtitle":"Add a document","subject_name":"Luna","photo":null,"icon":"doc.text","detail":"Add a photo of Luna's vet check-up. Eligible visits earn 200 points, up to twice a year and at least 60 days apart.","reward_points":200,"progress":null,"dog_id":8,"entitlement_id":null,"collected_at":null},
     {"id":"document:11","kind":"MICROCHIP_REGISTRATION","status":"COLLECTED","title":"Microchip registration","subtitle":"Collected","subject_name":"Luna","photo":null,"icon":"doc.text","detail":"Your annual registration reward was collected.","reward_points":300,"progress":1,"dog_id":8,"entitlement_id":11,"collected_at":"2026-09-25T00:00:00Z"}]}
     """#
+}
+private func questRequestBody(_ request: URLRequest) throws -> [String: Any] {
+    var data = request.httpBody ?? Data()
+    if data.isEmpty, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+    }
+    return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 }
 private final class QuestTokenStore: CredentialStoring, @unchecked Sendable {
     private let lock = NSLock()
