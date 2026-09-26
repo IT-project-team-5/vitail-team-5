@@ -29,6 +29,7 @@ struct DocumentEligibility: Decodable, Sendable {
     let remainingThisYear: Int?
     let canEarn: Bool?
     let message: String
+    var registrationYear: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case kind, message
@@ -36,6 +37,7 @@ struct DocumentEligibility: Decodable, Sendable {
         case awardsCount = "awards_count"
         case remainingThisYear = "remaining_this_year"
         case canEarn = "can_earn"
+        case registrationYear = "registration_year"
     }
 }
 
@@ -60,6 +62,7 @@ struct DocumentSubmission: Decodable, Identifiable, Sendable {
     var collectedAt: String? = nil
     var councilName: String? = nil
     var registrationYear: Int? = nil
+    var rewardRegistrationYear: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, kind, status, filename
@@ -76,6 +79,7 @@ struct DocumentSubmission: Decodable, Identifiable, Sendable {
         case entitlementID = "entitlement_id", rewardStatus = "reward_status"
         case rewardPoints = "reward_points", collectedAt = "collected_at"
         case councilName = "council_name", registrationYear = "registration_year"
+        case rewardRegistrationYear = "reward_registration_year"
     }
 }
 
@@ -85,9 +89,17 @@ struct DocumentDashboard: Decodable, Sendable {
     let eligibility: [DocumentEligibility]
     var entitlements: [DocumentEntitlement]? = nil
 
-    func latestPendingSubmission(dogID: Int, kind: DocumentKind) -> DocumentSubmission? {
+    func rewardRegistrationYear(for submission: DocumentSubmission) -> Int? {
+        submission.rewardRegistrationYear
+            ?? entitlements?.first(where: { $0.id == submission.entitlementID })?.registrationYear
+            ?? submission.registrationYear
+    }
+
+    func latestPendingSubmission(dogID: Int, kind: DocumentKind, registrationYear: Int? = nil) -> DocumentSubmission? {
         submissions.filter { submission in
             guard submission.dogID == dogID, submission.kind == kind else { return false }
+            if kind == .council, let registrationYear,
+               rewardRegistrationYear(for: submission) != registrationYear { return false }
             if let entitlements {
                 guard let entitlement = entitlements.first(where: { $0.id == submission.entitlementID }) else {
                     return false
@@ -129,11 +141,13 @@ struct DocumentEntitlement: Decodable, Identifiable, Sendable {
     let rewardPoints: Int
     let collectedAt: String?
     let canCollect: Bool
+    var registrationYear: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, kind
         case dogID = "dog_id", dogName = "dog_name", rewardStatus = "reward_status"
         case rewardPoints = "reward_points", collectedAt = "collected_at", canCollect = "can_collect"
+        case registrationYear = "registration_year"
     }
 }
 
@@ -145,10 +159,12 @@ struct DocumentCollectionReceipt: Decodable, Sendable {
     let balance: Int
     let collectedAt: String
     let created: Bool
+    var registrationYear: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case kind, points, balance, created
         case entitlementID = "entitlement_id", dogID = "dog_id", collectedAt = "collected_at"
+        case registrationYear = "registration_year"
     }
 }
 
@@ -164,8 +180,13 @@ struct DocumentDraft: Equatable, Sendable {
 
     static func registration(dogID: Int, kind: DocumentKind, method: DocumentEvidenceMethod,
                              number: String, councilName: String, registrationYear: Int,
-                             filename: String?, fileData: Data?, today: Date = Date()) throws -> DocumentDraft {
+                             filename: String?, fileData: Data?, today: Date = Date(),
+                             questRegistrationYear: Int? = nil) throws -> DocumentDraft {
         guard kind != .vet else { throw DocumentInputError.invalidKind }
+        if kind == .council, let questRegistrationYear,
+           questRegistrationYear != DocumentRegistration.currentCouncilYear(on: today) {
+            throw DocumentInputError.councilQuestExpired
+        }
         if method == .upload {
             guard let fileData, !fileData.isEmpty, let filename, !filename.isEmpty else {
                 throw DocumentInputError.attachmentRequired
@@ -224,10 +245,19 @@ enum DocumentRegistration {
     static func councilYearLabel(_ endYear: Int) -> String {
         "\(endYear - 1)–\(String(format: "%02d", endYear % 100))"
     }
+
+    static func isValidCouncilYear(_ endYear: Int) -> Bool { (2...9999).contains(endYear) }
+
+    static func matchesCouncilRewardYear(received: Int?, expected: Int?) -> Bool {
+        guard received.map(isValidCouncilYear) ?? true, expected.map(isValidCouncilYear) ?? true else { return false }
+        // Exact legacy receipts may omit the new field; callers still require the same entitlement ID.
+        guard let received, let expected else { return true }
+        return received == expected
+    }
 }
 
 enum DocumentInputError: LocalizedError {
-    case invalidKind, attachmentRequired, microchipNumber, councilNumber, councilName, councilYear
+    case invalidKind, attachmentRequired, microchipNumber, councilNumber, councilName, councilYear, councilQuestExpired
     var errorDescription: String? {
         switch self {
         case .invalidKind: return "Choose the document Quest again."
@@ -236,6 +266,7 @@ enum DocumentInputError: LocalizedError {
         case .councilNumber: return "Enter the Animal ID or registration number using letters, digits, spaces or hyphens (up to 100 characters). For another format, upload your proof."
         case .councilName: return "Enter the council name (up to 100 characters)."
         case .councilYear: return "Use your current registration year, or upload your proof."
+        case .councilQuestExpired: return "The registration year has changed. Close this page and refresh Quests to submit for the current year."
         }
     }
 }

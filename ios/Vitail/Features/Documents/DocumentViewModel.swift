@@ -131,11 +131,26 @@ final class DocumentViewModel: ObservableObject {
 
     func entitlement(for submission: DocumentSubmission) -> DocumentEntitlement? {
         guard let id = submission.entitlementID else { return nil }
-        if let current = dashboard?.entitlements?.first(where: { $0.id == id }) { return current }
+        if let current = dashboard?.entitlements?.first(where: { $0.id == id }) {
+            guard current.dogID == submission.dogID, current.kind == submission.kind,
+                  current.kind != .council || DocumentRegistration.matchesCouncilRewardYear(
+                    received: current.registrationYear, expected: submission.rewardRegistrationYear) else { return nil }
+            return current
+        }
         guard let status = submission.rewardStatus, let points = submission.rewardPoints else { return nil }
         return DocumentEntitlement(id: id, dogID: submission.dogID, dogName: submission.dogName,
             kind: submission.kind, rewardStatus: status, rewardPoints: points, collectedAt: submission.collectedAt,
-            canCollect: status == .ready && dashboard?.dogs.contains(where: { $0.id == submission.dogID }) == true)
+            canCollect: status == .ready && dashboard?.dogs.contains(where: { $0.id == submission.dogID }) == true,
+            registrationYear: submission.rewardRegistrationYear ?? submission.registrationYear)
+    }
+
+    func currentSubmission(dogID: Int, kind: DocumentKind, registrationYear: Int? = nil) -> DocumentSubmission? {
+        if let submission = receipt?.submission, submission.dogID == dogID, submission.kind == kind {
+            let rewardYear = submission.rewardRegistrationYear
+                ?? dashboard?.rewardRegistrationYear(for: submission) ?? submission.registrationYear
+            if kind != .council || registrationYear == nil || rewardYear == registrationYear { return submission }
+        }
+        return dashboard?.latestPendingSubmission(dogID: dogID, kind: kind, registrationYear: registrationYear)
     }
 
     func isCollected(_ entitlement: DocumentEntitlement) -> Bool {
@@ -145,6 +160,7 @@ final class DocumentViewModel: ObservableObject {
     func canCollect(_ entitlement: DocumentEntitlement) -> Bool {
         isActive && isCurrentOwner && entitlement.canCollect && !isCollected(entitlement)
             && entitlement.id > 0 && entitlement.rewardPoints == entitlement.kind.points
+            && (entitlement.kind != .council || (entitlement.registrationYear.map(DocumentRegistration.isValidCouncilYear) ?? true))
             && !isLoading && !isSubmitting && collectingID == nil
     }
 
@@ -160,6 +176,8 @@ final class DocumentViewModel: ObservableObject {
                 guard accepts(requestGeneration), !Task.isCancelled else { return false }
                 guard result.entitlementID == entitlement.id, result.kind == entitlement.kind,
                       result.dogID == entitlement.dogID, result.points == entitlement.kind.points,
+                      (result.kind == .council ? DocumentRegistration.matchesCouncilRewardYear(
+                        received: result.registrationYear, expected: entitlement.registrationYear) : result.registrationYear == nil),
                       result.balance >= 0, Self.collectionDate(result.collectedAt) != nil else {
                     throw APIError.invalidResponse
                 }
@@ -255,6 +273,12 @@ final class DocumentViewModel: ObservableObject {
                   result.rewardStatus != nil, result.rewardStatus == submission.rewardStatus,
                   result.rewardPoints == request.kind.points, submission.rewardPoints == result.rewardPoints,
                   result.awardedPoints == 0 else { throw APIError.invalidResponse }
+        }
+        if let rewardYear = submission.rewardRegistrationYear {
+            guard request.kind == .council, DocumentRegistration.isValidCouncilYear(rewardYear),
+                  request.registrationYear == nil || request.registrationYear == rewardYear else {
+                throw APIError.invalidResponse
+            }
         }
     }
 

@@ -36,13 +36,14 @@ struct StreakProgressView: View {
 struct QuestView: View {
     @ObservedObject var store: QuestStore
     @ObservedObject var checkIns: CheckInProgressStore
-    var onOpenDocuments: ((Int, DocumentKind) -> Void)?
+    var onOpenDocuments: ((Int, DocumentKind, Int?) -> Void)?
     @State private var selectedTask: QuestTask?
     @State private var pendingDocument: DocumentRoute?
 
     private struct DocumentRoute {
         let dogID: Int
         let kind: DocumentKind
+        let registrationYear: Int?
     }
 
     var body: some View {
@@ -80,11 +81,11 @@ struct QuestView: View {
         .sheet(item: $selectedTask, onDismiss: {
             guard let route = pendingDocument else { return }
             pendingDocument = nil
-            onOpenDocuments?(route.dogID, route.kind)
+            onOpenDocuments?(route.dogID, route.kind, route.registrationYear)
         }) { task in
             NavigationStack {
-                QuestDetailView(store: store, taskID: task.id, onOpenDocuments: onOpenDocuments == nil ? nil : { dogID, kind in
-                    pendingDocument = DocumentRoute(dogID: dogID, kind: kind)
+                QuestDetailView(store: store, taskID: task.id, onOpenDocuments: onOpenDocuments == nil ? nil : { dogID, kind, year in
+                    pendingDocument = DocumentRoute(dogID: dogID, kind: kind, registrationYear: year)
                     selectedTask = nil
                 })
             }
@@ -98,7 +99,7 @@ struct QuestView: View {
             Button {
                 if task.status == .inProgress, let kind = task.documentKind,
                    let dogID = task.dogID, let onOpenDocuments {
-                    onOpenDocuments(dogID, kind)
+                    onOpenDocuments(dogID, kind, task.registrationYear)
                 } else {
                     selectedTask = task
                 }
@@ -135,7 +136,7 @@ struct QuestTaskRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                Text(task.subjectName).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                Text(task.subjectLabel).font(.subheadline).foregroundStyle(AppColors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 if collected {
                     Label("Collected", systemImage: "checkmark.circle.fill").font(.caption)
@@ -171,7 +172,7 @@ struct QuestDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: QuestStore
     let taskID: String
-    var onOpenDocuments: ((Int, DocumentKind) -> Void)?
+    var onOpenDocuments: ((Int, DocumentKind, Int?) -> Void)?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -185,6 +186,9 @@ struct QuestDetailView: View {
                             }
                         }
                         Text(task.title).font(.title2.bold())
+                        if let period = task.registrationPeriodLabel {
+                            Text(period).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                        }
                         if task.isStreak, let progress = task.streakProgress {
                             StreakProgressView(currentDays: progress.currentDays, targetDays: progress.targetDays,
                                                isReady: task.status == .ready)
@@ -201,7 +205,7 @@ struct QuestDetailView: View {
                                     Task { await store.collect(taskID: taskID) }
                                 }
                             } else if let kind = task.documentKind, let dogID = task.dogID, let onOpenDocuments {
-                                PrimaryButton(title: "Add document") { onOpenDocuments(dogID, kind) }
+                                PrimaryButton(title: "Add document") { onOpenDocuments(dogID, kind, task.registrationYear) }
                             }
                         }
                         if let error = store.errorMessage {

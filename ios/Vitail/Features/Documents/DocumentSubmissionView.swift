@@ -10,6 +10,7 @@ struct DocumentSubmissionView: View {
     @StateObject private var model: DocumentViewModel
     private let dogID: Int
     private let kind: DocumentKind
+    private let questRegistrationYear: Int?
     private let onSubmitted: () async -> Void
     private let onChanged: () async -> Void
     @State private var method: DocumentEvidenceMethod = .details
@@ -31,10 +32,14 @@ struct DocumentSubmissionView: View {
 
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil,
          initialDogID: Int, initialKind: DocumentKind,
+         initialRegistrationYear: Int? = nil,
          initialMethod: DocumentEvidenceMethod = .details,
          onSubmitted: @escaping () async -> Void = {}, onChanged: @escaping () async -> Void = {}) {
         _model = StateObject(wrappedValue: DocumentViewModel(service: service, session: session))
         _method = State(initialValue: initialMethod)
+        let year = initialKind == .council ? (initialRegistrationYear ?? DocumentRegistration.currentCouncilYear()) : nil
+        _registrationYear = State(initialValue: year ?? DocumentRegistration.currentCouncilYear())
+        questRegistrationYear = year
         dogID = initialDogID
         kind = initialKind
         self.onSubmitted = onSubmitted
@@ -42,10 +47,14 @@ struct DocumentSubmissionView: View {
     }
 
     private var currentSubmission: DocumentSubmission? {
-        if let receipt = model.receipt, receipt.submission.dogID == dogID, receipt.submission.kind == kind {
-            return receipt.submission
-        }
-        return model.dashboard?.latestPendingSubmission(dogID: dogID, kind: kind)
+        model.currentSubmission(dogID: dogID, kind: kind, registrationYear: questRegistrationYear)
+    }
+
+    private var canSubmitForYear: Bool {
+        guard kind == .council else { return true }
+        guard questRegistrationYear == DocumentRegistration.currentCouncilYear() else { return false }
+        let serverYear = model.dashboard?.eligibility.first(where: { $0.dogID == dogID && $0.kind == .council })?.registrationYear
+        return serverYear == nil || serverYear == questRegistrationYear
     }
 
     var body: some View {
@@ -55,13 +64,19 @@ struct DocumentSubmissionView: View {
                     if let dog = dashboard.dogs.first(where: { $0.id == dogID }) {
                         HStack(spacing: AppSpacing.small) {
                             AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
-                            Text(dog.name).font(.headline)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(dog.name).font(.headline)
+                                if let year = questRegistrationYear, DocumentRegistration.isValidCouncilYear(year) {
+                                    Text(DocumentRegistration.councilYearLabel(year))
+                                        .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                                }
+                            }
                         }
                         tutorial
                         if let submission = currentSubmission, !isEditing {
                             submissionCard(submission)
-                            Button(kind == .vet ? "Add another check-up" : "Update submission") {
-                                isEditing = true
+                            if canSubmitForYear {
+                                Button(kind == .vet ? "Add another check-up" : "Update submission") { isEditing = true }
                             }
                         } else {
                             submissionForm
@@ -127,6 +142,8 @@ struct DocumentSubmissionView: View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
             switch kind {
             case .council:
+                Text("300 points per dog each registration year, from 10 April to 9 April.")
+                    .foregroundStyle(AppColors.secondaryText)
                 guide("Already registered?", "Find the Animal ID or registration number on your council's current certificate or registration confirmation. Ask your council for a copy if it is missing. Do not use a payment reference or tag number.")
                 guide("Not registered yet?", "Microchip your dog, then apply online or by paper form to the council where your dog lives. Wait for its completed-registration confirmation before submitting here.")
                 Link("Find your council", destination: URL(string: "https://www.vec.vic.gov.au/electoral-boundaries/which-boundaries-cover-where-i-live")!)
@@ -189,8 +206,12 @@ struct DocumentSubmissionView: View {
                     .environment(\.timeZone, DogBirthday.timeZone)
             }
             PrimaryButton(title: model.isSubmitting ? "Submitting…" : "Submit",
-                          isLoading: model.isSubmitting) {
+                          isLoading: model.isSubmitting, isDisabled: !canSubmitForYear) {
                 Task { await submit() }
+            }
+            if !canSubmitForYear {
+                Text(DocumentInputError.councilQuestExpired.localizedDescription)
+                    .font(.caption).foregroundStyle(AppColors.secondaryText)
             }
             Text("Submitted details are self-reported and may be checked later.")
                 .font(.caption).foregroundStyle(AppColors.secondaryText)
@@ -242,8 +263,9 @@ struct DocumentSubmissionView: View {
                 Text(submission.registrationNumber).font(.subheadline).textSelection(.enabled)
             }
             if let council = submission.councilName, !council.isEmpty { Text(council).font(.subheadline) }
-            if let year = submission.registrationYear {
-                Text(DocumentRegistration.councilYearLabel(year)).font(.subheadline)
+            if let year = submission.rewardRegistrationYear ?? model.dashboard?.rewardRegistrationYear(for: submission),
+               DocumentRegistration.isValidCouncilYear(year) {
+                Text("Reward year · \(DocumentRegistration.councilYearLabel(year))").font(.subheadline)
             }
             if let date = submission.eventDate { Text(DogBirthday.display(date)).font(.subheadline) }
             if submission.fileURL != nil {
@@ -281,6 +303,7 @@ struct DocumentSubmissionView: View {
             return
         }
         do {
+            guard canSubmitForYear else { throw DocumentInputError.councilQuestExpired }
             let draft: DocumentDraft
             if kind == .vet {
                 guard let fileData, let filename else { throw DocumentInputError.attachmentRequired }
@@ -289,11 +312,15 @@ struct DocumentSubmissionView: View {
             } else {
                 draft = try DocumentDraft.registration(dogID: dogID, kind: kind, method: method,
                     number: registrationNumber, councilName: councilName, registrationYear: registrationYear,
-                    filename: filename, fileData: fileData)
+                    filename: filename, fileData: fileData, questRegistrationYear: questRegistrationYear)
             }
             if await model.submit(draft), model.isActive, isVisible {
                 isEditing = false
                 clearAttachment()
+                if kind == .council, let year = model.receipt?.submission.rewardRegistrationYear,
+                   year != questRegistrationYear, DocumentRegistration.isValidCouncilYear(year) {
+                    validationMessage = "Saved for the \(DocumentRegistration.councilYearLabel(year)) reward year. Close this page and refresh Quests."
+                }
                 await onChanged()
             }
         } catch { validationMessage = error.localizedDescription }

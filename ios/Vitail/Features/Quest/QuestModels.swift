@@ -57,10 +57,19 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
     var currentDays: Int? = nil
     var milestoneDays: Int? = nil
     var runStartDate: String? = nil
+    var registrationYear: Int? = nil
 
     var documentKind: DocumentKind? { DocumentKind(rawValue: kind) }
     var isBirthday: Bool { kind == "BIRTHDAY" }
     var isStreak: Bool { kind == "STREAK" }
+    var registrationPeriodLabel: String? {
+        guard documentKind == .council, let registrationYear,
+              DocumentRegistration.isValidCouncilYear(registrationYear) else { return nil }
+        return DocumentRegistration.councilYearLabel(registrationYear)
+    }
+    var subjectLabel: String {
+        registrationPeriodLabel.map { "\(subjectName) · \($0)" } ?? subjectName
+    }
     var streakProgress: StreakProgressValue? {
         guard isStreak, let currentDays, let milestoneDays else { return nil }
         return StreakProgressValue(currentDays: currentDays, targetDays: milestoneDays)
@@ -71,6 +80,8 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
     }
     var isSupported: Bool {
         if isStreak { return isSupportedStreak }
+        if documentKind == .council, let registrationYear,
+           !DocumentRegistration.isValidCouncilYear(registrationYear) { return false }
         guard !id.isEmpty, !title.isEmpty, let dogID, dogID > 0,
               rewardPoints > 0, isBirthday || documentKind != nil else { return false }
         switch status {
@@ -107,6 +118,7 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
         case subjectName = "subject_name", rewardPoints = "reward_points"
         case dogID = "dog_id", entitlementID = "entitlement_id", collectedAt = "collected_at"
         case currentDays = "current_days", milestoneDays = "milestone_days", runStartDate = "run_start_date"
+        case registrationYear = "registration_year"
     }
 }
 

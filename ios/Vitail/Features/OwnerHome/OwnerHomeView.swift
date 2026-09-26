@@ -56,7 +56,8 @@ struct OwnerHomeView: View {
     private struct DocumentSelection: Identifiable {
         let dogID: Int
         let kind: DocumentKind
-        var id: String { "\(dogID)-\(kind.rawValue)" }
+        let registrationYear: Int?
+        var id: String { "\(dogID)-\(kind.rawValue)-\(registrationYear.map(String.init) ?? "none")" }
     }
 
     init(
@@ -94,7 +95,7 @@ struct OwnerHomeView: View {
                     .tag(Page.walk)
                     QuestView(store: questStore, checkIns: checkIns,
                               onOpenDocuments: documentService != nil
-                                ? { dogID, kind in documentSelection = DocumentSelection(dogID: dogID, kind: kind) } : nil)
+                                ? { dogID, kind, year in documentSelection = DocumentSelection(dogID: dogID, kind: kind, registrationYear: year) } : nil)
                         .tag(Page.quest)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
@@ -122,11 +123,13 @@ struct OwnerHomeView: View {
                     NavigationStack {
                         DocumentSubmissionView(service: documentService, session: session,
                                                initialDogID: selectedDocument.dogID, initialKind: selectedDocument.kind,
+                                               initialRegistrationYear: selectedDocument.registrationYear,
                                                onSubmitted: {
                                                    async let quests: Void = questStore.refresh()
                                                    async let wallet: Void = redemptionViewModel.refresh()
                                                    _ = await (quests, wallet)
                                                }, onChanged: { await questStore.refresh() })
+                        .id(selectedDocument.id)
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
                                 Button("Done") { documentSelection = nil }

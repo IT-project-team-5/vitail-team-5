@@ -59,6 +59,62 @@ final class DocumentTests: XCTestCase {
         XCTAssertEqual(DocumentRegistration.councilYearLabel(2027), "2026–27")
     }
 
+    func testCouncilUploadStaysSimpleButExpiredQuestCannotSubmitForAnotherYear() throws {
+        let today = try XCTUnwrap(DogBirthday.date(from: "2027-04-10"))
+        XCTAssertThrowsError(try DocumentDraft.registration(dogID: 7, kind: .council, method: .upload,
+            number: "", councilName: "", registrationYear: 2027, filename: "proof.png", fileData: Data([1]),
+            today: today, questRegistrationYear: 2027))
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .council, method: .upload,
+            number: "old hidden number", councilName: "old hidden council", registrationYear: 2027,
+            filename: "proof.png", fileData: Data([1]), today: today, questRegistrationYear: 2028)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(DocumentRequest(draft: draft))) as? [String: Any])
+        XCTAssertNil(payload["registration_year"])
+        XCTAssertNil(payload["registration_number"])
+        XCTAssertNil(payload["council_name"])
+        XCTAssertEqual(payload["file_base64"] as? String, "AQ==")
+    }
+
+    func testCouncilRewardYearDecodesSeparatelyFromUploadedDocumentDetails() throws {
+        let json = #"""
+        {"dogs":[],"submissions":[{"id":1,"request_id":"11111111-1111-1111-1111-111111111111",
+        "dog_id":7,"dog_name":"Coco","kind":"COUNCIL_REGISTRATION","status":"SELF_REPORTED",
+        "registration_number":"","registration_year":null,"reward_registration_year":2027,
+        "event_date":null,"valid_from":null,"valid_to":null,"filename":"proof.pdf","file_url":"/private/1",
+        "awarded_points":0,"submitted_at":"2026-09-25T01:00:00Z","entitlement_id":91,"reward_status":"READY"}],
+        "eligibility":[{"dog_id":7,"kind":"COUNCIL_REGISTRATION","awards_count":0,"message":"Annual reward","registration_year":2027}],
+        "entitlements":[{"id":91,"dog_id":7,"dog_name":"Coco","kind":"COUNCIL_REGISTRATION",
+        "reward_status":"READY","reward_points":300,"collected_at":null,"can_collect":true,"registration_year":2027}]}
+        """#
+        let dashboard = try JSONDecoder().decode(DocumentDashboard.self, from: Data(json.utf8))
+        let submission = try XCTUnwrap(dashboard.submissions.first)
+        XCTAssertNil(submission.registrationYear)
+        XCTAssertEqual(submission.rewardRegistrationYear, 2027)
+        XCTAssertEqual(dashboard.entitlements?.first?.registrationYear, 2027)
+        XCTAssertEqual(dashboard.eligibility.first?.registrationYear, 2027)
+        XCTAssertNotNil(dashboard.latestPendingSubmission(dogID: 7, kind: .council, registrationYear: 2027))
+        XCTAssertNil(dashboard.latestPendingSubmission(dogID: 7, kind: .council, registrationYear: 2028))
+    }
+
+    func testCouncilPendingEvidenceIsScopedByRewardYearEvenWhenOlderYearWasUploadedLast() {
+        func submission(_ id: Int, rewardYear: Int?) -> DocumentSubmission {
+            DocumentSubmission(id: id, requestID: UUID(), dogID: 7, dogName: "Coco", kind: .council,
+                status: "SELF_REPORTED", registrationNumber: "", eventDate: nil, validFrom: nil, validTo: nil,
+                filename: "proof.pdf", fileURL: "/private/\(id)", awardedPoints: 0, submittedAt: "2027-04-10T01:00:00Z",
+                entitlementID: id, rewardStatus: .ready, rewardPoints: 300, rewardRegistrationYear: rewardYear)
+        }
+        let previous = submission(2, rewardYear: 2027)
+        let current = submission(1, rewardYear: nil) // Older exact receipt: resolve through its entitlement.
+        let dashboard = DocumentDashboard(dogs: [], submissions: [previous, current], eligibility: [], entitlements: [
+            DocumentEntitlement(id: 2, dogID: 7, dogName: "Coco", kind: .council, rewardStatus: .ready,
+                rewardPoints: 300, collectedAt: nil, canCollect: true, registrationYear: 2027),
+            DocumentEntitlement(id: 1, dogID: 7, dogName: "Coco", kind: .council, rewardStatus: .ready,
+                rewardPoints: 300, collectedAt: nil, canCollect: true, registrationYear: 2028)
+        ])
+        XCTAssertEqual(dashboard.latestPendingSubmission(dogID: 7, kind: .council, registrationYear: 2027)?.id, 2)
+        XCTAssertEqual(dashboard.latestPendingSubmission(dogID: 7, kind: .council, registrationYear: 2028)?.id, 1)
+        XCTAssertNil(dashboard.latestPendingSubmission(dogID: 7, kind: .council, registrationYear: 2029))
+    }
+
     func testPendingSubmissionNeverFallsBackToAnotherDogOrDocumentKindOrCollectedHistory() throws {
         func submission(_ id: Int, dog: Int, kind: DocumentKind) -> DocumentSubmission {
             DocumentSubmission(id: id, requestID: UUID(), dogID: dog, dogName: "Dog", kind: kind,
@@ -252,6 +308,33 @@ final class DocumentTests: XCTestCase {
         XCTAssertTrue(succeeded)
         XCTAssertEqual(model.receipt?.submission.councilName, "")
         XCTAssertNil(model.receipt?.submission.registrationYear)
+    }
+
+    @MainActor
+    func testCouncilUploadReceiptKeepsRewardYearAndDoesNotLeakIntoNextYearSheet() async throws {
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .council, method: .upload,
+            number: "", councilName: "", registrationYear: 2027, filename: "proof.png", fileData: Data([1]))
+        let service = DocumentControlledService(readySubmission: true, rewardYear: 2027)
+        let model = DocumentViewModel(service: service)
+        await service.failNextFetch()
+        let succeeded = await model.submit(draft)
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(model.receipt?.submission.registrationYear)
+        XCTAssertEqual(model.receipt?.submission.rewardRegistrationYear, 2027)
+        XCTAssertNotNil(model.currentSubmission(dogID: 7, kind: .council, registrationYear: 2027))
+        XCTAssertNil(model.currentSubmission(dogID: 7, kind: .council, registrationYear: 2028))
+    }
+
+    @MainActor
+    func testCouncilCollectionRejectsWrongYearAndAcceptsMatchingOrLegacyReceipt() async {
+        let entitlement = DocumentEntitlement(id: 91, dogID: 7, dogName: "Coco", kind: .council,
+            rewardStatus: .ready, rewardPoints: 300, collectedAt: nil, canCollect: true, registrationYear: 2027)
+        for receivedYear in [2028, 2027, nil] as [Int?] {
+            let model = DocumentViewModel(service: DocumentControlledService(rewardYear: receivedYear))
+            let succeeded = await model.collect(entitlement)
+            XCTAssertEqual(succeeded, receivedYear != 2028)
+            XCTAssertEqual(model.isCollected(entitlement), receivedYear != 2028)
+        }
     }
 
     @MainActor
@@ -486,6 +569,7 @@ private actor DocumentControlledService: DocumentServing {
     private let collectionFault: DocumentCollectionFault?
     private let award: Int
     private let readySubmission: Bool
+    private let rewardYear: Int?
     private var failFetch = false
     private var failCollection = false
     private var paused: Set<String> = []
@@ -493,11 +577,12 @@ private actor DocumentControlledService: DocumentServing {
     private var started: [String: CheckedContinuation<Void, Never>] = [:]
 
     init(fault: DocumentReceiptFault? = nil, award: Int = 300, readySubmission: Bool = false,
-         collectionFault: DocumentCollectionFault? = nil) {
+         collectionFault: DocumentCollectionFault? = nil, rewardYear: Int? = nil) {
         self.fault = fault
         self.award = award
         self.readySubmission = readySubmission
         self.collectionFault = collectionFault
+        self.rewardYear = rewardYear
     }
     func fetchDocuments() async throws -> DocumentDashboard {
         fetchCount += 1
@@ -524,7 +609,8 @@ private actor DocumentControlledService: DocumentServing {
             entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
             rewardPoints: readySubmission ? 300 : nil,
             councilName: fault == .council ? "Wrong council" : (request.councilName ?? ""),
-            registrationYear: fault == .year ? 2099 : request.registrationYear
+            registrationYear: fault == .year ? 2099 : request.registrationYear,
+            rewardRegistrationYear: request.kind == .council ? (rewardYear ?? request.registrationYear) : nil
         ), balance: fault == .balance ? -1 : 300, awardedPoints: amount, created: true,
            entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
            rewardPoints: readySubmission ? 300 : nil)
@@ -542,7 +628,8 @@ private actor DocumentControlledService: DocumentServing {
         return DocumentCollectionReceipt(entitlementID: collectionFault == .id ? 92 : entitlementID,
             kind: collectionFault == .kind ? .vet : .council, dogID: collectionFault == .dog ? 8 : 7,
             points: collectionFault == .amount ? 999 : 300, balance: collectionFault == .balance ? -1 : 300,
-            collectedAt: collectionFault == .date ? "invalid" : "2026-09-25T01:00:00.123456Z", created: collectionIDs.count == 1)
+            collectedAt: collectionFault == .date ? "invalid" : "2026-09-25T01:00:00.123456Z", created: collectionIDs.count == 1,
+            registrationYear: rewardYear)
     }
     func pause(_ operation: String) { paused.insert(operation) }
     func waitFor(_ operation: String) async {
