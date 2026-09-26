@@ -709,7 +709,7 @@ paths:
         OWNER only; evidence is self-reported and may be audited later. A new
         submission awards zero points and leaves its entitlement READY until
         the owner explicitly collects it. Rewards belong to the dog: Council
-        reserves 300 points per Victorian registration year (10 April–9 April);
+        reserves 300 points for the current registration until its confirmed expiry;
         microchip reserves 300 points once in the dog's lifetime;
         vet check-ups reserve 200 points per visit, at most
         twice in the visit's calendar year and at least 60 days apart even across
@@ -720,13 +720,14 @@ paths:
         any prior credited microchip entitlement prevents another credit.
         Otherwise only the oldest pending microchip reservation is collectible;
         a held or rejected reservation cannot be bypassed by a newer one.
-        Re-uploading within the same Council year or microchip lifetime never
-        creates an additional reward. A new Council year appears even when an
-        earlier reward remains uncollected; old pending rewards stay collectible.
-        Both Council routes use the server's current reward year, separately
-        from the submission's entered registration_year. Identical Council files
-        cannot support another year for the same dog. Renewal may reuse the
-        same animal registration number.
+        Re-uploading a current Council registration or lifetime microchip record
+        never creates another reward. Council renewal appears the day after
+        valid_to in Melbourne time; the expiry day is inclusive. Expired and
+        superseded pending rewards disappear from Quest and cannot collect.
+        Unknown legacy expiry must be bound once, without another award for an
+        already paid record. No dates are inferred from old registration_year.
+        Identical Council files cannot support another qualification for the
+        same dog, including across transfer. Renewal may reuse the Animal ID.
         The same vet photo cannot support another visit for the same owner and dog.
         Send request_id and reuse the exact request on an ambiguous failure.
         An identical owner/UUID retry replays the stored receipt, including its
@@ -744,7 +745,7 @@ paths:
             schema: {$ref: '#/components/schemas/DocumentRequest'}
       responses:
         '201':
-          description: New submission; awarded_points is zero, with READY or previously COLLECTED entitlement metadata
+          description: New submission; awarded_points is zero with current entitlement metadata; a legacy expiry update may retire an expired record
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DocumentReceipt'}
@@ -785,7 +786,9 @@ paths:
         the recipient's balance. Legacy immediate awards stay collected, with
         their collection timestamp backfilled from the original ledger entry;
         migration never credits points again. Document bonuses do not consume
-        the walking/check-in daily cap.
+        the walking/check-in daily cap. Council expiry is inclusive in Melbourne;
+        expired or superseded pending rewards return EXPIRED, and an unknown
+        confirmed expiry returns EXPIRY_REQUIRED (both HTTP 400).
       requestBody:
         required: false
         content:
@@ -798,7 +801,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/DocumentCollectionReceipt'}
         '400':
-          description: Reward is held or rejected, or this legacy microchip reservation is superseded by the dog's lifetime entitlement
+          description: Reward held/rejected or superseded; Council returns code EXPIRED or EXPIRY_REQUIRED when its qualification is unavailable
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DocumentValidationError'}
@@ -940,7 +943,9 @@ components:
         Clamp its displayed numerator to the milestone while READY. Idle state
         is zero of seven with a null run start. DAILY_GOAL remains reserved and omitted.
       properties:
-        id: {type: string, description: 'Stable row identity; birthday dog/year, Council council:dog:ending_year, other document dog/kind or entitlement ID, streak run/milestone, or streak:idle:7'}
+        valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
+        needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
+        id: {type: string, description: 'Stable row identity; birthday dog/year, Council council:dog:new or council:dog:entitlement:id, other document dog/kind or entitlement ID, streak run/milestone, or streak:idle:7'}
         kind: {type: string, enum: [BIRTHDAY, COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION, VET_CHECKUP, DAILY_GOAL, STREAK]}
         status: {type: string, enum: [IN_PROGRESS, READY, COLLECTED]}
         title: {type: string}
@@ -953,7 +958,7 @@ components:
         progress: {type: number, minimum: 0, maximum: 1, nullable: true, description: Null when numeric progress is not defined; do not display as zero percent}
         dog_id: {type: integer, minimum: 1, nullable: true, description: Dog identity or immutable ID snapshot}
         entitlement_id: {type: integer, minimum: 1, nullable: true, description: Reserved document reward ID; null for non-document and unsubmitted document tasks}
-        registration_year: {type: integer, nullable: true, description: 'Council reward ending year; scopes annual tasks and distinguishes older pending rewards; absent/null for other kinds'}
+        registration_year: {type: integer, nullable: true, description: 'Historical metadata only; no longer controls eligibility'}
         collected_at: {type: string, format: date-time, nullable: true, description: Actual award time; null before collection}
         current_days: {type: integer, minimum: 0, description: STREAK only; verified consecutive days in the represented run}
         milestone_days: {type: integer, minimum: 7, description: STREAK only; seven or a positive multiple of thirty}
@@ -1019,8 +1024,8 @@ components:
       enum: [COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION, VET_CHECKUP]
     DocumentRewardStatus:
       type: string
-      enum: [READY, COLLECTED]
-      description: READY reserves eligibility without wallet credit; COLLECTED is already linked to one canonical ledger credit
+      enum: [IN_PROGRESS, READY, COLLECTED, EXPIRED]
+      description: IN_PROGRESS requires a legacy expiry update; READY may collect; COLLECTED links a ledger credit; EXPIRED Council reservations cannot collect
     DocumentDog:
       type: object
       required: [id, name, photo]
@@ -1032,13 +1037,15 @@ components:
       type: object
       required: [dog_id, kind, awards_count, pending_count, remaining_this_year, can_earn, message]
       properties:
+        valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
+        needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
         dog_id: {type: integer, minimum: 1}
         kind: {$ref: '#/components/schemas/DocumentKind'}
-        awards_count: {type: integer, minimum: 0, description: 'Rewarded entitlements across owners; Council counts only the current registration year, other kinds count all years'}
-        pending_count: {type: integer, minimum: 0, description: Uncredited reservations counting toward quota; Council counts the current registration year and microchip its canonical lifetime reservation}
+        awards_count: {type: integer, minimum: 0, description: 'Rewarded entitlements across owners; Council counts its canonical current qualification, other kinds count all history'}
+        pending_count: {type: integer, minimum: 0, description: Uncredited reservations counting toward quota; Council counts its canonical current qualification and microchip its canonical lifetime reservation}
         remaining_this_year: {type: integer, minimum: 0, maximum: 2, nullable: true, description: Vet slots remaining in the current Melbourne calendar year after pending and collected reservations; null for registrations}
-        can_earn: {type: boolean, nullable: true, description: Whether the current-year Council or lifetime microchip reward remains unreserved; null for vet check-ups requiring an event date}
-        registration_year: {type: integer, nullable: true, description: 'Server-current Council reward ending year, separate from any document contents'}
+        can_earn: {type: boolean, nullable: true, description: Whether a current Council or lifetime microchip reward remains unreserved; null for vet check-ups requiring an event date}
+        registration_year: {type: integer, nullable: true, description: 'Historical compatibility field; null in current eligibility responses'}
         message: {type: string}
     DocumentSubmission:
       type: object
@@ -1057,9 +1064,13 @@ components:
         kind: {$ref: '#/components/schemas/DocumentKind'}
         status: {type: string, enum: [SELF_REPORTED], description: Self-reported evidence; later audit possible and no prior approval implied}
         registration_number: {type: string, maxLength: 100}
-        council_name: {type: string, maxLength: 100, description: Self-reported issuing council; empty for uploads and legacy records}
-        registration_year: {type: integer, nullable: true, description: 'Council registration ending year: 2027 represents 10 April 2026 through 9 April 2027; null for uploads and legacy records'}
-        reward_registration_year: {type: integer, nullable: true, description: 'Council entitlement ending year; server-assigned reward period, not an OCR result or verified certificate year; old receipt snapshots may omit it'}
+        council_name: {type: string, maxLength: 100, description: Confirmed issuing council; required for new Council submissions, including uploads}
+        registration_year: {type: integer, nullable: true, description: 'Historical submitted year; no longer accepted for new submissions'}
+        reward_registration_year: {type: integer, nullable: true, description: 'Historical reward year; no longer controls eligibility; legacy receipts may omit it'}
+        registry_name: {type: string, maxLength: 100, description: Optional confirmed microchip registry}
+        document_dog_name: {type: string, maxLength: 100, description: Printed name separate from the app dog snapshot}
+        document_reading: {$ref: '#/components/schemas/DocumentReading'}
+        needs_expiry: {type: boolean}
         event_date: {type: string, format: date, nullable: true}
         valid_from: {type: string, format: date, nullable: true}
         valid_to: {type: string, format: date, nullable: true}
@@ -1075,11 +1086,13 @@ components:
       type: object
       required: [id, dog_id, dog_name, kind, reward_status, reward_points, collected_at, can_collect]
       properties:
+        valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
+        needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
         id: {type: integer, minimum: 1}
         dog_id: {type: integer, minimum: 1, description: Immutable dog ID retained after deletion}
         dog_name: {type: string, description: Current owned dog name or this viewer's historical submission snapshot}
         kind: {$ref: '#/components/schemas/DocumentKind'}
-        registration_year: {type: integer, nullable: true, description: Council reward ending year; null for other kinds}
+        registration_year: {type: integer, nullable: true, description: 'Historical metadata; no longer controls eligibility'}
         reward_status: {$ref: '#/components/schemas/DocumentRewardStatus'}
         reward_points: {type: integer, enum: [200, 300]}
         collected_at: {type: string, format: date-time, nullable: true, description: Null for READY; legacy awards use their original ledger timestamp}
@@ -1092,41 +1105,73 @@ components:
         submissions: {type: array, items: {$ref: '#/components/schemas/DocumentSubmission'}}
         eligibility: {type: array, items: {$ref: '#/components/schemas/DocumentEligibility'}}
         entitlements: {type: array, items: {$ref: '#/components/schemas/DocumentEntitlement'}}
+    DocumentReading:
+      type: object
+      nullable: true
+      additionalProperties: false
+      required: [source, pages_read, candidates]
+      description: Optional client-supplied suggestions accompanying an upload; not verification. Raw OCR text is not stored. Confirmed fields are separate.
+      properties:
+        source: {type: string, enum: [PDF_TEXT, APPLE_VISION, MIXED]}
+        pages_read: {type: integer, minimum: 1, maximum: 20}
+        candidates:
+          type: object
+          additionalProperties: false
+          properties:
+            registration_number: {$ref: '#/components/schemas/DocumentCandidates'}
+            council_name: {$ref: '#/components/schemas/DocumentCandidates'}
+            registry_name: {$ref: '#/components/schemas/DocumentCandidates'}
+            document_dog_name: {$ref: '#/components/schemas/DocumentCandidates'}
+            valid_to: {$ref: '#/components/schemas/DocumentCandidates'}
+    DocumentCandidates:
+      type: array
+      maxItems: 3
+      items:
+        type: object
+        additionalProperties: false
+        required: [value, page]
+        properties:
+          value: {type: string, minLength: 1, maxLength: 100, description: Nonblank single-line printable text}
+          page: {type: integer, minimum: 1, maximum: 20, description: Must not exceed pages_read}
+          source: {type: string, enum: [PDF_TEXT, APPLE_VISION]}
     DocumentRequest:
       type: object
       required: [request_id, dog_id, kind]
       description: >-
-        Council and microchip registrations accept exactly one route: entered
-        details OR a PDF/JPEG/PNG proof file. Council entered details require
-        council_name, registration_number and registration_year matching the
-        current Victorian registration year (10 April through 9 April).
-        registration_year stores the ending year. Council numbers preserve
-        leading zeros and may contain letters, digits, spaces and hyphens;
-        there is no universal council number length. Microchip entered numbers
-        normalize spaces/hyphens to exactly 15 ASCII digits without a required
-        prefix; other formats use the proof route. Neither registration kind
-        accepts new event/validity dates. Uploads need no entered number,
-        council or year. Council uploads reserve the current server reward year
-        without reading or verifying the certificate year. A number or file
-        remains self-reported, not verified.
-        Registration PDFs must be unencrypted with 1–20 pages; photos must
-        decode as JPEG/PNG with at most 16 megapixels.
-        Vet requires event_date no later than today and no earlier than a known
-        DOB, plus a JPEG/PNG photo of at most 16 megapixels; it rejects registration
-        numbers and validity dates. All dates use YYYY-MM-DD and eligibility uses
-        the Melbourne calendar. Files are raw base64,
-        not data URLs, and are limited to 4 MiB decoded. The display filename never
-        determines the storage path or trusted file type.
+        Council requires confirmed council_name, registration_number and actual
+        printed valid_to for both upload and manual entry. Microchip requires
+        registration_number and optionally registry_name, with no expiry.
+        Upload is the iOS default: PDF text or on-device Vision suggests details
+        and the user confirms/corrects them. Missing expiry is never inferred.
+        Manual Council references preserve zeros and allow ASCII letters, digits,
+        spaces and hyphens, with at least one alphanumeric character. Manual chip
+        numbers normalize whitespace/hyphens to 15 ASCII digits; uploads support
+        older printable chip/reference formats up to 100 characters.
+        Registration PDFs must be unencrypted and 1–20 pages; JPEG/PNG images
+        contain at most 16 megapixels. Optional document_reading requires the file.
+        expected_entitlement_id guards an existing Quest against concurrent
+        qualification changes. An active confirmed expiry cannot change.
+        An unknown legacy expiry can be bound once, even to a past date, without
+        another award; other new Council submissions require a current expiry.
+        Vet requires event_date no later than today and no earlier than a known birthday,
+        plus a JPEG/PNG photo, and rejects registration fields. All dates are
+        YYYY-MM-DD, with Melbourne eligibility. Files are raw base64, not data
+        URLs, up to 4 MiB decoded. File bytes determine the type and generated
+        storage path. Old exact request replays remain supported.
       properties:
         request_id: {type: string, format: uuid}
         dog_id: {type: integer, minimum: 1}
         kind: {$ref: '#/components/schemas/DocumentKind'}
-        registration_number: {type: string, maxLength: 100, description: 'Entered-details route only; council animal/registration reference or 15-digit microchip number, preserved as text'}
-        council_name: {type: string, maxLength: 100, description: Required only for entered Council details}
-        registration_year: {type: integer, description: 'Required only for entered Council details; ending year, for example 2027 for 2026–27'}
-        event_date: {type: string, format: date, nullable: true}
-        valid_from: {type: string, format: date, nullable: true, deprecated: true, description: Historical retry compatibility only; do not send for new submissions}
-        valid_to: {type: string, format: date, nullable: true, deprecated: true, description: Historical retry compatibility only; do not send for new submissions}
+        registration_number: {type: string, maxLength: 100, description: Confirmed registration/chip number required for both registration methods}
+        council_name: {type: string, maxLength: 100, description: Required for Council with or without an upload}
+        registry_name: {type: string, maxLength: 100, description: Optional microchip registry}
+        document_dog_name: {type: string, maxLength: 100, description: Optional confirmed printed dog name}
+        document_reading: {$ref: '#/components/schemas/DocumentReading'}
+        expected_entitlement_id: {type: integer, minimum: 1, description: Current entitlement from the Quest route; stale targets return 409}
+        registration_year: {type: integer, deprecated: true, description: Historical exact retry compatibility only; rejected for new submissions}
+        event_date: {type: string, format: date, nullable: true, description: Vet only}
+        valid_from: {type: string, format: date, nullable: true, deprecated: true, description: Historical exact retry compatibility only}
+        valid_to: {type: string, format: date, description: Actual confirmed Council expiry; inclusive in Melbourne time}
         filename: {type: string, maxLength: 150}
         file_base64: {type: string, format: byte, maxLength: 5592408}
     DocumentValidationError:
@@ -1140,11 +1185,14 @@ components:
       required: [submission, balance, awarded_points, created]
       description: >-
         A submission receipt, not a collection receipt. New submissions reserve
-        READY rewards with awarded_points=0, or attach to an already COLLECTED
+        READY rewards with awarded_points=0, retire a legacy expired qualification,
+        or attach to an already COLLECTED
         entitlement. Exact legacy retries may still contain their original
         immediate award and omit the additive entitlement fields. A replay never
         creates another credit; use GET documents to refresh current reward state.
       properties:
+        valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
+        needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
         submission: {$ref: '#/components/schemas/DocumentSubmission'}
         balance: {type: integer, minimum: 0, description: Wallet balance captured when the submission was created; identical retries replay this value}
         awarded_points: {type: integer, enum: [0, 200, 300], description: Zero for a new submission; legacy award amount is preserved only for its original receipt}
@@ -1157,10 +1205,12 @@ components:
       type: object
       required: [entitlement_id, kind, dog_id, points, balance, collected_at, created]
       properties:
+        valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
+        needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
         entitlement_id: {type: integer, minimum: 1}
         kind: {$ref: '#/components/schemas/DocumentKind'}
         dog_id: {type: integer, minimum: 1, description: Immutable dog identity snapshot}
-        registration_year: {type: integer, nullable: true, description: 'Council reward ending year; collection time can be in a later year without changing this qualification'}
+        registration_year: {type: integer, nullable: true, description: 'Historical metadata; expiry controls qualification'}
         points: {type: integer, enum: [200, 300], description: Canonical original credit amount; retries do not award it again}
         balance: {type: integer, minimum: 0, description: 'Current authoritative wallet balance, including on replay'}
         collected_at: {type: string, format: date-time, description: 'Original collection time, unchanged on retry'}

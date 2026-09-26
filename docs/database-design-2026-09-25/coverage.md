@@ -93,7 +93,7 @@
 | US-03 Track a Walk with GPS（Must） | 已連接：手機記錄／暫停／Finish、`Walk`、`WalkDog`驗證。 | server session／GPS樣本表是基礎，未接持續上傳；保留期限及分享同意未定。 |
 | US-04 Earn and View Points（Must） | 已連接：`PointEntry` credit lot、到期、Walking來源及共享cap。 | Goal20/day只有數值定案，Net與Goal是否進72cap仍待定；多狗不倍增Walking點數。 |
 | US-05 Check In at a Place（Must） | 基礎：`Venue`、`CheckIn`、`LocationSample`與內部Collect。 | 正式GPS provider未接；目前共享72cap，部分發點不開放。不能靠新增地點繞過每日四類限制。 |
-| US-06 Vet and Registration Proof（Should） | 已連接：三個文件模型、私人檔案、READY→Collect。 | Council 每狗每登記年度一次，Microchip 每狗終身一次；手填或 PDF／照片皆為 self-reported。舊事前核准已取代；完整抽查與處置服務未交付。 |
+| US-06 Vet and Registration Proof（Should） | 已連接：三個文件模型、私人檔案、READY→Collect。 | Council 每狗每實際有效期一次，Microchip 每狗終身一次；手填或 PDF／照片皆為 self-reported。舊事前核准已取代；完整抽查與處置服務未交付。 |
 | US-07 Use Points for Rewards（Must） | 已連接：Venue菜單、Reward有效期／配額、Redemption與ledger。 | Purchase扣點，swipe只確認取餐，取代舊swipe扣點。店內購買條件可展示但未驗證現金消費。 |
 | US-08 History and Charity Donations（Should） | 已連接：`Redemption`／`PointEntry`歷史；延後：`Charity`／`Donation`。 | 沒有捐點表或API；合作方、確認／退款／對帳規則待定，不預建支付結算系統。 |
 | US-09 Recommendations and Streaks（Should） | 基礎：`QuestDefinition`、`DogDailyGoal`、`QuestAward`。 | 沒有推薦引擎；streak 已接有效散步日、漏日歸零及每段7／30／60／90…領點，已達標未領資格保留。 |
@@ -139,7 +139,7 @@
 | 7-day streak | Walk驗證日期 → QuestAward.run_start_date／milestone_days → PointEntry | 已連接；每段新streak可重新達標，Collect防重領。 |
 | 30/60/90…day streak | 同上 | 已連接；單一進度條等待Collect後切換下個目標。 |
 | Vet checkup | DocumentEntitlement事件日 → PointEntry | 已連接。 |
-| Council registration | 每狗／登記年度 entitlement → PointEntry | 已連接；每年4/10墨爾本零時開新年度，舊收據／點數保留。 |
+| Council registration | 每狗／實際到期日 entitlement → PointEntry | 已連接；過期後開新期，舊未領任務失效；舊收據／點數保留。 |
 | Microchip certificate | 每狗終身 entitlement → PointEntry | 已連接；舊年期／點數保留，歷史已領資格不能重領。 |
 | Dog birthday | Dog.date_of_birth、QuestAward → PointEntry | 已連接；每狗／年份唯一，跨轉移防重領。 |
 
@@ -147,7 +147,7 @@ Walk＋Check-in共享72/day已在服務保護；Goal／Net是否納入待定。�
 
 ## 保留的衝突與未完成範圍
 
-- 最新決定取代舊一狗／兩狗限制、Council終身一次、咖啡60提示、事前文件核准及swipe扣點；完整現行規則見[QUESTS.md](../QUESTS.md)。Council依2026-09-27決定每登記年度一次。目前最多10狗，walking仍按帳戶計分。
+- 最新決定取代舊一狗／兩狗限制、Council終身一次、咖啡60提示、事前文件核准及swipe扣點；完整現行規則見[QUESTS.md](../QUESTS.md)。Council依2026-09-27更正決定按文件實際到期日刷新。目前最多10狗，walking仍按帳戶計分。
 - Daily goal20/day不是未知金額；未知的是個人化公式／資格。舊15分鐘例子不能直接作目標，舊「72包含goal」不能覆蓋新Walk＋Check-in範圍。
 - Streak已定案為有效散步日、漏日重置，每段7日與30/60/90…可領；已達標未領保留。Net規則與DailyGoal公式仍需定案，資料表不代表引擎存在。
 - User刪除／Dog封存欄位、文件audit欄位及LogEntry不等於完整刪除／抽查／稽核流程；保存、匿名化及點數追回待政策。六個延後模型不以假欄位冒充完成。

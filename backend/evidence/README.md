@@ -1,127 +1,121 @@
 # Self-reported document rewards
 
-`GET /api/quests/documents` returns the authenticated owner's dogs, preserved
-submission versions, per-dog eligibility and reward entitlements. `POST` accepts
-a UUID `request_id`, `dog_id`, and `kind`, with the fields below. Submission
-records `SELF_REPORTED` evidence and reserves a `READY` entitlement. It awards
-zero points. This does not verify a certificate or imply that an audit occurred.
+`GET /api/quests/documents` returns the owner's dogs, immutable submissions,
+current eligibility and entitlements. `POST` submits evidence and reserves a
+reward; it awards **zero points**. `POST /api/quests/documents/entitlements/{id}/collect`
+credits the reserved reward exactly once. Evidence stays `SELF_REPORTED` until
+an actual audit; text recognition is not registration or authenticity verification.
 
-- `COUNCIL_REGISTRATION`: 300 points per dog per Victorian registration year. Enter `registration_number`,
-  `council_name` and `registration_year`, or upload proof. Manual numbers allow
-  ASCII letters/digits, spaces and hyphens (1–100 characters, including at least
-  one letter/digit). Leading zeroes are preserved. Council names allow up to 100
-  printable characters. The year is the ending year of the current Victorian
-  registration period (10 April–9 April), evaluated in Melbourne time: e.g.
-  `2027` represents 10 April 2026–9 April 2027. Entitlements separately store
-  `registration_year` and are unique per dog/kind/year. Both routes reserve the
-  server's current year; uploads leave the submission's manually entered year
-  null and do not imply that the certificate's year was read or verified.
-  New entitlements use `council:YYYY` keys and the annual Council rules version.
-- `MICROCHIP_REGISTRATION`: 300 points once per dog. Enter a 15-digit
-  `registration_number`, or upload proof (including older/overseas chip formats).
-  Whitespace and hyphens are removed from typed numbers; all remaining characters
-  must be ASCII digits. Leading zeroes are preserved and no prefix is required.
-  No registration dates are requested or inferred. New entitlements use the
-  `microchip-lifetime-2026-09-25` rules version.
-- `VET_CHECKUP`: 200 points per actual `event_date`, maximum twice in its calendar
-  year, with at least 60 days between reserved event dates across year boundaries.
-  A JPEG/PNG photo is required. Future dates and visits before a known birthday
-  are rejected. No unconfirmed historical look-back limit is imposed.
+## Submission fields
 
-`POST /api/quests/documents/entitlements/{id}/collect` with `{}` explicitly credits
-the canonical point ledger and returns
-`{entitlement_id,kind,dog_id,registration_year,points,balance,collected_at,created}`. Collection locks
-the owner, dog and entitlement; retries return `created:false` without another
-credit. An uncollected entitlement requires the current dog's owner to have
-submitted evidence. A credited entitlement can only be replayed by its historical
-point recipient, even after transfer/deletion. Dog transfers never reset quota.
+Every request includes `request_id` (UUID), `dog_id` and `kind`.
 
-The submit receipt adds `entitlement_id`, `reward_status`, `reward_points` and
-`collected_at`, also present on the submission object. New submit receipts always
-have `awarded_points:0`. Original submit receipts remain immutable: retries replay
-their original status and balance even after collection. The dashboard gives the
-current state; `awards_count` counts credited entitlements (current-year Council,
-all years for other kinds), `pending_count` counts
-quota reservations (current-year Council, canonical lifetime microchip), and vet
-remaining slots include reservations. Council eligibility includes the server's
-current `registration_year`. New submission responses add
-`reward_registration_year` from the entitlement, separate from the entered
-`registration_year`; immutable old response snapshots may omit it. Legacy receipts,
-point entries, files and submission-level awarded amounts remain unchanged. The
-additive migration backfills legacy collection times from linked ledger entries.
+| Kind | Required confirmed details | Reward |
+| --- | --- | --- |
+| `COUNCIL_REGISTRATION` | `registration_number`, `council_name`, actual printed `valid_to` | 300 per current qualification; renew after expiry |
+| `MICROCHIP_REGISTRATION` | `registration_number`; optional `registry_name` | 300 once per dog |
+| `VET_CHECKUP` | `event_date` and JPEG/PNG evidence | 200, twice per calendar year, visits at least 60 days apart |
 
-Each entitlement freezes its promised points and rules version. Hold/rejection
-metadata can block collection without rewriting the original evidence or ledger.
-Submissions include optional audit metadata and upload byte size; historical file
-sizes remain unknown. The audit workflow is not enabled and no migrated submission
-is marked verified.
+Council and microchip default to file upload in iOS. Both upload and manual
+entry require confirmed details. Manual Council references allow ASCII letters,
+digits, spaces and hyphens, at least one letter/digit, up to 100 characters.
+Manual microchip numbers normalize whitespace/hyphens to exactly 15 ASCII digits.
+Leading zeroes are preserved. File-backed references may use older or overseas
+formats, with printable identifiers up to 100 characters. Microchip has no expiry.
+`document_dog_name` optionally records the printed name separately from the app's
+immutable `dog_name_snapshot`; submission never overwrites the dog's chip number.
 
-Re-uploading within the same Council year or microchip lifetime preserves another
-version of that entitlement without a second reward. Conflicting request-ID reuse
-returns 409. Per-dog file fingerprints cannot support a different Council year or
-vet visit. A renewed Council registration may reuse the same animal number with
-current details or new evidence. A family certificate/photo can support
-several dogs. Disabling Documents blocks new submissions and uncollected rewards
-with 409; successful request/collection retries, history and downloads remain.
+New requests do not accept `registration_year` or `valid_from`; these remain
+historical storage/output fields. `event_date` is for vet only. All dates use
+YYYY-MM-DD. Vet dates cannot be future or before a known birthday.
 
-Historical microchip annual entitlements are retained unchanged. Lifetime
-selection uses the oldest already-collected entitlement, or otherwise the oldest
-pending entitlement, including any held/rejected reservation. Only that pending
-entitlement may become collectible. The collect endpoint enforces this under the
-dog lock, so multiple legacy periods cannot produce another credit. Existing
-paid receipts continue to replay for their original recipients, with no points
-removed. Superseded pending rows remain in document history with
-`can_collect:false`, and are omitted from Quest tasks. Transfers do not reset the
-lifetime limit; a new owner must submit evidence against an existing pending
-entitlement before collecting it. An old microchip file can be attached to the
-canonical entitlement without changing the historic file fingerprint or award.
+## Council expiry and legacy records
 
-Council tasks recur at 00:00 on 10 April in Australia/Melbourne. A prior year's
-pending or paid entitlement does not block the current year. Old pending rewards
-remain collectible; their original reward year is shown separately. Transfer
-does not reset annual quota. Existing ownership/submission authorization still
-applies: a transferred dog's new owner cannot claim a former owner's old-year
-reservation without their own evidence, and new submissions only target the
-current year. This change does not introduce retrospective submission or
-transfer of unclaimed rewards. An already accepted request replays its original
-receipt across rollover without reserving a new year. New typed submissions
-are rechecked inside the transaction to reject a year that became stale while
-the request waited for its lock.
+`valid_to` is inclusive in Australia/Melbourne. A document valid through
+15 June is current until midnight starting 16 June. No fixed 10 April reset,
+upload-date anniversary or expiry inferred from a legacy year is used.
 
-The annual Council migration adds `DocumentEntitlement.registration_year` and
-backfills from the earliest submission's entered year, otherwise its Melbourne
-submission date, or the entitlement's creation date if it has no submissions.
-It preserves original keys, points, files, submission data and receipt snapshots.
-Later re-uploads cannot move the original qualification to a newer year. Duplicate
-legacy qualifications for one dog/year cause an explicit migration failure
-rather than silently merging financial history.
+An active entitlement's confirmed expiry cannot be changed by a re-upload.
+Updated evidence attaches to the same reward. Once expired, a fresh current
+registration creates a new entitlement (`expiry:YYYY-MM-DD`); the Animal ID may
+stay the same. The same file cannot support another Council qualification for
+that dog, including across ownership transfers.
 
-`evidence.services.quest_tasks(owner=...,dogs=...,request=...,now=...)` returns
-compact IN_PROGRESS, READY and COLLECTED task rows. Pending rewards suppress
-additional tasks of that dog/type/qualification year, never a new Council year.
-Council task IDs are `council:{dog_id}:{ending_year}` and carry the reward year.
-COLLECTED tasks are shown only on their
-collection's Melbourne date, while document history remains available. Former
-owners see their evidence's dog-name snapshot, not the transferred dog's profile.
+Expired and superseded uncollected Council rewards are absent from Quest and
+cannot be collected. History returns `EXPIRED`. Original files, submissions,
+receipt snapshots and ledger entries remain intact. A previous paid reward can
+still replay to its original recipient without another credit.
 
-Registration submissions use exactly one path: manual details or a PDF/JPEG/PNG
-proof upload. Uploads require no manually transcribed registration details or
-dates. Both paths remain self-reported, with no government/database lookup or
-automatic certificate verification. Historical exact request retries are checked
-before new semantic rules, so previously accepted number-only or number-and-PDF
-requests still replay their original receipts. New requests cannot reuse the old
-validation rules.
+The newest paid Council qualification by creation order blocks another reward
+until its known expiry passes. Then only a newer pending qualification, if any,
+is current. Without paid history, only the latest pending qualification is current.
+This prevents legacy pending rows from becoming extra rewards.
 
-JSON uploads are bounded at 4 MiB decoded and the request parser at 6 MiB. PDFs
-must parse, have 1–20 pages and be unencrypted. All photos must decode as JPEG or
-PNG and be at most 16 megapixels. Vet uploads remain photo-only. Files are not
-OCR-checked. Submitted bytes remain
-unchanged under generated names in `PRIVATE_MEDIA_ROOT`, never public
-`MEDIA_ROOT`; the database and private files must be backed up together. Partial
-write failures remove only the newly created file and database work rolls back.
+A current legacy qualification with unknown expiry must be updated first:
+`needs_expiry:true` creates an `IN_PROGRESS` task, worth zero new points if already
+paid. Its expiry can be bound once, including a past expiry that retires it. This
+updates the existing entitlement without modifying its original receipt or ledger.
+The submission can send `expected_entitlement_id` from the Quest route; a changed
+or expired route returns 409 rather than updating a different qualification.
 
-`GET /api/quests/documents/{id}/file` permits only the submitting owner or an
-admin (JWT, or an authenticated Django admin session). It returns an attachment
-with private/no-store, nosniff and sandbox headers. The admin page is read-only;
-original submissions cannot be overwritten or removed there. Deleting a dog
-retains its name/ID snapshots, reward entitlement, ledger entry and evidence.
+Migration `0006` removes obsolete annual constraints and adds reading metadata.
+It preserves existing values, including historical years, and never invents dates.
+
+## Document reading
+
+The iOS production reader uses PDFKit text first, then Apple Vision for scanned
+PDF pages, missing fields and JPEG/PNG images. Reading is local, bounded and
+cancellable. Labelled identifiers and expiry dates become suggestions; unrelated,
+ambiguous or low-confidence values remain unresolved. Application/renewal forms
+are not autofilled as completed certificates. The user confirms/corrects details
+before submitting; an unreadable date never becomes today's date or 9 April.
+
+Optional `document_reading` stores only bounded suggestions separately from
+confirmed fields:
+
+```json
+{"source":"MIXED","pages_read":2,"candidates":{"valid_to":[{"value":"2027-06-15","page":2,"source":"APPLE_VISION"}]}}
+```
+
+Source is `PDF_TEXT`, `APPLE_VISION` or `MIXED`; pages are 1–20. Candidate keys are
+`registration_number`, `council_name`, `registry_name`, `document_dog_name`,
+`valid_to`, at most three each. Each has printable `value` (1–100 characters),
+`page` within the file and optional `source` (`PDF_TEXT`/`APPLE_VISION`). Unknown
+keys, raw OCR text and metadata without the original upload are rejected.
+This is client-supplied provenance, not trusted verification.
+
+## Collection, retries and privacy
+
+Collection locks owner, dog and entitlement before crediting the canonical ledger.
+Uncollected rewards require the current owner to have submitted evidence. Transfer
+never resets quota. Only the original point recipient may replay a credited reward.
+`EXPIRY_REQUIRED` and `EXPIRED` collection errors are HTTP 400; changed request IDs
+or stale expected entitlement IDs return 409. Holds/rejections prevent collection.
+
+Retry the exact owner/request UUID payload after ambiguous network failure.
+Accepted requests replay their original receipt and balance, including historical
+payload formats, even after expiry or collection. New UUIDs use current validation.
+Disabled Documents blocks new submissions and collections, but not successful
+retries, history or authorized downloads. Document bonuses do not use the daily cap.
+
+Historical microchip rewards remain intact. The oldest paid entitlement, otherwise
+the oldest pending entitlement, is canonical for the dog's lifetime. Superseded
+pending rows cannot collect and never appear in Quest. Vet reservations consume
+quota, including pending visits, and the 60-day separation crosses New Year.
+
+Council task IDs are `council:{dog_id}:new` or
+`council:{dog_id}:entitlement:{id}`. Tasks carry `valid_to` and `needs_expiry`;
+collected tasks appear only on their collection's Melbourne day while still current.
+History remains available separately. Former owners see their submission name
+snapshot, not the transferred dog's current profile.
+
+JSON requests are bounded at 6 MiB and decoded files at 4 MiB. PDFs must be
+unencrypted, parseable and 1–20 pages. Images must decode as JPEG/PNG and contain
+at most 16 megapixels. Files stay unchanged under generated names in
+`PRIVATE_MEDIA_ROOT`. Back up database and private files together. Failed writes
+remove only the new file and roll back database work.
+
+`GET /api/quests/documents/{id}/file` permits the submitting owner or an admin
+(JWT or Django admin session), with private/no-store, nosniff and sandbox headers.
+The admin evidence view is read-only. Dog deletion preserves evidence, identity
+snapshots, entitlements and points.

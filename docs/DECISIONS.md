@@ -5,7 +5,7 @@ Current as of 27 September 2026. The latest confirmed conversation and
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
 
-Earlier Android, SwiftData, memory-only Walk, one-time-only streak, lifetime-only
+Earlier Android, SwiftData, memory-only Walk, one-time-only streak, lifetime-only or fixed-calendar
 Council rewards, annual microchip rewards, 60-point coffee and submission-immediately-awards proposals are
 superseded. Their full history remains in Git. Existing decision identifiers
 below are retained where other project documents cite them.
@@ -34,10 +34,10 @@ below are retained where other project documents cite them.
 | R52 | Use actual nullable dog birthdays; preserve legacy age-only records; birthday qualification is per dog/year |
 | R53 / R55 | Care rewards are per dog and self-reported. Submission reserves eligibility; explicit Collect credits once. Later spot checks replace up-front approval; audit tooling is separate work |
 | R56 | Up to four daily venue opportunities. Below the walking/check-in cap active rows remain; at the cap uncollected rows hide. Today's collected rows remain below until Melbourne midnight |
-| R57 | Registration Quests are fixed to one dog and document kind. Choose entered details or PDF/JPEG/PNG proof; Council details include council, animal reference and current registration year. Microchip numbers use 15 digits or the proof fallback. Submissions remain self-reported; no OCR or registry verification is implied |
+| R57 | Registration Quests are fixed to one dog and document kind. PDF/JPEG/PNG upload is the default, with on-device reading and user confirmation; entered details remain secondary. Council requires council, animal reference and actual expiry. Microchip has no expiry and supports proof-backed older identifiers. Submissions remain self-reported, never automatically verified |
 | R58 / O16 resolved | Microchip registration awards 300 points once per dog in its lifetime. No certificate start/end dates or annual renewal reward. Existing credits and receipts remain unchanged; previous microchip rewards prevent another credit |
 | R59 / O18 resolved | Streak counts valid walking days per account in Melbourne. A missed day breaks the run; each new run can earn seven-day points, then 30/60/90… milestones. One progress bar shows only x / target, stays full until explicit Collect, then advances |
-| R60 | Council registration awards 300 points per dog per Victorian registration year, resetting on 10 April in Melbourne. Previous pending rewards remain collectible; annual identity survives ownership changes. Uploads use the server's reward year without implying OCR. Historical evidence, receipts and points remain unchanged |
+| R60 (corrected) | Council registration awards 300 points per dog per actual registration period. Renewal opens after the confirmed document expiry, not a fixed 10 April date. Expired/superseded pending rewards disappear and cannot be collected. Unknown legacy expiry requires an evidence update without re-awarding paid points. Historical files, receipts and ledger entries remain private |
 
 The database foundation normalizes Venue, keeps one PointEntry ledger and adds
 specific daily-goal, check-in, live-location, net-walk and friendship records.
@@ -59,7 +59,7 @@ placeholder dog-goal endpoint are removed. Enabling a QuestDefinition does not
 activate a missing calculator/provider.
 
 Council, microchip and vet entitlements preserve evidence versions and one
-credit per qualification. Council awards once per dog per registration year;
+credit per qualification. Council awards once per dog per actual registration period;
 microchip awards once per dog in its lifetime. Legacy
 microchip annual records are retained but do not reopen reward eligibility.
 Private evidence and public profile/venue media remain separate.

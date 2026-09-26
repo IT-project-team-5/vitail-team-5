@@ -14,7 +14,7 @@ amount does not mean its qualification engine is implemented.
 | Daily goal | 20 points/day per account; per-dog progress for participating dogs | Not enabled: target formula, evaluation units and attribution remain open |
 | Venue check-in | 12 points; at most one daily opportunity per type, four types total | Persisted collection/cap service and shared UI foundation; no production GPS provider or enabled iOS service |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
-| Council registration | 300 points per dog per Victorian registration year (10 April–9 April) | Connected: annual Quest; submit current evidence, then Collect |
+| Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
 | Vet check-up | 200 points per visit, at most two per visit calendar year and at least 60 days apart | Connected: evidence with actual visit date, then Collect |
 | Streak | Each consecutive run: 7 days earns 20 points; 30/60/90… days earn 100 points each | Connected: validated walking days, one progress bar and explicit Collect |
@@ -107,49 +107,56 @@ progress table or client-generated qualification is used.
 ## Evidence: submit, then collect
 
 Council, microchip and vet evidence are self-reported per dog. An eligible
-submission reserves a DocumentEntitlement and preserves an immutable
-DocumentSubmission version with zero newly awarded points. Explicit Collect
-links the one canonical credit. Pending entitlements reserve quota; re-uploading
-proof for the same qualification does not create another reward. Council has
-one reward per dog per Victorian registration year; microchip has one lifetime
-reward per dog. Prior microchip credits
-count toward this limit; old annual entitlements and receipts remain intact,
-and cannot produce another credit once any microchip reward was collected.
+submission reserves a DocumentEntitlement and preserves an immutable submission
+version with zero newly awarded points. Explicit Collect links one ledger credit.
+Re-uploading the same qualification does not create another reward. Microchip
+has one lifetime reward per dog; prior credits and historical receipts remain
+intact and cannot produce a second lifetime credit.
 
-Submission UUIDs replay their original response; a changed payload under the
-same UUID conflicts. Consult the live dashboard for current status. Repeated or
-simultaneous collection from Documents and Quest returns the existing credit,
-not another award. Account changes reject late client responses; confirmed
-success survives a failed refresh and queues the canonical wallet refresh.
+Council uses the **confirmed expiry printed on the document**. `valid_to` is
+inclusive in Australia/Melbourne: a document expiring on 15 June remains eligible
+through that day; the renewal task opens at local midnight on 16 June. There is
+no fixed 10 April reset and no upload-date-plus-one-year calculation. Expired or
+superseded pending Council rewards disappear from Quest and cannot be collected.
+They do not remain alongside the new task. Historical files, receipts and ledger
+entries remain private records; hiding a task does not delete those records.
 
-Each registration task opens its fixed dog/type directly, with official help
-links above an Enter details / Upload proof choice. Council details include
-issuing council, animal reference and the current Victorian registration year
-(10 April–9 April; API stores the ending year). Standard microchips use a
-15-digit number; other formats can use the proof route. Proof accepts PDF,
-JPEG and PNG without asking for duplicate typed details. This does not verify
-ownership, registration completion or document authenticity.
+Only one Council qualification is active per dog. An unexpired paid registration
+blocks a new reward; its confirmed expiry cannot be changed to create another
+qualification. Once it expires, renewed evidence with a later valid expiry may
+reserve the next reward. The same animal number may recur after renewal; an
+identical file cannot support another qualification. Ownership transfers do not
+reset eligibility. Explicit collection rechecks expiry under the dog lock.
 
-Council's new task becomes available at **10 April, 00:00 Australia/Melbourne**,
-not twelve months after the last upload or collection. The reward entitlement
-stores its ending year separately from the submission's manually entered year.
-Both submission routes reserve the server's current year; uploads do not imply
-that the certificate's year was read or verified. The same registration number
-can be used after renewal, but the identical file cannot support a different
-year for that dog. Pending or collected rewards in an earlier year do not block
-the new year's task. Existing pending rewards remain collectible, and each row
-identifies its year. Ownership changes do not reset a year's quota.
+Historical Council rows with unknown expiry do not acquire an invented date from
+their old registration year. The current legacy qualification first requests
+its actual expiry. Updating an already paid qualification earns no extra points;
+an update-only task hides the reward amount. Earlier superseded pending rows are
+not offered. Old annual columns/keys and immutable receipt snapshots remain for
+compatibility; they no longer qualify a reward or schedule the next task.
 
-The Council migration assigns each historical entitlement to its earliest
-submission's explicit registration year, or that submission's Melbourne year
-when the field is unknown; without a submission it uses the entitlement's
-creation date. A later re-upload never moves the original reward to a newer
-year. Submission snapshots, prior credits and receipts remain unchanged.
+Each task opens its fixed dog/type. **Upload proof is the default**; entered
+details remain a secondary route. PDF/JPEG/PNG selection starts on-device reading:
+PDFKit extracts a text layer, and Apple Vision reads images or rendered PDF pages
+when needed. Council suggestions include council, animal registration number,
+printed dog name and explicitly labelled expiry; microchip suggestions include
+chip number, registry and printed dog name, without an expiry requirement.
 
-Private original files remain owner/admin-readable for later checks. No
-up-front human review or authenticity guarantee is claimed. Retention and
-spot-audit procedures are separate work. File limits, evidence formats and
-migration compatibility live in [evidence documentation](../backend/evidence/README.md).
+Users inspect and confirm the short fields before submission. Unreadable or
+ambiguous values stay empty for correction or a replacement file. Payment due
+dates, birthdays and issue dates are not silently used as expiry. Printed dog
+identity is kept separately from the app's dog name. Extracted candidates and
+confirmed values retain distinct provenance; full OCR text is not stored as a
+second copy. Reading does not establish authenticity, official completion or
+ownership, and no registry lookup or automatic verified status is implied.
+
+Submission UUIDs replay their original response, even across expiry; changed
+payloads under one UUID conflict. An already paid collection can replay its
+original receipt but never credits again. Account changes reject late client
+responses; confirmed success survives a failed refresh and queues the wallet
+refresh. Private originals remain owner/admin-readable for later spot checks.
+File limits, expiry selection and migration compatibility are documented in
+[evidence documentation](../backend/evidence/README.md).
 
 ## HTTP contract
 
@@ -169,7 +176,7 @@ also permit ADMIN.
 
 Each task includes a stable ID, kind/state, title/subject/avatar, detail, reward,
 optional measured progress, dog/entitlement IDs and collection timestamp. iOS
-also uses Council's `registration_year` to scope annual tasks and receipts. It
+also uses Council's actual expiry and entitlement identity to scope tasks and receipts. It
 ignores unused presentation fields and unsupported kinds/states. The old
 `daily_goal`, `streak`, `birthdays`, `check_ins` and `documents` dashboard
 projections are removed; the document dashboard has its own route. The unused

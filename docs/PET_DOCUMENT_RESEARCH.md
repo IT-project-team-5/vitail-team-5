@@ -1,6 +1,6 @@
 # 墨爾本寵物登記：流程、提交方式與辨識邊界
 
-查證：2026-09-25。使用者已確認登記 Quest 採「填資料」或「上傳證明」二選一。提交為 self-reported，成功後可 Collect；不做事前人工審查或宣稱官方驗證。
+流程查證：2026-09-25；實作決策更新：2026-09-27。登記 Quest 預設「上傳證明」，讀取後核對／補正資料；「填資料」保留為次要途徑。提交為 self-reported，符合當期資格才可 Collect；不做事前人工審查或宣稱官方驗證。
 
 ## 先釐清兩種登記
 
@@ -23,21 +23,21 @@ Council 文件的期間也不能推定為申請日起剛好 12 個月。例如 [
 每頁固定綁定 `dogID + documentKind`，標題沿用 Quest 名稱；不同狗各自一個 Quest，不再選狗或文件種類。
 
 1. 上方教學分「已有登記，去哪找」和「還沒登記，去哪辦」，附官方連結。
-2. 下方選擇 **Enter details** 或 **Upload proof**。
-3. Council 手填：Council 名稱、Animal ID／Registration number、當期有效年度。年度 API 存結束年；`2027` 表示 2026-04-10 至 2027-04-09。依 2026-09-27 使用者最新決定，Council 獎勵為每狗每登記年度一次。
+2. 下方預設 **Upload proof**，選檔即讀取；**Enter details** 為次要方式。
+3. Council 保存 Council 名稱、Animal ID／Registration number、文件實際到期日 `valid_to`。讀取後核對或手填，不再用年份選單或固定 4/10 推算刷新。到期日含當天，墨爾本隔日零時才能開始下一期。
 4. Microchip 手填：通常為 15 位 ASCII 數字；清除空格／連字號，保留開頭 0，不限制必須以 9 開頭。舊／海外等其他格式走上傳證明途徑。
-5. 上傳接受 PDF、JPEG、PNG（含照片、截圖），不強制再填 Council、號碼或日期。限制為 4 MiB；PDF 1–20 頁且未加密，圖片最多 16 MP。
+5. 上傳接受 PDF、JPEG、PNG（含照片、截圖），自動填入能明確讀到的欄位，使用者核對並補齊缺漏。Council 必須確認 Council、號碼、到期日；Microchip 確認晶片號碼，Registry 可選。限制為 4 MiB；PDF 1–20 頁且未加密，圖片最多 16 MP。
 6. 顯示此狗／此類型的提交與領取狀態，不列整個帳號的歷史或重複政策說明。Vet 保留就診日期＋照片。
 
 Council 編號沒有墨爾本統一格式：[Greater Dandenong](https://www.greaterdandenong.vic.gov.au/pets-and-animals/renew-your-pet-registration) 明確使用 1–5 位 Animal number；[Hume](https://www.hume.vic.gov.au/Residents/Pets-and-Animals/Register-Your-Pet) 要求 Animal ID，不能填 Tag number。手填保存字母、數字、空格、連字號；不套用通用位數規則。
 
-正式證明包括 Council 當年度有效登記證書／正式完成 Email，以及 registry 的 Registration／Identification Certificate。申請表、待付款通知、待處理畫面不能當作完成證明；這是教學與日後抽查標準。第一版只驗證輸入與檔案是否有效，不自動判斷文件內容或真偽。
+正式證明包括 Council 當年度有效登記證書／正式完成 Email，以及 registry 的 Registration／Identification Certificate。申請表、待付款通知、待處理畫面不能當作完成證明；這是教學與日後抽查標準。讀取器可提供文件類型警示與欄位建議，但不驗證真偽或政府資料庫狀態。
 
 ## Council tutorial 草稿
 
 **Already registered?**
 
-Check the registration confirmation or renewal paperwork from your local council. If you cannot find your pet's registration details, ask that council for a copy. Enter your council, animal registration number and current registration year, or upload proof showing the council and your dog's details.
+Check the registration confirmation or renewal paperwork from your local council. If you cannot find your pet's registration details, ask that council for a copy. Upload the completed-registration proof, then check your council, animal registration number and the expiry date printed on it. You can also enter these details yourself.
 
 **Not registered yet?**
 
@@ -74,23 +74,38 @@ Book a vet appointment for microchipping and registration. Once you receive the 
 
 ## 基本圖片判讀的可行性
 
-下列 **OCR 輔助填寫＋使用者確認** 是後續方案，尚未啟用；本輪使用手填或上傳二選一：
+正式上傳頁已接上 **OCR 輔助填寫＋使用者確認**：
 
 - 圖片／掃描 PDF 讀出文字；有文字層的 PDF 優先抽取文字。
-- 在已知 Quest 類型內辨識號碼、狗名、核發機構；Council 若需當期資格，再辨識有標籤的日期。
+- 在已知 Quest 類型內辨識號碼、狗名、核發機構；Council 只辨識明確標示為 expiry／valid until 的日期，不把付款截止日、生日或核發日拿來刷新。
 - 不把晶片號碼、Council 參考號碼及付款號碼混用；找不到明確候選就要求補正。
-- 與這隻狗已存的晶片資料比對。尚無可信號碼時，圖片無法單獨建立真實所有權。
+- 文件上的狗名另存為辨識資料，不用 App 狗名代替；不自動改寫狗狗主檔晶片資料。圖片無法單獨建立真實所有權。
 - 模糊、反光、裁切、手寫及多隻狗共用文件會增加錯讀；保留重拍／手動修正。
-- 一般文件資訊可在裝置端讀取。Apple 說明 Vision 在裝置端執行；目前 app 支援 iOS 17，實作應使用相容的 `VNRecognizeTextRequest`，避免把新版 API 當成所有裝置都能用。[Apple Vision](https://developer.apple.com/documentation/vision/vnrecognizetextrequest)、[Apple WWDC 說明](https://developer.apple.com/videos/play/wwdc2025/272/)。
+- 一般文件資訊可在裝置端讀取。Apple 說明 Vision 在裝置端執行；app 使用支援 iOS 17 的 `VNRecognizeTextRequest`，PDFKit 讀文字層或渲染頁面，工作不阻塞主畫面。[Apple Vision](https://developer.apple.com/documentation/vision/vnrecognizetextrequest)、[Apple WWDC 說明](https://developer.apple.com/videos/play/wwdc2025/272/)。
 
 OCR 能讀文字與提出一致性提示，不能證明文件未變造、當下政府／registry 登記狀態或實際所有權。未串接獲授權的查驗服務前，狀態仍應是 self-reported／已提交。前端 OCR 結果不得當成後端已驗證的發點授權。
 
-既有 OCR 研究使用官方空白表格及網路圖片，沒有足夠已核發證書正例，不能據此宣稱完整證書辨識率或涵蓋所有狀況。OCR 不在本輪提交流程中啟用。
+既有 OCR 研究使用官方空白表格及網路圖片，沒有足夠已核發證書正例，不能據此宣稱完整證書辨識率或涵蓋所有狀況。既有研究不是已核發證書的正確率保證；正式讀取器另以測試與實際檔案回歸驗證。
 
 ## 已確認的獎勵規則
 
-- Council 每隻狗每登記年度 300 點；每年 4 月 10 日墨爾本零時出現新年度 Quest。Microchip 維持每隻狗終身一次 300 點。
-- Council 手填年度是 self-reported 證明資料；獎勵年度另存在 entitlement，由伺服器當前年度決定。上傳仍不要求手填年度，且沒有 OCR 判讀文件年度。Microchip 不要求年度或證書起訖。
-- 上年度未領獎勵保留，與新年度 Quest 分開顯示。相同 Animal ID 可在續期後再用；同一份檔案不能跨年當作新資格。舊 Council 資格依最早提交的年度（未知則以該次提交日期推定）歸年，不因後續重傳移到新年度。
-- 保留原本已發點數、舊年期、提交檔案與收據。曾領過 Microchip 即已使用終身資格，不因換主人、重傳或換年度再發點。
-- 手填或上傳成功後可 Collect，狀態是已提交；後續抽查，沒有前置人工審核。OCR 仍屬後續方案。
+- Council 每隻狗每有效登記期 300 點，依確認過的實際到期日刷新；移除固定 4/10 規則。Microchip 維持每隻狗終身一次 300 點。
+- Council 舊期未領取資格過期後失效，不再出現在 Quest，也不能透過舊 Collect 連結補領。資料庫原始證據與帳本保留。
+- 相同 Animal ID 可在續期後再用；同一份檔案不能支援不同資格。未過期的資格不能靠改到期日重領。
+- 舊紀錄到期日未知時，要求補正同一份資格；已領點紀錄補日期不再給點，也不憑舊年份虛構 4/9 到期。
+- 手填或核對上傳內容後，只有目前有效、未領取的資格可 Collect；後續抽查，沒有前置人工審核。讀取結果不等於官方已驗證。
+
+
+## 2026-09-27 實作回歸結果
+
+以正式 `DocumentReader.swift` 跑既有 40 份真實檔案：10 份 Council
+官方表格、10 份 registry 官方表格、10 份較難辨識的圖片、10 份其他圖片。
+40 份全部完成讀取，沒有程式錯誤；沒有一份自動填出登記號碼或到期日。
+其中 6 份只提出 registry 名稱，其餘欄位等待使用者核對或更換文件。
+曾把空白狗名欄位後的「Date of Birth of Animal」及「Tick for Cross-Breed」
+讀成名字，已加入排除規則及測試，重跑後不再出現。
+
+此結果支持錯誤輸入／空白表單的保守處理，**不代表已核發證書的辨識率**。
+另外的程式測試涵蓋文字 PDF、實際 Vision 讀圖／掃描 PDF、PDF 可見表單欄位、
+多隻狗、多號碼、多日期、低信心、取消後的延遲結果及手動更正。這些生成的
+測試素材是工程測試，不計入上述真實檔案數。

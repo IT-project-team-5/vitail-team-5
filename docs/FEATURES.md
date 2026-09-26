@@ -15,7 +15,7 @@ complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 | Walking points | Connected | Explicit finish/dog confirmation, measured segmented GPS, durable retries and server receipts; no-dog records remain local with zero points |
 | Compact Quest list | Connected | Available tasks only; READY first, IN_PROGRESS next, today's COLLECTED last; detail sheets and explicit collection; stale/session responses guarded |
 | Birthday reward | Connected | Actual birthday qualification and once-per-dog/year credit; no invented birthdays |
-| Care documents | Connected | Council annual and microchip lifetime rewards per dog via entered details or PDF/JPEG/PNG; vet visit evidence; submit reserves, Collect credits; private files, immutable versions and replay safety; later spot-audit workflow remains unbuilt |
+| Care documents | Connected | Council expiry-based and microchip lifetime rewards per dog; default PDF/JPEG/PNG reading with confirmed fields or secondary entered details; vet visit evidence; submit reserves, Collect credits; private files, immutable versions and replay safety; later spot-audit workflow remains unbuilt |
 | Wallet/orders | Connected | Canonical expiring ledger; café-first menus, real prices, purchase confirmation/receipt, owner slide-to-collect and history |
 | Café account/products | Connected | Own Venue details/photo/Maps, own Reward products/prices/availability; venue photo separated from account avatar; unavailable products preserve historical orders |
 | Café orders | Connected | Read-only café-scoped feed, product/customer/profile-dog cards and receipt details; current profile data refreshes while open |
