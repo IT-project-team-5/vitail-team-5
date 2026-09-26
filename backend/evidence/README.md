@@ -6,14 +6,17 @@ a UUID `request_id`, `dog_id`, and `kind`, with the fields below. Submission
 records `SELF_REPORTED` evidence and reserves a `READY` entitlement. It awards
 zero points. This does not verify a certificate or imply that an audit occurred.
 
-- `COUNCIL_REGISTRATION`: 300 points once per dog. Enter `registration_number`,
+- `COUNCIL_REGISTRATION`: 300 points per dog per Victorian registration year. Enter `registration_number`,
   `council_name` and `registration_year`, or upload proof. Manual numbers allow
   ASCII letters/digits, spaces and hyphens (1–100 characters, including at least
   one letter/digit). Leading zeroes are preserved. Council names allow up to 100
   printable characters. The year is the ending year of the current Victorian
   registration period (10 April–9 April), evaluated in Melbourne time: e.g.
-  `2027` represents 10 April 2026–9 April 2027. This describes the evidence's
-  validity, not an annual Vitail reward.
+  `2027` represents 10 April 2026–9 April 2027. Entitlements separately store
+  `registration_year` and are unique per dog/kind/year. Both routes reserve the
+  server's current year; uploads leave the submission's manually entered year
+  null and do not imply that the certificate's year was read or verified.
+  New entitlements use `council:YYYY` keys and the annual Council rules version.
 - `MICROCHIP_REGISTRATION`: 300 points once per dog. Enter a 15-digit
   `registration_number`, or upload proof (including older/overseas chip formats).
   Whitespace and hyphens are removed from typed numbers; all remaining characters
@@ -27,7 +30,7 @@ zero points. This does not verify a certificate or imply that an audit occurred.
 
 `POST /api/quests/documents/entitlements/{id}/collect` with `{}` explicitly credits
 the canonical point ledger and returns
-`{entitlement_id,kind,dog_id,points,balance,collected_at,created}`. Collection locks
+`{entitlement_id,kind,dog_id,registration_year,points,balance,collected_at,created}`. Collection locks
 the owner, dog and entitlement; retries return `created:false` without another
 credit. An uncollected entitlement requires the current dog's owner to have
 submitted evidence. A credited entitlement can only be replayed by its historical
@@ -37,8 +40,13 @@ The submit receipt adds `entitlement_id`, `reward_status`, `reward_points` and
 `collected_at`, also present on the submission object. New submit receipts always
 have `awarded_points:0`. Original submit receipts remain immutable: retries replay
 their original status and balance even after collection. The dashboard gives the
-current state; `awards_count` counts credited entitlements, `pending_count` counts
-reserved ones, and vet remaining slots include reservations. Legacy receipts,
+current state; `awards_count` counts credited entitlements (current-year Council,
+all years for other kinds), `pending_count` counts
+quota reservations (current-year Council, canonical lifetime microchip), and vet
+remaining slots include reservations. Council eligibility includes the server's
+current `registration_year`. New submission responses add
+`reward_registration_year` from the entitlement, separate from the entered
+`registration_year`; immutable old response snapshots may omit it. Legacy receipts,
 point entries, files and submission-level awarded amounts remain unchanged. The
 additive migration backfills legacy collection times from linked ledger entries.
 
@@ -48,9 +56,11 @@ Submissions include optional audit metadata and upload byte size; historical fil
 sizes remain unknown. The audit workflow is not enabled and no migrated submission
 is marked verified.
 
-Re-uploading preserves another version of the original entitlement and never
-creates a second reward. Conflicting request-ID reuse returns 409. Per-dog file
-fingerprints cannot support a different vet visit. A family certificate/photo can support
+Re-uploading within the same Council year or microchip lifetime preserves another
+version of that entitlement without a second reward. Conflicting request-ID reuse
+returns 409. Per-dog file fingerprints cannot support a different Council year or
+vet visit. A renewed Council registration may reuse the same animal number with
+current details or new evidence. A family certificate/photo can support
 several dogs. Disabling Documents blocks new submissions and uncollected rewards
 with 409; successful request/collection retries, history and downloads remain.
 
@@ -66,9 +76,31 @@ lifetime limit; a new owner must submit evidence against an existing pending
 entitlement before collecting it. An old microchip file can be attached to the
 canonical entitlement without changing the historic file fingerprint or award.
 
+Council tasks recur at 00:00 on 10 April in Australia/Melbourne. A prior year's
+pending or paid entitlement does not block the current year. Old pending rewards
+remain collectible; their original reward year is shown separately. Transfer
+does not reset annual quota. Existing ownership/submission authorization still
+applies: a transferred dog's new owner cannot claim a former owner's old-year
+reservation without their own evidence, and new submissions only target the
+current year. This change does not introduce retrospective submission or
+transfer of unclaimed rewards. An already accepted request replays its original
+receipt across rollover without reserving a new year. New typed submissions
+are rechecked inside the transaction to reject a year that became stale while
+the request waited for its lock.
+
+The annual Council migration adds `DocumentEntitlement.registration_year` and
+backfills from the earliest submission's entered year, otherwise its Melbourne
+submission date, or the entitlement's creation date if it has no submissions.
+It preserves original keys, points, files, submission data and receipt snapshots.
+Later re-uploads cannot move the original qualification to a newer year. Duplicate
+legacy qualifications for one dog/year cause an explicit migration failure
+rather than silently merging financial history.
+
 `evidence.services.quest_tasks(owner=...,dogs=...,request=...,now=...)` returns
 compact IN_PROGRESS, READY and COLLECTED task rows. Pending rewards suppress
-additional tasks of that dog/type. COLLECTED tasks are shown only on their
+additional tasks of that dog/type/qualification year, never a new Council year.
+Council task IDs are `council:{dog_id}:{ending_year}` and carry the reward year.
+COLLECTED tasks are shown only on their
 collection's Melbourne date, while document history remains available. Former
 owners see their evidence's dog-name snapshot, not the transferred dog's profile.
 

@@ -447,6 +447,7 @@ Table DocumentEntitlement {
   dog_id_snapshot bigint [not null, note: 'nonnegative integer']
   kind varchar(30) [not null, note: 'choices: COUNCIL_REGISTRATION / MICROCHIP_REGISTRATION / VET_CHECKUP']
   entitlement_key varchar(80) [not null]
+  registration_year smallint [note: 'nonnegative integer']
   event_date date
   valid_from date
   valid_to date
@@ -461,10 +462,12 @@ Table DocumentEntitlement {
     (owner_id, collected_at) [name: 'evidence_owner_collection']
     (dog_id_snapshot, kind, event_date) [name: 'evidence_dog_event']
     (dog_id_snapshot, kind, entitlement_key) [unique, name: 'evidence_entitlement_unique']
+    (dog_id_snapshot, kind, registration_year) [unique, name: 'council_dog_year_unique']
     (owner_id)
     (dog_id)
   }
   Note: 'Physical table: evidence_documententitlement. Model: evidence.DocumentEntitlement. All FK deletion notes are Django behavior; constraints below are exact model Q expressions.'
+  // CHECK council_reward_year_shape: (OR: (AND: ('kind', DocumentKind.COUNCIL), ('registration_year__gte', 1), ('registration_year__isnull', False)), (AND: (NOT (AND: ('kind', DocumentKind.COUNCIL))), ('registration_year__isnull', True)))
   // CHECK document_reward_positive: (AND: ('promised_points__gt', 0))
   // CHECK document_collection_shape: (OR: (AND: ('collected_at__isnull', True), ('point_entry__isnull', True)), (AND: ('collected_at__isnull', False), ('point_entry__isnull', False)))
   // CHECK document_eligibility_reason: (OR: ('eligibility_status', 'ELIGIBLE'), (AND: ('eligibility_status__in', ('ON_HOLD', 'REJECTED')), (NOT (AND: ('eligibility_reason', '')))))

@@ -1,6 +1,6 @@
 # Quest and Point Policy
 
-Canonical reward reference, updated 26 September 2026. Latest source:
+Canonical reward reference, updated 27 September 2026. Latest source:
 [New Point Retrieval / Calculation](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation),
 24 September, plus subsequent confirmed collection/UI decisions.
 [Open questions](DECISIONS.md#open-decisions) remain explicit; a published reward
@@ -14,7 +14,7 @@ amount does not mean its qualification engine is implemented.
 | Daily goal | 20 points/day per account; per-dog progress for participating dogs | Not enabled: target formula, evaluation units and attribution remain open |
 | Venue check-in | 12 points; at most one daily opportunity per type, four types total | Persisted collection/cap service and shared UI foundation; no production GPS provider or enabled iOS service |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
-| Council registration | 300 points once per dog | Connected: submit evidence, then Collect |
+| Council registration | 300 points per dog per Victorian registration year (10 April–9 April) | Connected: annual Quest; submit current evidence, then Collect |
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
 | Vet check-up | 200 points per visit, at most two per visit calendar year and at least 60 days apart | Connected: evidence with actual visit date, then Collect |
 | Streak | Each consecutive run: 7 days earns 20 points; 30/60/90… days earn 100 points each | Connected: validated walking days, one progress bar and explicit Collect |
@@ -110,8 +110,9 @@ Council, microchip and vet evidence are self-reported per dog. An eligible
 submission reserves a DocumentEntitlement and preserves an immutable
 DocumentSubmission version with zero newly awarded points. Explicit Collect
 links the one canonical credit. Pending entitlements reserve quota; re-uploading
-proof for the same qualification does not create another reward. Council and
-microchip each have a separate lifetime reward per dog. Prior microchip credits
+proof for the same qualification does not create another reward. Council has
+one reward per dog per Victorian registration year; microchip has one lifetime
+reward per dog. Prior microchip credits
 count toward this limit; old annual entitlements and receipts remain intact,
 and cannot produce another credit once any microchip reward was collected.
 
@@ -128,6 +129,22 @@ issuing council, animal reference and the current Victorian registration year
 15-digit number; other formats can use the proof route. Proof accepts PDF,
 JPEG and PNG without asking for duplicate typed details. This does not verify
 ownership, registration completion or document authenticity.
+
+Council's new task becomes available at **10 April, 00:00 Australia/Melbourne**,
+not twelve months after the last upload or collection. The reward entitlement
+stores its ending year separately from the submission's manually entered year.
+Both submission routes reserve the server's current year; uploads do not imply
+that the certificate's year was read or verified. The same registration number
+can be used after renewal, but the identical file cannot support a different
+year for that dog. Pending or collected rewards in an earlier year do not block
+the new year's task. Existing pending rewards remain collectible, and each row
+identifies its year. Ownership changes do not reset a year's quota.
+
+The Council migration assigns each historical entitlement to its earliest
+submission's explicit registration year, or that submission's Melbourne year
+when the field is unknown; without a submission it uses the entitlement's
+creation date. A later re-upload never moves the original reward to a newer
+year. Submission snapshots, prior credits and receipts remain unchanged.
 
 Private original files remain owner/admin-readable for later checks. No
 up-front human review or authenticity guarantee is claimed. Retention and
@@ -152,6 +169,7 @@ also permit ADMIN.
 
 Each task includes a stable ID, kind/state, title/subject/avatar, detail, reward,
 optional measured progress, dog/entitlement IDs and collection timestamp. iOS
+also uses Council's `registration_year` to scope annual tasks and receipts. It
 ignores unused presentation fields and unsupported kinds/states. The old
 `daily_goal`, `streak`, `birthdays`, `check_ins` and `documents` dashboard
 projections are removed; the document dashboard has its own route. The unused

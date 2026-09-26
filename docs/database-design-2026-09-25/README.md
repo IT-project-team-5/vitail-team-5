@@ -22,7 +22,7 @@
 | `DogDailyGoal` | 每狗每日凍結目標及最終結果的資料基礎；20 點／天已定，公式與資格判斷未定，因此不產生目標或發點。 |
 | `QuestDefinition`、`QuestAward` | Quest 目錄、生日與 streak 資格及 Collect 已連接；streak 沿用 Walk 與 QuestAward，不另建進度表。Goal 資格仍待公式。開啟目錄不會啟動未實作規則。 |
 | `CheckIn` | 共用進度查詢／Collect、每日類別唯一性及 cap 保護；Map／Quest 共用 iOS store。Start／定位驗證及正式 provider 尚未連接，不顯示假的進度或可領任務。 |
-| `DocumentEntitlement`、`DocumentSubmission`、`EvidenceFingerprint` | 每狗私人文件、版本、證據重用保護、提交 READY → Collect 已連接；Council 名稱／有效年度與每狗晶片終身資格已對齊。抽查／凍結欄位已建立，完整人工抽查與追回點數流程未交付。 |
+| `DocumentEntitlement`、`DocumentSubmission`、`EvidenceFingerprint` | 每狗私人文件、版本、證據重用保護、提交 READY → Collect 已連接；Council 每登記年度資格與每狗晶片終身資格已對齊。Council entitlement 的獎勵年度與 submission 的手填文件年度分開。抽查／凍結欄位已建立，完整人工抽查與追回點數流程未交付。 |
 | `Friendship`、`UserBlock` | canonical pair、邀請／回覆、雙向封鎖判斷的內部服務基礎；沒有朋友、搜尋、leaderboard 或位置公開 API／頁面。 |
 
 延後且**未建立**：`ExternalIdentity`（Apple）、`ChatMessage`（單對單聊天／nudge）、`Charity`＋`Donation`（捐點）、`PushDevice`＋`NotificationDelivery`（遠端通知）。這裡只保留需求落點，不刊登尚未實作的欄位作為現有 schema。
@@ -61,7 +61,7 @@
 
 優先順序：後續使用者決定與 [DECISIONS.md](../DECISIONS.md) → [New Point Retrieval / Calculation v3](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation)（2026-09-24 15:06 UTC）→ [Client Meeting 09/24 v7](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/26738689/Client+Meeting+09+24)、[Detailed Meeting Minutes v4](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27787267/Detailed+Meeting+Minutes) → [Client Requirements](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/294913/Client+Requirements)、[User Story](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/10518529/User+Story)（兩者當時為 live document / draft）。[Design Preference v3](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/28606465/Design+Preference) 提供視覺方向；[New Features Listings v1](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/28377100/New+Features+Listings) 為空，不推導額外需求。
 
-舊設計的事前審核、council 年度獎勵、咖啡約 60 點、swipe 扣點、28 張表全數建立及 Reward 雙重歸屬均不再描述現況。原提案與討論歷程留在 Git；目前圖只畫實際模型。
+舊設計的事前審核、Council 終身一次、咖啡約 60 點、swipe 扣點、28 張表全數建立及 Reward 雙重歸屬均不再描述現況。Council 年度獎勵以 2026-09-27 使用者最新決定為準。原提案與討論歷程留在 Git；目前圖只畫實際模型。
 
 ## 重建與驗證
 

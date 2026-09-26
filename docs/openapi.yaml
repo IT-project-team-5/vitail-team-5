@@ -708,9 +708,10 @@ paths:
       description: >-
         OWNER only; evidence is self-reported and may be audited later. A new
         submission awards zero points and leaves its entitlement READY until
-        the owner explicitly collects it. Rewards belong to the dog: council
-        and microchip registrations each reserve 300 points once in the dog's
-        lifetime; vet check-ups reserve 200 points per visit, at most
+        the owner explicitly collects it. Rewards belong to the dog: Council
+        reserves 300 points per Victorian registration year (10 April–9 April);
+        microchip reserves 300 points once in the dog's lifetime;
+        vet check-ups reserve 200 points per visit, at most
         twice in the visit's calendar year and at least 60 days apart even across
         New Year. Dates use Australia/Melbourne. Pending reservations consume
         the same quota as collected rewards. Updated evidence for an existing
@@ -719,7 +720,13 @@ paths:
         any prior credited microchip entitlement prevents another credit.
         Otherwise only the oldest pending microchip reservation is collectible;
         a held or rejected reservation cannot be bypassed by a newer one.
-        Re-uploading registration proof never creates an additional reward.
+        Re-uploading within the same Council year or microchip lifetime never
+        creates an additional reward. A new Council year appears even when an
+        earlier reward remains uncollected; old pending rewards stay collectible.
+        Both Council routes use the server's current reward year, separately
+        from the submission's entered registration_year. Identical Council files
+        cannot support another year for the same dog. Renewal may reuse the
+        same animal registration number.
         The same vet photo cannot support another visit for the same owner and dog.
         Send request_id and reuse the exact request on an ambiguous failure.
         An identical owner/UUID retry replays the stored receipt, including its
@@ -933,7 +940,7 @@ components:
         Clamp its displayed numerator to the milestone while READY. Idle state
         is zero of seven with a null run start. DAILY_GOAL remains reserved and omitted.
       properties:
-        id: {type: string, description: 'Stable row identity; birthday dog/year, document dog/kind or entitlement ID, streak run/milestone, or streak:idle:7'}
+        id: {type: string, description: 'Stable row identity; birthday dog/year, Council council:dog:ending_year, other document dog/kind or entitlement ID, streak run/milestone, or streak:idle:7'}
         kind: {type: string, enum: [BIRTHDAY, COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION, VET_CHECKUP, DAILY_GOAL, STREAK]}
         status: {type: string, enum: [IN_PROGRESS, READY, COLLECTED]}
         title: {type: string}
@@ -946,6 +953,7 @@ components:
         progress: {type: number, minimum: 0, maximum: 1, nullable: true, description: Null when numeric progress is not defined; do not display as zero percent}
         dog_id: {type: integer, minimum: 1, nullable: true, description: Dog identity or immutable ID snapshot}
         entitlement_id: {type: integer, minimum: 1, nullable: true, description: Reserved document reward ID; null for non-document and unsubmitted document tasks}
+        registration_year: {type: integer, nullable: true, description: 'Council reward ending year; scopes annual tasks and distinguishes older pending rewards; absent/null for other kinds'}
         collected_at: {type: string, format: date-time, nullable: true, description: Actual award time; null before collection}
         current_days: {type: integer, minimum: 0, description: STREAK only; verified consecutive days in the represented run}
         milestone_days: {type: integer, minimum: 7, description: STREAK only; seven or a positive multiple of thirty}
@@ -1026,10 +1034,11 @@ components:
       properties:
         dog_id: {type: integer, minimum: 1}
         kind: {$ref: '#/components/schemas/DocumentKind'}
-        awards_count: {type: integer, minimum: 0, description: Number of this dog's rewarded entitlements for this kind across all years and owners}
-        pending_count: {type: integer, minimum: 0, description: Uncredited reservations counting toward quota; registrations count only the canonical lifetime reservation}
+        awards_count: {type: integer, minimum: 0, description: 'Rewarded entitlements across owners; Council counts only the current registration year, other kinds count all years'}
+        pending_count: {type: integer, minimum: 0, description: Uncredited reservations counting toward quota; Council counts the current registration year and microchip its canonical lifetime reservation}
         remaining_this_year: {type: integer, minimum: 0, maximum: 2, nullable: true, description: Vet slots remaining in the current Melbourne calendar year after pending and collected reservations; null for registrations}
-        can_earn: {type: boolean, nullable: true, description: Whether the registration lifetime reward remains unreserved; null for vet check-ups requiring an event date}
+        can_earn: {type: boolean, nullable: true, description: Whether the current-year Council or lifetime microchip reward remains unreserved; null for vet check-ups requiring an event date}
+        registration_year: {type: integer, nullable: true, description: 'Server-current Council reward ending year, separate from any document contents'}
         message: {type: string}
     DocumentSubmission:
       type: object
@@ -1050,6 +1059,7 @@ components:
         registration_number: {type: string, maxLength: 100}
         council_name: {type: string, maxLength: 100, description: Self-reported issuing council; empty for uploads and legacy records}
         registration_year: {type: integer, nullable: true, description: 'Council registration ending year: 2027 represents 10 April 2026 through 9 April 2027; null for uploads and legacy records'}
+        reward_registration_year: {type: integer, nullable: true, description: 'Council entitlement ending year; server-assigned reward period, not an OCR result or verified certificate year; old receipt snapshots may omit it'}
         event_date: {type: string, format: date, nullable: true}
         valid_from: {type: string, format: date, nullable: true}
         valid_to: {type: string, format: date, nullable: true}
@@ -1069,6 +1079,7 @@ components:
         dog_id: {type: integer, minimum: 1, description: Immutable dog ID retained after deletion}
         dog_name: {type: string, description: Current owned dog name or this viewer's historical submission snapshot}
         kind: {$ref: '#/components/schemas/DocumentKind'}
+        registration_year: {type: integer, nullable: true, description: Council reward ending year; null for other kinds}
         reward_status: {$ref: '#/components/schemas/DocumentRewardStatus'}
         reward_points: {type: integer, enum: [200, 300]}
         collected_at: {type: string, format: date-time, nullable: true, description: Null for READY; legacy awards use their original ledger timestamp}
@@ -1095,7 +1106,9 @@ components:
         normalize spaces/hyphens to exactly 15 ASCII digits without a required
         prefix; other formats use the proof route. Neither registration kind
         accepts new event/validity dates. Uploads need no entered number,
-        council or year. A number or file remains self-reported, not verified.
+        council or year. Council uploads reserve the current server reward year
+        without reading or verifying the certificate year. A number or file
+        remains self-reported, not verified.
         Registration PDFs must be unencrypted with 1–20 pages; photos must
         decode as JPEG/PNG with at most 16 megapixels.
         Vet requires event_date no later than today and no earlier than a known
@@ -1147,6 +1160,7 @@ components:
         entitlement_id: {type: integer, minimum: 1}
         kind: {$ref: '#/components/schemas/DocumentKind'}
         dog_id: {type: integer, minimum: 1, description: Immutable dog identity snapshot}
+        registration_year: {type: integer, nullable: true, description: 'Council reward ending year; collection time can be in a later year without changing this qualification'}
         points: {type: integer, enum: [200, 300], description: Canonical original credit amount; retries do not award it again}
         balance: {type: integer, minimum: 0, description: 'Current authoritative wallet balance, including on replay'}
         collected_at: {type: string, format: date-time, description: 'Original collection time, unchanged on retry'}
