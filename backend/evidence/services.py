@@ -18,6 +18,7 @@ from rewards.services import credit_points, get_balance
 
 from .models import DocumentEntitlement, DocumentKind, DocumentSubmission, EvidenceFingerprint
 from .fingerprints import request_fingerprint
+from .policy import council_registration_year
 from .serializers import DocumentSubmissionSerializer
 from .storage import private_storage
 
@@ -49,7 +50,18 @@ def _microchip_canonical_ids(rows):
 def _entitlement(owner, dog, data):
     kind = data["kind"]
     existing = list(DocumentEntitlement.objects.filter(dog_id_snapshot=dog.pk, kind=kind))
-    if kind in {DocumentKind.COUNCIL, DocumentKind.MICROCHIP}:
+    year = None
+    if kind == DocumentKind.COUNCIL:
+        # Recheck after obtaining owner/dog locks: a request may have waited
+        # across the April 10 boundary since serializer validation.
+        year = council_registration_year()
+        if data["registration_number"] and data.get("registration_year") != year:
+            raise ValidationError({"registration_year": f"Use the current registration year, {year - 1}–{year} (ending year {year})."})
+        current = next((item for item in existing if item.registration_year == year), None)
+        if current:
+            return current, False
+        key = f"council:{year}"
+    elif kind == DocumentKind.MICROCHIP:
         if existing:
             return _lifetime_entitlement(existing), False
         key = "lifetime"
@@ -65,8 +77,10 @@ def _entitlement(owner, dog, data):
         key = f"visit:{event.isoformat()}"
     return DocumentEntitlement.objects.create(
         owner=owner, dog=dog, dog_id_snapshot=dog.pk, kind=kind, entitlement_key=key,
+        registration_year=year,
         promised_points=POINTS[kind],
-        rules_version="microchip-lifetime-2026-09-25" if kind == DocumentKind.MICROCHIP else "documents-2026-09-25",
+        rules_version=("council-annual-2026-09-27" if kind == DocumentKind.COUNCIL else
+                       "microchip-lifetime-2026-09-25" if kind == DocumentKind.MICROCHIP else "documents-2026-09-25"),
         event_date=data.get("event_date"), valid_from=data.get("valid_from"), valid_to=data.get("valid_to"),
     ), True
 
@@ -100,6 +114,15 @@ def submit_document(*, owner, data):
                 fingerprints.append((hashlib.sha256(("number:" + number).encode()).hexdigest(), False))
             if upload:
                 fingerprints.append((upload["sha256"], True))
+                if data["kind"] == DocumentKind.COUNCIL:
+                    # A transfer does not make last year's certificate reusable
+                    # for another reward. The shared dog lock protects this check.
+                    reused = EvidenceFingerprint.objects.filter(
+                        dog_id_snapshot=dog.pk, kind=DocumentKind.COUNCIL,
+                        fingerprint=upload["sha256"], is_file=True,
+                    ).exclude(entitlement__registration_year=entitlement.registration_year).exists()
+                    if reused:
+                        raise ValidationError("This file already supported another registration year. Add this year's evidence.")
             for proof_hash, is_file in fingerprints:
                 proof, created = EvidenceFingerprint.objects.get_or_create(
                     owner=owner, dog_id_snapshot=dog.pk, kind=data["kind"], fingerprint=proof_hash,
@@ -144,6 +167,7 @@ def _iso(value):
 
 def _collection_receipt(entitlement, owner, created):
     return {"entitlement_id": entitlement.pk, "kind": entitlement.kind,
+            "registration_year": entitlement.registration_year,
             "dog_id": entitlement.dog_id_snapshot, "points": entitlement.point_entry.amount,
             "balance": get_balance(owner), "collected_at": _iso(entitlement.collected_at), "created": created}
 
@@ -206,6 +230,7 @@ def entitlements_for(owner):
     ))
     enabled = QuestDefinition.objects.filter(code="DOCUMENTS", is_enabled=True).exists()
     return [{"id": row.pk, "dog_id": row.dog_id_snapshot, "dog_name": _name(row, owner), "kind": row.kind,
+             "registration_year": row.registration_year,
              "reward_status": "COLLECTED" if row.point_entry_id else "READY", "reward_points": row.promised_points,
              "collected_at": _iso(row.collected_at),
              "can_collect": bool(enabled and row.eligibility_status == "ELIGIBLE" and not row.point_entry_id
@@ -216,11 +241,14 @@ def entitlements_for(owner):
 
 def eligibility_for(owner, dogs):
     today = _local_today()
+    year = council_registration_year(today)
     rows = list(DocumentEntitlement.objects.filter(dog_id_snapshot__in=[dog.pk for dog in dogs]))
     result = []
     for dog in dogs:
         for kind in DocumentKind.values:
             reserved = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            if kind == DocumentKind.COUNCIL:
+                reserved = [row for row in reserved if row.registration_year == year]
             earned = [row for row in reserved if row.point_entry_id]
             pending = len(reserved) - len(earned)
             remaining = None
@@ -229,7 +257,8 @@ def eligibility_for(owner, dogs):
                 canonical = _lifetime_entitlement(reserved)
                 pending = int(bool(canonical and not canonical.point_entry_id))
                 can_earn = not reserved
-                message = "300 points once per dog. Submit evidence, then collect." if not reserved else (
+                rule = f"300 points per dog for {year - 1}–{year}. Submit evidence, then collect." if kind == DocumentKind.COUNCIL else "300 points once per dog. Submit evidence, then collect."
+                message = rule if not reserved else (
                     "Ready to collect. Updated evidence will use the same reward." if pending else "Reward already collected. Updated evidence earns no extra points.")
                 if pending and canonical.eligibility_status != "ELIGIBLE":
                     message = "This reward is unavailable pending a review outcome."
@@ -237,6 +266,7 @@ def eligibility_for(owner, dogs):
                 remaining = max(0, 2 - sum(row.event_date.year == today.year for row in reserved))
                 message = f"{remaining} of 2 slots remaining for {today.year}, including pending rewards. Visits must be at least 60 days apart."
             result.append({"dog_id": dog.pk, "kind": kind, "awards_count": len(earned), "pending_count": pending,
+                           "registration_year": year if kind == DocumentKind.COUNCIL else None,
                            "remaining_this_year": remaining, "can_earn": can_earn, "message": message})
     return result
 
@@ -245,6 +275,7 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
     if not QuestDefinition.objects.filter(code="DOCUMENTS", is_enabled=True).exists():
         return []
     today = _local_today(now)
+    year = council_registration_year(today)
     dogs = list(dogs)
     dog_by_id = {dog.pk: dog for dog in dogs}
     rows = list(DocumentEntitlement.objects.filter(
@@ -252,7 +283,7 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
     ).select_related("dog", "point_entry").prefetch_related("documentsubmission_set"))
     canonical_ids = _microchip_canonical_ids(rows)
     details = {
-        DocumentKind.COUNCIL: "Enter your dog's current Council registration details or upload proof, then collect 300 points once per dog.",
+        DocumentKind.COUNCIL: "Enter this year's Council registration details or upload proof, then collect 300 points per dog each registration year.",
         DocumentKind.MICROCHIP: "Enter the 15-digit microchip number or upload proof, then collect 300 points once per dog.",
         DocumentKind.VET: "Submit a photo and the check-up date, then collect 200 points. Up to two visits per calendar year, at least 60 days apart.",
     }
@@ -260,11 +291,19 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
     def task(dog, kind, status, row=None):
         photo = photo_url(dog.uploaded_photo, request) if dog and dog.uploaded_photo else (dog.photo if dog else None)
         name = dog.name if dog else _name(row, owner)
-        return {"id": f"entitlement:{row.pk}" if row else f"document:{dog.pk}:{kind}",
+        dog_id = row.dog_id_snapshot if row else dog.pk
+        task_year = (row.registration_year if row else year) if kind == DocumentKind.COUNCIL else None
+        task_id = f"entitlement:{row.pk}" if row else f"document:{dog_id}:{kind}"
+        if task_year:
+            task_id = f"council:{dog_id}:{task_year}"
+        detail = (f"Council registration for {task_year - 1}–{task_year}. Collect 300 points once per dog for this registration year."
+                  if task_year else details[kind])
+        return {"id": task_id,
                 "kind": kind, "status": status, "title": DocumentKind(kind).label,
-                "subtitle": name, "subject_name": name, "photo": photo, "icon": "doc.text",
-                "detail": details[kind], "reward_points": row.promised_points if row else POINTS[kind], "progress": None,
-                "dog_id": row.dog_id_snapshot if row else dog.pk,
+                "subtitle": f"{name} · {task_year - 1}–{task_year}" if task_year else name,
+                "registration_year": task_year, "subject_name": name, "photo": photo, "icon": "doc.text",
+                "detail": detail, "reward_points": row.promised_points if row else POINTS[kind], "progress": None,
+                "dog_id": dog_id,
                 "entitlement_id": row.pk if row else None, "collected_at": _iso(row.collected_at) if row else None}
 
     tasks = []
@@ -279,6 +318,10 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
     for dog in dogs:
         for kind in DocumentKind.values:
             reserved = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            if kind == DocumentKind.COUNCIL:
+                reserved = [row for row in reserved if row.registration_year == year]
+                if any(row.point_entry_id or row.eligibility_status != "ELIGIBLE" for row in reserved):
+                    continue
             if kind == DocumentKind.MICROCHIP:
                 canonical = _lifetime_entitlement(reserved)
                 if canonical:

@@ -215,6 +215,7 @@ class DocumentApiTests(APITestCase):
         entitlement = DocumentEntitlement.objects.create(
             owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk,
             kind=legacy["kind"], entitlement_key="lifetime", promised_points=275,
+            registration_year=2027,
         )
         receipt = {"balance": 1234, "awarded_points": 0, "created": True, "legacy": "unchanged"}
         submission = DocumentSubmission.objects.create(
@@ -243,6 +244,7 @@ class DocumentApiTests(APITestCase):
         entitlement = DocumentEntitlement.objects.create(
             owner=self.owner, dog=self.dog, dog_id_snapshot=self.dog.pk,
             kind=legacy["kind"], entitlement_key="lifetime", promised_points=300,
+            registration_year=2027,
         )
         receipt = {"balance": 321, "awarded_points": 300, "created": True, "old": "receipt"}
         DocumentSubmission.objects.create(
@@ -765,7 +767,7 @@ class DocumentApiTests(APITestCase):
         tasks = quest_tasks(owner=self.owner, dogs=[self.second_dog], now=now)
         collected = next(row for row in tasks if row["status"] == "COLLECTED")
         self.assertEqual(collected["subject_name"], "Coco")
-        self.assertEqual(collected["subtitle"], "Coco")
+        self.assertEqual(collected["subtitle"], "Coco · 2026–2027")
         self.assertIsNone(collected["photo"])
 
     def test_validation_uses_melbourne_dates_when_server_default_is_utc(self, _today):

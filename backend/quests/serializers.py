@@ -16,6 +16,7 @@ class QuestTaskSerializer(serializers.Serializer):
     dog_id = serializers.IntegerField(allow_null=True)
     entitlement_id = serializers.IntegerField(allow_null=True)
     collected_at = serializers.DateTimeField(allow_null=True)
+    registration_year = serializers.IntegerField(required=False, allow_null=True)
     current_days = serializers.IntegerField(required=False)
     milestone_days = serializers.IntegerField(required=False)
     run_start_date = serializers.DateField(required=False, allow_null=True)

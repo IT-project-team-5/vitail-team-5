@@ -6,6 +6,7 @@ from rest_framework import serializers
 
 from .models import DocumentKind, DocumentSubmission
 from .fingerprints import request_fingerprint
+from .policy import council_registration_year
 from .uploads import MAX_BYTES, validate_upload
 
 
@@ -74,7 +75,7 @@ class DocumentRequestSerializer(serializers.Serializer):
                 council = attrs.get("council_name", "")
                 if not council or any(not char.isprintable() for char in council):
                     raise serializers.ValidationError({"council_name": "Enter the Council named on your registration."})
-                year = today.year + ((today.month, today.day) >= (4, 10))
+                year = council_registration_year(today)
                 if attrs.get("registration_year") != year:
                     raise serializers.ValidationError({"registration_year": f"Use the current registration year, {year - 1}–{year} (ending year {year})."})
         return attrs
@@ -88,10 +89,11 @@ class DocumentSubmissionSerializer(serializers.ModelSerializer):
     reward_status = serializers.SerializerMethodField()
     reward_points = serializers.SerializerMethodField()
     collected_at = serializers.DateTimeField(source="entitlement.collected_at", read_only=True)
+    reward_registration_year = serializers.IntegerField(source="entitlement.registration_year", read_only=True, allow_null=True)
 
     class Meta:
         model = DocumentSubmission
-        fields = ("id", "request_id", "dog_id", "dog_name", "kind", "status", "registration_number", "council_name", "registration_year", "event_date", "valid_from", "valid_to", "filename", "file_url", "awarded_points", "submitted_at", "entitlement_id", "reward_status", "reward_points", "collected_at")
+        fields = ("id", "request_id", "dog_id", "dog_name", "kind", "status", "registration_number", "council_name", "registration_year", "reward_registration_year", "event_date", "valid_from", "valid_to", "filename", "file_url", "awarded_points", "submitted_at", "entitlement_id", "reward_status", "reward_points", "collected_at")
         read_only_fields = fields
 
     def get_file_url(self, submission):
