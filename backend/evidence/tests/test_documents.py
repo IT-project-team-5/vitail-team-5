@@ -65,14 +65,11 @@ class DocumentApiTests(APITestCase):
         data = {"request_id": str(uuid4()), "dog_id": self.dog.pk,
                 "kind": "COUNCIL_REGISTRATION", "registration_number": "Council ABC-42"}
         data.update(changes)
-        if "registration_number" not in changes:
-            if data.get("file_base64"):
-                data["registration_number"] = ""
-            elif data["kind"] == "MICROCHIP_REGISTRATION":
-                data["registration_number"] = "012345678901234"
-        if data["kind"] == "COUNCIL_REGISTRATION" and data["registration_number"] and not data.get("file_base64"):
+        if "registration_number" not in changes and data["kind"] == "MICROCHIP_REGISTRATION":
+            data["registration_number"] = "012345678901234"
+        if data["kind"] == "COUNCIL_REGISTRATION":
             data.setdefault("council_name", "City of Melbourne")
-            data.setdefault("registration_year", 2027)
+            data.setdefault("valid_to", "2027-04-09")
         return data
 
     def post(self, data):
@@ -146,48 +143,28 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(DocumentSubmission.objects.count(), 1)
         self.assertEqual(PointEntry.objects.count(), 1)
 
-    def test_council_manual_details_preserve_leading_zero_and_require_current_year(self, _today):
+    def test_council_confirmed_details_preserve_leading_zero_and_require_expiry(self, _today):
         response = self.post(self.payload(registration_number="00042-AB"))
         self.assertEqual(response.status_code, 201)
         submission = response.data["submission"]
         self.assertEqual(submission["registration_number"], "00042-AB")
         self.assertEqual(submission["council_name"], "City of Melbourne")
-        self.assertEqual(submission["registration_year"], 2027)
-        self.assertIsNone(submission["valid_from"])
-        self.assertIsNone(submission["valid_to"])
-        for changes in ({"council_name": ""}, {"registration_year": None}, {"registration_year": 2026},
-                        {"registration_year": 2028}, {"registration_number": "ABC/42"},
-                        {"registration_number": "--"}, {"council_name": "Melbourne\nOther"}):
-            with self.subTest(changes=changes):
-                self.assertEqual(self.post(self.payload(**changes)).status_code, 400)
+        self.assertIsNone(submission["registration_year"])
+        self.assertEqual(submission["valid_to"], "2027-04-09")
+        for changes in ({"council_name": ""}, {"valid_to": None}, {"registration_year": 2027},
+                        {"registration_number": "ABC/42"}, {"registration_number": "--"},
+                        {"council_name": "Melbourne\nOther"}):
+            self.assertEqual(self.post(self.payload(**changes)).status_code, 400)
         self.assertEqual(DocumentSubmission.objects.count(), 1)
 
-    def test_council_registration_year_rolls_over_april_ten_in_melbourne_and_retry_survives(self, _today):
-        before = datetime(2026, 4, 9, 13, 59, tzinfo=dt_timezone.utc)
-        payload = self.payload(registration_year=2026)
-        with override_settings(TIME_ZONE="UTC"), patch("django.utils.timezone.localdate", wraps=actual_localdate):
-            with patch("django.utils.timezone.now", return_value=before):
-                receipt = self.post(payload)
-                self.assertEqual(receipt.status_code, 201)
-            with patch("django.utils.timezone.now", return_value=before + timedelta(minutes=1)):
-                self.assertEqual(self.post({**payload, "request_id": str(uuid4())}).status_code, 400)
-                self.assertEqual(self.post(self.payload(registration_year=2027)).status_code, 201)
-                replay = self.post(payload)
-                self.assertEqual(replay.status_code, 200)
-                self.assertEqual(replay.data, receipt.data)
-
-    def test_registration_modes_are_exclusive_and_upload_needs_no_manual_details(self, _today):
+    def test_upload_requires_confirmed_details_and_allows_printed_number_formats(self, _today):
         proof = base64.b64encode(pdf_file()).decode()
-        for payload in (
-            self.payload(registration_number="ABC42", file_base64=proof),
-            self.payload(registration_number=""),
-            self.payload(registration_number="", file_base64=proof, council_name="City of Melbourne"),
-            self.payload(registration_number="", file_base64=proof, registration_year=2027),
-        ):
-            self.assertEqual(self.post(payload).status_code, 400)
-        response = self.post(self.payload(file_base64=proof))
+        for changes in ({"registration_number": ""}, {"council_name": ""}, {"valid_to": None}):
+            self.assertEqual(self.post(self.payload(file_base64=proof, **changes)).status_code, 400)
+        response = self.post(self.payload(registration_number="ABC/42", file_base64=proof))
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["submission"]["council_name"], "")
+        self.assertEqual(response.data["submission"]["registration_number"], "ABC/42")
+        self.assertEqual(response.data["submission"]["council_name"], "City of Melbourne")
         self.assertIsNone(response.data["submission"]["registration_year"])
 
     def test_registration_photo_bytes_remain_private_and_filename_follows_actual_format(self, _today):
@@ -320,14 +297,14 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(DocumentSubmission.objects.count(), 1)
         self.assertEqual(PointEntry.objects.count(), 0)
 
-    def test_microchip_proof_accepts_pdf_or_photo_without_number_or_dates(self, _today):
+    def test_microchip_proof_accepts_pdf_or_photo_with_confirmed_number_without_dates(self, _today):
         for original, filename in ((pdf_file(), "chip.pdf"), (photo_file(), "chip.jpg")):
             with self.subTest(filename=filename):
                 response = self.post(self.payload(kind="MICROCHIP_REGISTRATION", filename=filename,
                                                  file_base64=base64.b64encode(original).decode()))
                 self.assertEqual(response.status_code, 201)
                 submission = response.data["submission"]
-                self.assertEqual(submission["registration_number"], "")
+                self.assertEqual(submission["registration_number"], "012345678901234")
                 self.assertEqual(submission["status"], "SELF_REPORTED")
                 self.assertIsNone(submission["registration_year"])
                 self.assertIsNone(submission["valid_from"])
@@ -523,7 +500,7 @@ class DocumentApiTests(APITestCase):
 
     def test_pdf_bytes_preserved_private_and_download_is_owner_or_admin_only(self, _today):
         original = pdf_file()
-        response = self.post(self.payload(registration_number="", filename="../../Original.pdf",
+        response = self.post(self.payload(filename="../../Original.pdf",
                                           file_base64=base64.b64encode(original).decode()))
         self.assertEqual(response.status_code, 201)
         submission = DocumentSubmission.objects.get()
@@ -765,10 +742,7 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(history["submissions"][0]["dog_name"], "Coco")
         self.assertEqual(history["entitlements"][0]["dog_name"], "Coco")
         tasks = quest_tasks(owner=self.owner, dogs=[self.second_dog], now=now)
-        collected = next(row for row in tasks if row["status"] == "COLLECTED")
-        self.assertEqual(collected["subject_name"], "Coco")
-        self.assertEqual(collected["subtitle"], "Coco · 2026–2027")
-        self.assertIsNone(collected["photo"])
+        self.assertFalse(any(row["dog_id"] == self.dog.pk for row in tasks))
 
     def test_validation_uses_melbourne_dates_when_server_default_is_utc(self, _today):
         melbourne_just_after_midnight = datetime(2026, 9, 24, 14, 10, tzinfo=dt_timezone.utc)
@@ -811,7 +785,7 @@ class DocumentConcurrencyTests(TransactionTestCase):
                 submitted = client.post("/api/quests/documents", {
                     "request_id": str(uuid4()), "dog_id": dog.pk,
                     "kind": kind, "registration_number": "012345678901234",
-                    **({"council_name": "City of Melbourne", "registration_year": 2027} if kind == "COUNCIL_REGISTRATION" else {}),
+                    **({"council_name": "City of Melbourne", "valid_to": "2027-04-09"} if kind == "COUNCIL_REGISTRATION" else {}),
                 }, format="json")
                 return client.post(f"/api/quests/documents/entitlements/{submitted.data['entitlement_id']}/collect", {}, format="json")
             finally:

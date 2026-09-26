@@ -31,9 +31,6 @@ class DocumentEntitlement(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("dog_id_snapshot", "kind", "entitlement_key"), name="evidence_entitlement_unique"),
-            models.UniqueConstraint(fields=("dog_id_snapshot", "kind", "registration_year"), name="council_dog_year_unique"),
-            models.CheckConstraint(condition=(models.Q(kind=DocumentKind.COUNCIL, registration_year__isnull=False, registration_year__gte=1)
-                                              | (~models.Q(kind=DocumentKind.COUNCIL) & models.Q(registration_year__isnull=True))), name="council_reward_year_shape"),
             models.CheckConstraint(condition=models.Q(promised_points__gt=0), name="document_reward_positive"),
             models.CheckConstraint(condition=models.Q(point_entry__isnull=True, collected_at__isnull=True) | models.Q(point_entry__isnull=False, collected_at__isnull=False), name="document_collection_shape"),
             models.CheckConstraint(condition=models.Q(eligibility_status="ELIGIBLE") | (models.Q(eligibility_status__in=("ON_HOLD", "REJECTED")) & ~models.Q(eligibility_reason="")), name="document_eligibility_reason"),
@@ -53,6 +50,9 @@ class DocumentSubmission(models.Model):
     entitlement = models.ForeignKey(DocumentEntitlement, on_delete=models.PROTECT)
     registration_number = models.CharField(max_length=100, blank=True)
     council_name = models.CharField(max_length=100, blank=True)
+    registry_name = models.CharField(max_length=100, blank=True)
+    document_dog_name = models.CharField(max_length=100, blank=True)
+    document_reading = models.JSONField(null=True, blank=True)
     registration_year = models.PositiveSmallIntegerField(null=True, blank=True)
     event_date = models.DateField(null=True, blank=True)
     valid_from = models.DateField(null=True, blank=True)

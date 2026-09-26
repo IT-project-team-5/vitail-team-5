@@ -50,7 +50,7 @@ class DeletedAccountServiceGuardsTests(TestCase):
         serializer = DocumentRequestSerializer(data={"request_id": str(uuid4()), "dog_id": self.dog.pk,
             "kind": "COUNCIL_REGISTRATION", "registration_number": "Council ABC",
             "council_name": "City of Melbourne",
-            "registration_year": today.year + ((today.month, today.day) >= (4, 10))})
+            "valid_to": (today + timedelta(days=365)).isoformat()})
         serializer.is_valid(raise_exception=True)
         return serializer.validated_data
 

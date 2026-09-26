@@ -1,5 +1,6 @@
 import base64
 import tempfile
+from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -31,6 +32,8 @@ class PrivateDocumentSessionTests(APITestCase):
         self.client.force_authenticate(self.owner)
         response = self.client.post("/api/quests/documents", {
             "request_id": str(uuid4()), "dog_id": dog.pk, "kind": "COUNCIL_REGISTRATION",
+            "registration_number": "00042", "council_name": "City of Melbourne",
+            "valid_to": (timezone.localdate() + timedelta(days=365)).isoformat(),
             "filename": "registration.pdf", "file_base64": base64.b64encode(self.original).decode(),
         }, format="json")
         self.assertEqual(response.status_code, 201)

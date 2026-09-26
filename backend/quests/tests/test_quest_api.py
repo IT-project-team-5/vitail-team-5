@@ -352,7 +352,7 @@ class QuestApiTests(APITestCase):
         submitted = self.client.post("/api/quests/documents", {
             "request_id": str(uuid4()), "dog_id": self.dog.pk,
             "kind": "COUNCIL_REGISTRATION", "registration_number": "TASK-123",
-            "council_name": "City of Melbourne", "registration_year": 2027,
+            "council_name": "City of Melbourne", "valid_to": "2027-04-09",
         }, format="json")
         self.assertEqual(submitted.status_code, 201)
         entitlement = DocumentEntitlement.objects.get(dog_id_snapshot=self.dog.pk, kind="COUNCIL_REGISTRATION")
