@@ -45,9 +45,10 @@ final class QuestStore: ObservableObject {
                 // Earned rewards survive a break; cached live progress must await a new-day snapshot.
                 return task.status == .ready || (task.status == .inProgress && snapshot?.localDate == displayDate)
             }
-            if task.documentKind == .council, task.status == .inProgress, let year = task.registrationYear,
-               let date = displayDate.flatMap(DogBirthday.date),
-               year != DocumentRegistration.currentCouncilYear(on: date) { return false }
+            if task.documentKind == .council, task.status != .inProgress {
+                guard let date = displayDate.flatMap(DogBirthday.date),
+                      DocumentRegistration.isCurrent(task.validTo, on: date) else { return false }
+            }
             if task.status == .collected {
                 guard let date = task.collectedAt.flatMap(QuestCalendar.parse) else { return false }
                 return QuestCalendar.dateString(date) == displayDate
@@ -71,7 +72,9 @@ final class QuestStore: ObservableObject {
             // while its entitlement collection is awaiting a fresh server view.
             return task.status != .inProgress || !unacknowledged.contains {
                 $0.documentKind != nil && $0.kind == task.kind && $0.dogID == task.dogID
-                    && (task.documentKind != .council || $0.registrationYear == task.registrationYear)
+                    && (task.documentKind != .council || (task.entitlementID == nil
+                        || ($0.entitlementID == task.entitlementID && $0.validTo == task.validTo
+                            && $0.needsExpiry == task.needsExpiry)))
                     && $0.collectedAt.flatMap(QuestCalendar.parse).map(QuestCalendar.dateString) == displayDate
             }
         }
@@ -143,8 +146,7 @@ final class QuestStore: ObservableObject {
                     let result = try await service.collectDocument(entitlementID: entitlementID)
                     guard result.entitlementID == entitlementID, result.dogID == dogID,
                           result.kind == selected.documentKind, result.points == selected.rewardPoints,
-                          (result.kind == .council ? DocumentRegistration.matchesCouncilRewardYear(
-                            received: result.registrationYear, expected: selected.registrationYear) : result.registrationYear == nil) else {
+                          (result.kind != .council || (result.validTo == selected.validTo && result.needsExpiry != true)) else {
                         throw APIError.invalidResponse
                     }
                     receipt = QuestAwardReceipt(kind: result.kind.rawValue, dogID: dogID, points: result.points,

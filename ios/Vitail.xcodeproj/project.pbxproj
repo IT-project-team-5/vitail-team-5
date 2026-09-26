@@ -87,10 +87,12 @@
 		18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */; };
 		B3C767A9C15E35A6C2AA554C /* CheckInProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */; };
 		2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */; };
+		E72026092700000000000011 /* DocumentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000001 /* DocumentReader.swift */; };
 		7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE812BF2460D749B2A393459 /* DocumentService.swift */; };
 		D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */; };
 		6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */; };
 		0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECF0F73A9474B166766F7F /* DocumentTests.swift */; };
+		E72026092700000000000012 /* DocumentReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000002 /* DocumentReaderTests.swift */; };
 		DFDB93C3237E58D028699C37 /* QuestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACB97598A23B803F298053B /* QuestTests.swift */; };
 		6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */; };
 /* End PBXBuildFile section */
@@ -194,10 +196,12 @@
 		A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressCard.swift; sourceTree = "<group>"; };
 		020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressTests.swift; sourceTree = "<group>"; };
 		25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModels.swift; sourceTree = "<group>"; };
+		E72026092700000000000001 /* DocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReader.swift; sourceTree = "<group>"; };
 		BE812BF2460D749B2A393459 /* DocumentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentService.swift; sourceTree = "<group>"; };
 		0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSubmissionView.swift; sourceTree = "<group>"; };
 		D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewModel.swift; sourceTree = "<group>"; };
 		F6ECF0F73A9474B166766F7F /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
+		E72026092700000000000002 /* DocumentReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReaderTests.swift; sourceTree = "<group>"; };
 		1ACB97598A23B803F298053B /* QuestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestTests.swift; sourceTree = "<group>"; };
 		88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRefreshTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -386,6 +390,7 @@
 				88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */,
 				1ACB97598A23B803F298053B /* QuestTests.swift */,
 				F6ECF0F73A9474B166766F7F /* DocumentTests.swift */,
+				E72026092700000000000002 /* DocumentReaderTests.swift */,
 				020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */,
 				00000000000000000000E213 /* BrandAppearanceTests.swift */,
 				F20000000000000000000003 /* AvatarProfileTests.swift */,
@@ -501,6 +506,7 @@
 				0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */,
 				BE812BF2460D749B2A393459 /* DocumentService.swift */,
 				25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */,
+				E72026092700000000000001 /* DocumentReader.swift */,
 			);
 			path = Documents;
 			sourceTree = "<group>";
@@ -608,6 +614,7 @@
 				D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */,
 				7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */,
 				2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */,
+				E72026092700000000000011 /* DocumentReader.swift in Sources */,
 				18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */,
 				B050D75339160A6E5DED733D /* CheckInProgress.swift in Sources */,
 				0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */,
@@ -677,6 +684,7 @@
 				6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */,
 				DFDB93C3237E58D028699C37 /* QuestTests.swift in Sources */,
 				0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */,
+				E72026092700000000000012 /* DocumentReaderTests.swift in Sources */,
 				B3C767A9C15E35A6C2AA554C /* CheckInProgressTests.swift in Sources */,
 				00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */,
 				F10000000000000000000003 /* AvatarProfileTests.swift in Sources */,

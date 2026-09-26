@@ -2,6 +2,89 @@ import Combine
 import Foundation
 
 @MainActor
+final class DocumentReviewModel: ObservableObject {
+    @Published var registrationNumber = "" { didSet { isConfirmed = false } }
+    @Published var councilName = "" { didSet { isConfirmed = false } }
+    @Published var registryName = "" { didSet { isConfirmed = false } }
+    @Published var expiryText = "" { didSet { isConfirmed = false } }
+    @Published var isConfirmed = false
+    @Published var dogName = "" { didSet { isConfirmed = false } }
+    @Published private(set) var isReading = false
+    @Published private(set) var didRead = false
+    @Published private(set) var needsCorrection = false
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var readingAudit: DocumentReadingAudit?
+
+    private let reader: any DocumentReading
+    private var generation = 0
+    private var readTask: Task<Void, Never>?
+
+    init(reader: any DocumentReading = DocumentReader()) { self.reader = reader }
+    deinit { readTask?.cancel() }
+
+    func read(data: Data, filename: String, kind: DocumentKind) async {
+        clear()
+        let requestGeneration = generation
+        isReading = true
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await reader.read(data: data, filename: filename, kind: kind)
+                guard generation == requestGeneration, !Task.isCancelled else { return }
+                registrationNumber = result.registrationNumber ?? ""
+                councilName = result.councilName ?? ""
+                registryName = result.registryName ?? ""
+                dogName = result.dogName ?? ""
+                readingAudit = DocumentReadingAudit(result: result)
+                expiryText = result.validTo.map(DocumentRegistration.expiryInputText) ?? ""
+                needsCorrection = !result.warnings.isEmpty || registrationNumber.isEmpty
+                    || (kind == .council && (councilName.isEmpty || expiryText.isEmpty))
+                didRead = true
+            } catch {
+                guard generation == requestGeneration, !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+                needsCorrection = true
+                didRead = true
+            }
+        }
+        readTask = task
+        await task.value
+        if generation == requestGeneration {
+            isReading = false
+            readTask = nil
+        }
+    }
+
+    func cancelReading() {
+        generation += 1
+        readTask?.cancel()
+        readTask = nil
+        isReading = false
+        didRead = true
+        needsCorrection = true
+        errorMessage = "Reading cancelled. Try again or enter the document details below."
+        isConfirmed = false
+    }
+
+    func clear() {
+        generation += 1
+        readTask?.cancel()
+        readTask = nil
+        isReading = false
+        didRead = false
+        needsCorrection = false
+        errorMessage = nil
+        registrationNumber = ""
+        councilName = ""
+        registryName = ""
+        expiryText = ""
+        dogName = ""
+        readingAudit = nil
+        isConfirmed = false
+    }
+}
+
+@MainActor
 final class DocumentViewModel: ObservableObject {
     @Published private(set) var dashboard: DocumentDashboard?
     @Published private(set) var receipt: DocumentReceipt?
@@ -133,24 +216,23 @@ final class DocumentViewModel: ObservableObject {
         guard let id = submission.entitlementID else { return nil }
         if let current = dashboard?.entitlements?.first(where: { $0.id == id }) {
             guard current.dogID == submission.dogID, current.kind == submission.kind,
-                  current.kind != .council || DocumentRegistration.matchesCouncilRewardYear(
-                    received: current.registrationYear, expected: submission.rewardRegistrationYear) else { return nil }
+                  current.kind != .council || current.validTo == submission.validTo else { return nil }
             return current
         }
         guard let status = submission.rewardStatus, let points = submission.rewardPoints else { return nil }
         return DocumentEntitlement(id: id, dogID: submission.dogID, dogName: submission.dogName,
             kind: submission.kind, rewardStatus: status, rewardPoints: points, collectedAt: submission.collectedAt,
             canCollect: status == .ready && dashboard?.dogs.contains(where: { $0.id == submission.dogID }) == true,
-            registrationYear: submission.rewardRegistrationYear ?? submission.registrationYear)
+            validTo: submission.kind == .council ? submission.validTo : nil,
+            needsExpiry: submission.kind == .council && submission.validTo == nil)
     }
 
-    func currentSubmission(dogID: Int, kind: DocumentKind, registrationYear: Int? = nil) -> DocumentSubmission? {
+    func currentSubmission(dogID: Int, kind: DocumentKind, entitlementID: Int? = nil, today: Date = Date()) -> DocumentSubmission? {
         if let submission = receipt?.submission, submission.dogID == dogID, submission.kind == kind {
-            let rewardYear = submission.rewardRegistrationYear
-                ?? dashboard?.rewardRegistrationYear(for: submission) ?? submission.registrationYear
-            if kind != .council || registrationYear == nil || rewardYear == registrationYear { return submission }
+            if (entitlementID == nil || submission.entitlementID == entitlementID)
+                && (kind != .council || DocumentRegistration.isCurrent(submission.validTo, on: today)) { return submission }
         }
-        return dashboard?.latestPendingSubmission(dogID: dogID, kind: kind, registrationYear: registrationYear)
+        return dashboard?.latestPendingSubmission(dogID: dogID, kind: kind, entitlementID: entitlementID, today: today)
     }
 
     func isCollected(_ entitlement: DocumentEntitlement) -> Bool {
@@ -160,7 +242,7 @@ final class DocumentViewModel: ObservableObject {
     func canCollect(_ entitlement: DocumentEntitlement) -> Bool {
         isActive && isCurrentOwner && entitlement.canCollect && !isCollected(entitlement)
             && entitlement.id > 0 && entitlement.rewardPoints == entitlement.kind.points
-            && (entitlement.kind != .council || (entitlement.registrationYear.map(DocumentRegistration.isValidCouncilYear) ?? true))
+            && (entitlement.kind != .council || (entitlement.needsExpiry != true && DocumentRegistration.isCurrent(entitlement.validTo)))
             && !isLoading && !isSubmitting && collectingID == nil
     }
 
@@ -176,8 +258,7 @@ final class DocumentViewModel: ObservableObject {
                 guard accepts(requestGeneration), !Task.isCancelled else { return false }
                 guard result.entitlementID == entitlement.id, result.kind == entitlement.kind,
                       result.dogID == entitlement.dogID, result.points == entitlement.kind.points,
-                      (result.kind == .council ? DocumentRegistration.matchesCouncilRewardYear(
-                        received: result.registrationYear, expected: entitlement.registrationYear) : result.registrationYear == nil),
+                      (result.kind != .council || (result.validTo == entitlement.validTo && result.needsExpiry != true)),
                       result.balance >= 0, Self.collectionDate(result.collectedAt) != nil else {
                     throw APIError.invalidResponse
                 }
@@ -264,7 +345,10 @@ final class DocumentViewModel: ObservableObject {
               submission.eventDate == request.eventDate,
               submission.registrationNumber == (request.registrationNumber ?? ""),
               (submission.councilName ?? "") == (request.councilName ?? ""),
-              submission.registrationYear == request.registrationYear,
+              submission.validTo == request.validTo,
+              (submission.registryName ?? "") == (request.registryName ?? ""),
+              (submission.documentDogName ?? "") == (request.documentDogName ?? ""),
+              request.expectedEntitlementID == nil || submission.entitlementID == request.expectedEntitlementID,
               submission.awardedPoints == result.awardedPoints,
               result.awardedPoints == 0 || result.awardedPoints == request.kind.points,
               result.balance >= 0 else { throw APIError.invalidResponse }
@@ -273,12 +357,6 @@ final class DocumentViewModel: ObservableObject {
                   result.rewardStatus != nil, result.rewardStatus == submission.rewardStatus,
                   result.rewardPoints == request.kind.points, submission.rewardPoints == result.rewardPoints,
                   result.awardedPoints == 0 else { throw APIError.invalidResponse }
-        }
-        if let rewardYear = submission.rewardRegistrationYear {
-            guard request.kind == .council, DocumentRegistration.isValidCouncilYear(rewardYear),
-                  request.registrationYear == nil || request.registrationYear == rewardYear else {
-                throw APIError.invalidResponse
-            }
         }
     }
 

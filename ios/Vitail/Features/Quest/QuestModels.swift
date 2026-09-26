@@ -57,18 +57,21 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
     var currentDays: Int? = nil
     var milestoneDays: Int? = nil
     var runStartDate: String? = nil
-    var registrationYear: Int? = nil
+    var validTo: String? = nil
+    var needsExpiry: Bool? = nil
 
     var documentKind: DocumentKind? { DocumentKind(rawValue: kind) }
     var isBirthday: Bool { kind == "BIRTHDAY" }
     var isStreak: Bool { kind == "STREAK" }
-    var registrationPeriodLabel: String? {
-        guard documentKind == .council, let registrationYear,
-              DocumentRegistration.isValidCouncilYear(registrationYear) else { return nil }
-        return DocumentRegistration.councilYearLabel(registrationYear)
+    var expiryLabel: String? {
+        guard documentKind == .council, let validTo, DogBirthday.date(from: validTo) != nil else { return nil }
+        return "Valid through \(DogBirthday.display(validTo))"
     }
-    var subjectLabel: String {
-        registrationPeriodLabel.map { "\(subjectName) · \($0)" } ?? subjectName
+    var subjectLabel: String { subjectName }
+    var documentRoute: DocumentQuestRoute? {
+        guard let kind = documentKind, let dogID else { return nil }
+        return DocumentQuestRoute(id: id, dogID: dogID, kind: kind,
+            expectedEntitlementID: kind == .council ? entitlementID : nil, needsExpiry: needsExpiry == true)
     }
     var streakProgress: StreakProgressValue? {
         guard isStreak, let currentDays, let milestoneDays else { return nil }
@@ -80,8 +83,19 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
     }
     var isSupported: Bool {
         if isStreak { return isSupportedStreak }
-        if documentKind == .council, let registrationYear,
-           !DocumentRegistration.isValidCouncilYear(registrationYear) { return false }
+        if documentKind == .council {
+            guard let dogID, dogID > 0, !id.isEmpty, !title.isEmpty else { return false }
+            if needsExpiry == true {
+                return status == .inProgress && (entitlementID ?? 0) > 0 && (rewardPoints == 0 || rewardPoints == 300)
+            }
+            guard rewardPoints == 300 else { return false }
+            switch status {
+            case .inProgress: return true
+            case .ready: return (entitlementID ?? 0) > 0 && validTo.flatMap(DogBirthday.date) != nil
+            case .collected: return validTo.flatMap(DogBirthday.date) != nil && collectedAt.flatMap(QuestCalendar.parse) != nil
+            case .unknown: return false
+            }
+        }
         guard !id.isEmpty, !title.isEmpty, let dogID, dogID > 0,
               rewardPoints > 0, isBirthday || documentKind != nil else { return false }
         switch status {
@@ -118,7 +132,7 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
         case subjectName = "subject_name", rewardPoints = "reward_points"
         case dogID = "dog_id", entitlementID = "entitlement_id", collectedAt = "collected_at"
         case currentDays = "current_days", milestoneDays = "milestone_days", runStartDate = "run_start_date"
-        case registrationYear = "registration_year"
+        case validTo = "valid_to", needsExpiry = "needs_expiry"
     }
 }
 

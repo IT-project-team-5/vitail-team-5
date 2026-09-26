@@ -51,14 +51,7 @@ struct OwnerHomeView: View {
     @State private var hasCheckedOnboarding = false
     @State private var isAddingFirstDog = false
     @State private var accountRefreshID = 0
-    @State private var documentSelection: DocumentSelection?
-
-    private struct DocumentSelection: Identifiable {
-        let dogID: Int
-        let kind: DocumentKind
-        let registrationYear: Int?
-        var id: String { "\(dogID)-\(kind.rawValue)-\(registrationYear.map(String.init) ?? "none")" }
-    }
+    @State private var documentSelection: DocumentQuestRoute?
 
     init(
         user: User, session: SessionStore,
@@ -95,7 +88,7 @@ struct OwnerHomeView: View {
                     .tag(Page.walk)
                     QuestView(store: questStore, checkIns: checkIns,
                               onOpenDocuments: documentService != nil
-                                ? { dogID, kind, year in documentSelection = DocumentSelection(dogID: dogID, kind: kind, registrationYear: year) } : nil)
+                                ? { route in documentSelection = route } : nil)
                         .tag(Page.quest)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
@@ -123,7 +116,7 @@ struct OwnerHomeView: View {
                     NavigationStack {
                         DocumentSubmissionView(service: documentService, session: session,
                                                initialDogID: selectedDocument.dogID, initialKind: selectedDocument.kind,
-                                               initialRegistrationYear: selectedDocument.registrationYear,
+                                               expectedEntitlementID: selectedDocument.expectedEntitlementID, needsExpiry: selectedDocument.needsExpiry,
                                                onSubmitted: {
                                                    async let quests: Void = questStore.refresh()
                                                    async let wallet: Void = redemptionViewModel.refresh()

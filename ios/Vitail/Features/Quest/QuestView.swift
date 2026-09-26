@@ -36,15 +36,9 @@ struct StreakProgressView: View {
 struct QuestView: View {
     @ObservedObject var store: QuestStore
     @ObservedObject var checkIns: CheckInProgressStore
-    var onOpenDocuments: ((Int, DocumentKind, Int?) -> Void)?
+    var onOpenDocuments: ((DocumentQuestRoute) -> Void)?
     @State private var selectedTask: QuestTask?
-    @State private var pendingDocument: DocumentRoute?
-
-    private struct DocumentRoute {
-        let dogID: Int
-        let kind: DocumentKind
-        let registrationYear: Int?
-    }
+    @State private var pendingDocument: DocumentQuestRoute?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -81,11 +75,11 @@ struct QuestView: View {
         .sheet(item: $selectedTask, onDismiss: {
             guard let route = pendingDocument else { return }
             pendingDocument = nil
-            onOpenDocuments?(route.dogID, route.kind, route.registrationYear)
+            onOpenDocuments?(route)
         }) { task in
             NavigationStack {
-                QuestDetailView(store: store, taskID: task.id, onOpenDocuments: onOpenDocuments == nil ? nil : { dogID, kind, year in
-                    pendingDocument = DocumentRoute(dogID: dogID, kind: kind, registrationYear: year)
+                QuestDetailView(store: store, taskID: task.id, onOpenDocuments: onOpenDocuments == nil ? nil : { route in
+                    pendingDocument = route
                     selectedTask = nil
                 })
             }
@@ -97,9 +91,8 @@ struct QuestView: View {
     private func taskRows(_ tasks: [QuestTask]) -> some View {
         ForEach(tasks) { task in
             Button {
-                if task.status == .inProgress, let kind = task.documentKind,
-                   let dogID = task.dogID, let onOpenDocuments {
-                    onOpenDocuments(dogID, kind, task.registrationYear)
+                if task.status == .inProgress, let route = task.documentRoute, let onOpenDocuments {
+                    onOpenDocuments(route)
                 } else {
                     selectedTask = task
                 }
@@ -172,7 +165,7 @@ struct QuestDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var store: QuestStore
     let taskID: String
-    var onOpenDocuments: ((Int, DocumentKind, Int?) -> Void)?
+    var onOpenDocuments: ((DocumentQuestRoute) -> Void)?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -186,7 +179,7 @@ struct QuestDetailView: View {
                             }
                         }
                         Text(task.title).font(.title2.bold())
-                        if let period = task.registrationPeriodLabel {
+                        if let period = task.expiryLabel {
                             Text(period).font(.subheadline).foregroundStyle(AppColors.secondaryText)
                         }
                         if task.isStreak, let progress = task.streakProgress {
@@ -198,14 +191,14 @@ struct QuestDetailView: View {
                             Label("Collected · \(task.rewardPoints) points", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(AppColors.success)
                         } else {
-                            Text("\(task.rewardPoints) points").font(.headline)
+                            if task.rewardPoints > 0 { Text("\(task.rewardPoints) points").font(.headline) }
                             if task.status == .ready {
                                 PrimaryButton(title: "Collect", isLoading: store.collectingTaskID == taskID,
                                               isDisabled: !store.canCollect(task)) {
                                     Task { await store.collect(taskID: taskID) }
                                 }
-                            } else if let kind = task.documentKind, let dogID = task.dogID, let onOpenDocuments {
-                                PrimaryButton(title: "Add document") { onOpenDocuments(dogID, kind, task.registrationYear) }
+                            } else if let route = task.documentRoute, let onOpenDocuments {
+                                PrimaryButton(title: task.needsExpiry == true ? "Update document" : "Add document") { onOpenDocuments(route) }
                             }
                         }
                         if let error = store.errorMessage {

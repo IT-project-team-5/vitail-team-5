@@ -10,13 +10,12 @@ struct DocumentSubmissionView: View {
     @StateObject private var model: DocumentViewModel
     private let dogID: Int
     private let kind: DocumentKind
-    private let questRegistrationYear: Int?
+    private let expectedEntitlementID: Int?
+    private let needsExpiry: Bool
+    @StateObject private var review: DocumentReviewModel
     private let onSubmitted: () async -> Void
     private let onChanged: () async -> Void
-    @State private var method: DocumentEvidenceMethod = .details
-    @State private var registrationNumber = ""
-    @State private var councilName = ""
-    @State private var registrationYear = DocumentRegistration.currentCouncilYear()
+    @State private var method: DocumentEvidenceMethod = .upload
     @State private var eventDate = Date()
     @State private var importingFile = false
     @State private var photoSelection: PhotosPickerItem?
@@ -29,17 +28,20 @@ struct DocumentSubmissionView: View {
     @State private var previewDirectory: URL?
     @State private var isDownloading = false
     @State private var isVisible = true
+    @State private var choosingExpiry = false
+    @State private var expiryChoice = Date()
 
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil,
          initialDogID: Int, initialKind: DocumentKind,
-         initialRegistrationYear: Int? = nil,
-         initialMethod: DocumentEvidenceMethod = .details,
+         expectedEntitlementID: Int? = nil, needsExpiry: Bool = false,
+         initialMethod: DocumentEvidenceMethod = .upload,
+         reader: any DocumentReading = DocumentReader(),
          onSubmitted: @escaping () async -> Void = {}, onChanged: @escaping () async -> Void = {}) {
         _model = StateObject(wrappedValue: DocumentViewModel(service: service, session: session))
         _method = State(initialValue: initialMethod)
-        let year = initialKind == .council ? (initialRegistrationYear ?? DocumentRegistration.currentCouncilYear()) : nil
-        _registrationYear = State(initialValue: year ?? DocumentRegistration.currentCouncilYear())
-        questRegistrationYear = year
+        _review = StateObject(wrappedValue: DocumentReviewModel(reader: reader))
+        self.expectedEntitlementID = expectedEntitlementID
+        self.needsExpiry = needsExpiry
         dogID = initialDogID
         kind = initialKind
         self.onSubmitted = onSubmitted
@@ -47,14 +49,7 @@ struct DocumentSubmissionView: View {
     }
 
     private var currentSubmission: DocumentSubmission? {
-        model.currentSubmission(dogID: dogID, kind: kind, registrationYear: questRegistrationYear)
-    }
-
-    private var canSubmitForYear: Bool {
-        guard kind == .council else { return true }
-        guard questRegistrationYear == DocumentRegistration.currentCouncilYear() else { return false }
-        let serverYear = model.dashboard?.eligibility.first(where: { $0.dogID == dogID && $0.kind == .council })?.registrationYear
-        return serverYear == nil || serverYear == questRegistrationYear
+        model.currentSubmission(dogID: dogID, kind: kind, entitlementID: expectedEntitlementID)
     }
 
     var body: some View {
@@ -64,20 +59,12 @@ struct DocumentSubmissionView: View {
                     if let dog = dashboard.dogs.first(where: { $0.id == dogID }) {
                         HStack(spacing: AppSpacing.small) {
                             AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(dog.name).font(.headline)
-                                if let year = questRegistrationYear, DocumentRegistration.isValidCouncilYear(year) {
-                                    Text(DocumentRegistration.councilYearLabel(year))
-                                        .font(.subheadline).foregroundStyle(AppColors.secondaryText)
-                                }
-                            }
+                            Text(dog.name).font(.headline)
                         }
                         tutorial
                         if let submission = currentSubmission, !isEditing {
                             submissionCard(submission)
-                            if canSubmitForYear {
-                                Button(kind == .vet ? "Add another check-up" : "Update submission") { isEditing = true }
-                            }
+                            Button(kind == .vet ? "Add another check-up" : "Update submission") { isEditing = true }
                         } else {
                             submissionForm
                         }
@@ -117,12 +104,31 @@ struct DocumentSubmissionView: View {
         }
         .onChange(of: photoSelection) { _, selected in
             guard let selected else { return }
+            clearAttachment()
             let generation = UUID()
             attachmentGeneration = generation
             Task { await importPhoto(selected, generation: generation) }
         }
         .sheet(item: $preview, onDismiss: clearPreview) { file in
             DocumentPreviewController(url: file.url).ignoresSafeArea()
+        }
+        .sheet(isPresented: $choosingExpiry) {
+            NavigationStack {
+                DatePicker("Expiry date", selection: $expiryChoice, displayedComponents: .date)
+                    .datePickerStyle(.graphical).padding()
+                    .environment(\.calendar, DogBirthday.calendar)
+                    .environment(\.timeZone, DogBirthday.timeZone)
+                    .navigationTitle("Expiry date")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { choosingExpiry = false } }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Use this date") {
+                                review.expiryText = DocumentRegistration.expiryInputText(DogBirthday.string(from: expiryChoice))
+                                choosingExpiry = false
+                            }
+                        }
+                    }
+            }.presentationDetents([.medium, .large])
         }
         .onAppear { isVisible = true }
         .onChange(of: isPresented) { _, presented in
@@ -142,7 +148,7 @@ struct DocumentSubmissionView: View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
             switch kind {
             case .council:
-                Text("300 points per dog each registration year, from 10 April to 9 April.")
+                Text(needsExpiry ? "Update the expiry on your existing registration. This does not create another reward." : "Your registration stays current through the expiry date on your document. Submit renewed proof after it expires.")
                     .foregroundStyle(AppColors.secondaryText)
                 guide("Already registered?", "Find the Animal ID or registration number on your council's current certificate or registration confirmation. Ask your council for a copy if it is missing. Do not use a payment reference or tag number.")
                 guide("Not registered yet?", "Microchip your dog, then apply online or by paper form to the council where your dog lives. Wait for its completed-registration confirmation before submitting here.")
@@ -176,42 +182,26 @@ struct DocumentSubmissionView: View {
             if kind != .vet {
                 Picker("Submission method", selection: $method) {
                     ForEach(DocumentEvidenceMethod.allCases) { method in Text(method.rawValue).tag(method) }
-                }
-                .pickerStyle(.segmented)
+                }.pickerStyle(.segmented)
             }
-            if kind != .vet && method == .details {
-                if kind == .council {
-                    entryField("Council name", text: $councilName)
-                    entryField("Animal ID / registration number", text: $registrationNumber)
-                    Picker("Registration year", selection: $registrationYear) {
-                        let year = DocumentRegistration.currentCouncilYear()
-                        ForEach([year - 1, year, year + 1], id: \.self) { value in
-                            Text(DocumentRegistration.councilYearLabel(value)).tag(value)
-                        }
-                    }
-                    Text("Use the current year shown on your completed registration. For other formats, choose Upload proof.")
-                        .font(.caption).foregroundStyle(AppColors.secondaryText)
-                } else {
-                    entryField("15-digit microchip number", text: $registrationNumber)
-                        .keyboardType(.numbersAndPunctuation)
-                    Text("Spaces and hyphens are OK. For an older or overseas number, choose Upload proof.")
-                        .font(.caption).foregroundStyle(AppColors.secondaryText)
-                }
-            } else {
-                attachmentPicker
-            }
+            if kind == .vet || method == .upload { attachmentPicker }
             if kind == .vet {
                 DatePicker("Visit date", selection: $eventDate, in: ...Date(), displayedComponents: .date)
                     .environment(\.calendar, DogBirthday.calendar)
                     .environment(\.timeZone, DogBirthday.timeZone)
+            } else if review.isReading {
+                HStack {
+                    ProgressView("Reading document…")
+                    Spacer()
+                    Button("Cancel") { review.cancelReading() }
+                }
+            } else if method == .details || (fileData != nil && review.didRead) {
+                reviewFields
             }
             PrimaryButton(title: model.isSubmitting ? "Submitting…" : "Submit",
-                          isLoading: model.isSubmitting, isDisabled: !canSubmitForYear) {
+                          isLoading: model.isSubmitting,
+                          isDisabled: review.isReading || (kind != .vet && !review.isConfirmed)) {
                 Task { await submit() }
-            }
-            if !canSubmitForYear {
-                Text(DocumentInputError.councilQuestExpired.localizedDescription)
-                    .font(.caption).foregroundStyle(AppColors.secondaryText)
             }
             Text("Submitted details are self-reported and may be checked later.")
                 .font(.caption).foregroundStyle(AppColors.secondaryText)
@@ -221,6 +211,43 @@ struct DocumentSubmissionView: View {
         }
         .padding(AppSpacing.medium)
         .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+    }
+
+    private var reviewFields: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Text(method == .upload ? "Check document details" : "Registration details").font(.headline)
+            if let error = review.errorMessage {
+                Text(error).font(.footnote).foregroundStyle(AppColors.secondaryText)
+                Button("Read again") { startReading() }
+            } else if method == .upload && review.needsCorrection {
+                Text("Some details could not be read. Check and complete the fields below.")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+            }
+            if kind == .council {
+                entryField("Council name", text: $review.councilName)
+                entryField("Animal ID / registration number", text: $review.registrationNumber)
+                Button {
+                    expiryChoice = DocumentRegistration.normalizedExpiry(review.expiryText).flatMap(DogBirthday.date) ?? Date()
+                    choosingExpiry = true
+                } label: {
+                    HStack {
+                        Text("Expiry date")
+                        Spacer()
+                        Text(DocumentRegistration.normalizedExpiry(review.expiryText).map(DogBirthday.display) ?? "Select expiry date")
+                        Image(systemName: "calendar")
+                    }.font(.subheadline)
+                }
+                Text("Use the printed expiry date. Registration is valid through that day in Melbourne time.")
+                    .font(.caption).foregroundStyle(AppColors.secondaryText)
+            } else {
+                entryField(method == .upload ? "Microchip number on certificate" : "15-digit microchip number", text: $review.registrationNumber)
+                    .keyboardType(.numbersAndPunctuation)
+                entryField("Registry name (optional)", text: $review.registryName)
+            }
+            if method == .upload { entryField("Dog name on document (optional)", text: $review.dogName) }
+            Toggle("I checked these details against my dog's document", isOn: $review.isConfirmed)
+                .font(.subheadline)
+        }
     }
 
     private func entryField(_ title: String, text: Binding<String>) -> some View {
@@ -238,7 +265,7 @@ struct DocumentSubmissionView: View {
             Text(kind == .vet ? "Upload visit evidence" : "Upload proof").font(.headline)
             if kind != .vet {
                 Text(kind == .council
-                     ? "Show the council, your dog, registration number and current registration year on a certificate or completed-registration email."
+                     ? "Show the council, your dog, registration number and expiry date on a certificate or completed-registration email."
                      : "Show the registry, microchip number and dog or owner details on your registration certificate.")
                     .font(.subheadline).foregroundStyle(AppColors.secondaryText)
                 Button { importingFile = true } label: { Label("Choose file", systemImage: "doc.badge.plus") }
@@ -263,9 +290,11 @@ struct DocumentSubmissionView: View {
                 Text(submission.registrationNumber).font(.subheadline).textSelection(.enabled)
             }
             if let council = submission.councilName, !council.isEmpty { Text(council).font(.subheadline) }
-            if let year = submission.rewardRegistrationYear ?? model.dashboard?.rewardRegistrationYear(for: submission),
-               DocumentRegistration.isValidCouncilYear(year) {
-                Text("Reward year · \(DocumentRegistration.councilYearLabel(year))").font(.subheadline)
+            if kind == .council, let expiry = submission.validTo, DogBirthday.date(from: expiry) != nil {
+                Text("Valid through \(DogBirthday.display(expiry))").font(.subheadline)
+            }
+            if needsExpiry, submission.rewardStatus == .collected {
+                Text("Expiry updated. No additional points awarded.").font(.footnote).foregroundStyle(AppColors.secondaryText)
             }
             if let date = submission.eventDate { Text(DogBirthday.display(date)).font(.subheadline) }
             if submission.fileURL != nil {
@@ -303,7 +332,7 @@ struct DocumentSubmissionView: View {
             return
         }
         do {
-            guard canSubmitForYear else { throw DocumentInputError.councilQuestExpired }
+            guard kind == .vet || (!review.isReading && review.isConfirmed) else { throw DocumentInputError.confirmationRequired }
             let draft: DocumentDraft
             if kind == .vet {
                 guard let fileData, let filename else { throw DocumentInputError.attachmentRequired }
@@ -311,15 +340,17 @@ struct DocumentSubmissionView: View {
                                       eventDate: DogBirthday.string(from: eventDate), filename: filename, fileData: fileData)
             } else {
                 draft = try DocumentDraft.registration(dogID: dogID, kind: kind, method: method,
-                    number: registrationNumber, councilName: councilName, registrationYear: registrationYear,
-                    filename: filename, fileData: fileData, questRegistrationYear: questRegistrationYear)
+                    number: review.registrationNumber, councilName: review.councilName, validTo: review.expiryText,
+                    registryName: review.registryName, documentDogName: review.dogName,
+                    filename: filename, fileData: fileData, expectedEntitlementID: expectedEntitlementID,
+                    needsExpiry: needsExpiry, documentReading: review.readingAudit)
             }
             if await model.submit(draft), model.isActive, isVisible {
                 isEditing = false
                 clearAttachment()
-                if kind == .council, let year = model.receipt?.submission.rewardRegistrationYear,
-                   year != questRegistrationYear, DocumentRegistration.isValidCouncilYear(year) {
-                    validationMessage = "Saved for the \(DocumentRegistration.councilYearLabel(year)) reward year. Close this page and refresh Quests."
+                if kind == .council, let expiry = model.receipt?.submission.validTo,
+                   !DocumentRegistration.isCurrent(expiry) {
+                    validationMessage = "Expiry updated. This document has expired. Close this page and open the refreshed Quest with renewed registration proof."
                 }
                 await onChanged()
             }
@@ -349,6 +380,7 @@ struct DocumentSubmissionView: View {
         fileData = data
         filename = String(url.lastPathComponent.prefix(150))
         validationMessage = nil
+        startReading()
     }
 
     private func importPhoto(_ item: PhotosPickerItem, generation: UUID) async {
@@ -367,6 +399,7 @@ struct DocumentSubmissionView: View {
             fileData = data
             filename = "\(kind.title).jpg"
             validationMessage = nil
+            startReading()
         } catch {
             if attachmentGeneration == generation, model.isActive, !Task.isCancelled {
                 validationMessage = error.localizedDescription
@@ -374,7 +407,18 @@ struct DocumentSubmissionView: View {
         }
     }
 
+    private func startReading() {
+        guard kind != .vet, method == .upload, model.isActive, let fileData, let filename else { return }
+        let generation = attachmentGeneration
+        Task {
+            guard model.isActive, method == .upload, attachmentGeneration == generation else { return }
+            await review.read(data: fileData, filename: filename, kind: kind)
+        }
+    }
+
     private func clearAttachment() {
+        review.clear()
+        choosingExpiry = false
         attachmentGeneration = UUID()
         fileData = nil
         filename = nil
@@ -409,8 +453,6 @@ struct DocumentSubmissionView: View {
         preview = nil
         clearPreview()
         clearAttachment()
-        registrationNumber = ""
-        councilName = ""
         validationMessage = nil
     }
 

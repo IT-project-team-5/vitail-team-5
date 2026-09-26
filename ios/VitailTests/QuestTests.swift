@@ -246,87 +246,84 @@ final class QuestTests: XCTestCase {
         XCTAssertEqual(snapshot.localDate, "2026-09-25")
     }
 
-    func testCouncilTaskDecodesAnnualIdentityAndCompactPeriod() throws {
-        var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(QuestFixture.json.utf8)) as? [String: Any])
-        var tasks = try XCTUnwrap(payload["tasks"] as? [[String: Any]])
-        tasks[1]["id"] = "council:7:2027"
-        tasks[1]["registration_year"] = 2027
-        payload["tasks"] = tasks
-        let snapshot = try JSONDecoder().decode(QuestSnapshot.self, from: JSONSerialization.data(withJSONObject: payload))
-        let council = snapshot.tasks[1]
-        XCTAssertEqual(council.registrationYear, 2027)
-        XCTAssertEqual(council.registrationPeriodLabel, "2026–27")
-        XCTAssertEqual(council.subjectLabel, "Milo · 2026–27")
-        XCTAssertTrue(council.isSupported)
-        XCTAssertFalse(QuestFixture.council(year: Int.max).isSupported)
+    func testCouncilTaskUsesExpiryAndUnknownExpiryRoutesToExistingEntitlement() throws {
+        let ready = QuestFixture.council(expiry: "2027-06-15", status: .ready, entitlementID: 10)
+        XCTAssertEqual(ready.validTo, "2027-06-15")
+        XCTAssertEqual(ready.subjectLabel, "Milo")
+        XCTAssertNotNil(ready.expiryLabel)
+        XCTAssertTrue(ready.isSupported)
+        XCTAssertFalse(QuestFixture.council(status: .ready, entitlementID: 10).isSupported)
+        var unknown = QuestFixture.council(entitlementID: 10)
+        unknown.needsExpiry = true
+        XCTAssertTrue(unknown.isSupported)
+        XCTAssertEqual(unknown.documentRoute?.expectedEntitlementID, 10)
+        XCTAssertEqual(unknown.documentRoute?.needsExpiry, true)
     }
 
-    func testCouncilRolloverHidesExpiredFormButKeepsOlderUnclaimedReward() async {
+    func testCouncilExpiryHidesUnclaimedRewardAtMelbourneMidnight() async {
         let session = await makeSession()
         var clock = Date(timeIntervalSince1970: 0)
-        let oldReward = QuestFixture.council(year: 2026, status: .ready, entitlementID: 9)
-        let service = QuestFixture(tasks: [oldReward, QuestFixture.council(year: 2027)],
-                                   serverTime: "2027-04-09T13:59:00Z")
+        let old = QuestFixture.council(expiry: "2027-06-15", status: .ready, entitlementID: 9)
+        let service = QuestFixture(tasks: [old], serverTime: "2027-06-15T13:59:00Z")
         let store = QuestStore(ownerID: 1, session: session, service: service, now: { clock })
         await store.refresh()
-        XCTAssertEqual(store.inProgressTasks.first?.registrationYear, 2027)
+        XCTAssertEqual(store.readyTasks, [old])
         clock = clock.addingTimeInterval(61)
-        XCTAssertTrue(store.inProgressTasks.isEmpty)
-        XCTAssertEqual(store.readyTasks, [oldReward])
-        await service.setServerTime("2027-04-09T14:01:00Z")
-        await service.setTasks([oldReward, QuestFixture.council(year: 2028)])
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        XCTAssertFalse(store.canCollect(old))
+        await service.setServerTime("2027-06-15T14:01:00Z")
+        await service.setTasks([QuestFixture.council()])
         await store.refresh()
-        XCTAssertEqual(store.inProgressTasks.first?.registrationYear, 2028)
-        XCTAssertEqual(store.readyTasks, [oldReward])
+        XCTAssertEqual(store.inProgressTasks.map(\.id), ["council:7:new"])
+        XCTAssertTrue(store.readyTasks.isEmpty)
     }
 
-    func testCollectingPreviousCouncilYearDoesNotSuppressCurrentYearForm() async {
+    func testExpiredOptimisticCollectionCannotHideRenewalForm() async {
         let session = await makeSession()
-        let previous = QuestFixture.council(year: 2027, status: .ready, entitlementID: 10)
-        let current = QuestFixture.council(year: 2028)
-        let timestamp = "2027-04-10T01:00:00Z"
-        let service = QuestFixture(tasks: [previous, current], serverTime: timestamp)
-        let store = QuestStore(ownerID: 1, session: session, service: service)
+        var clock = Date(timeIntervalSince1970: 0)
+        let selected = QuestFixture.council(expiry: "2027-06-15", status: .ready, entitlementID: 10)
+        let timestamp = "2027-06-15T13:59:00Z"
+        let service = QuestFixture(tasks: [selected], serverTime: timestamp)
+        let store = QuestStore(ownerID: 1, session: session, service: service, now: { clock })
         await store.refresh()
         await service.overrideDocument(DocumentCollectionReceipt(entitlementID: 10, kind: .council,
-            dogID: 7, points: 300, balance: 420, collectedAt: timestamp, created: true, registrationYear: 2027))
+            dogID: 7, points: 300, balance: 420, collectedAt: timestamp, created: true, validTo: "2027-06-15"))
         await service.failNextFetch()
-        await store.collect(taskID: previous.id)
-        XCTAssertEqual(store.inProgressTasks, [current])
-        XCTAssertTrue(store.readyTasks.isEmpty)
-        XCTAssertEqual(store.collectedTodayTasks.first?.registrationPeriodLabel, "2026–27")
+        await store.collect(taskID: selected.id)
+        XCTAssertEqual(store.collectedTodayTasks.count, 1)
+        clock = clock.addingTimeInterval(61)
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        await service.setServerTime("2027-06-15T14:01:00Z")
+        await service.setTasks([QuestFixture.council()])
         await store.refresh()
-        XCTAssertEqual(store.inProgressTasks, [current])
-        XCTAssertTrue(store.readyTasks.isEmpty)
-        XCTAssertEqual(store.visibleTasks.count, 2)
+        XCTAssertEqual(store.visibleTasks, [QuestFixture.council()])
     }
 
-    func testCouncilCollectionYearMustMatchButLegacyReceiptCanOmitIt() async {
-        for receivedYear in [2028, 2027, nil] as [Int?] {
+    func testCouncilCollectionRequiresMatchingConfirmedExpiry() async {
+        for receivedExpiry in ["2027-06-16", "2027-06-15", nil] as [String?] {
             let session = await makeSession()
-            let selected = QuestFixture.council(year: 2027, status: .ready, entitlementID: 10)
+            let selected = QuestFixture.council(expiry: "2027-06-15", status: .ready, entitlementID: 10)
             let service = QuestFixture(tasks: [selected])
             let store = QuestStore(ownerID: 1, session: session, service: service)
             await store.refresh()
             await service.overrideDocument(DocumentCollectionReceipt(entitlementID: 10, kind: .council,
                 dogID: 7, points: 300, balance: 420, collectedAt: QuestFixture.timestamp, created: true,
-                registrationYear: receivedYear))
+                validTo: receivedExpiry))
             var callbacks = 0
             store.onAward = { _ in callbacks += 1 }
             await store.collect(taskID: selected.id)
-            XCTAssertEqual(callbacks, receivedYear == 2028 ? 0 : 1)
-            XCTAssertEqual(store.task(id: selected.id)?.status, receivedYear == 2028 ? .ready : .collected)
+            XCTAssertEqual(callbacks, receivedExpiry == selected.validTo ? 1 : 0)
+            XCTAssertEqual(store.task(id: selected.id)?.status, receivedExpiry == selected.validTo ? .collected : .ready)
         }
     }
 
-    func testAnnualCouncilQuestAppearanceSnapshot() async throws {
+    func testCouncilQuestExpiryAppearanceSnapshot() async throws {
         let session = await makeSession()
-        let service = QuestFixture(tasks: [QuestFixture.council(year: 2027, status: .ready, entitlementID: 10),
-                                          QuestFixture.council(year: 2028)], serverTime: "2027-04-10T01:00:00Z")
+        let service = QuestFixture(tasks: [QuestFixture.council(expiry: "2027-06-15", status: .ready, entitlementID: 10)])
         let store = QuestStore(ownerID: 1, session: session, service: service)
         await store.refresh()
         try await snapshot(QuestView(store: store, checkIns: CheckInProgressStore(ownerID: 1)),
-                           name: "Quest-Council-Annual-Periods", dark: false)
+                           name: "Quest-Council-Expiry", dark: false)
     }
 
     func testTaskDecodingPreservesUnknownStatusWithoutShowingUnavailableRows() async throws {
@@ -602,7 +599,7 @@ final class QuestTests: XCTestCase {
         }
         try await snapshot(QuestView(store: store, checkIns: checkIns).environment(\.dynamicTypeSize, .accessibility3),
                            name: "Quest-Compact-Large-Text", dark: false)
-        try await snapshot(QuestDetailView(store: store, taskID: "document:8:VET_CHECKUP", onOpenDocuments: { _, _, _ in })
+        try await snapshot(QuestDetailView(store: store, taskID: "document:8:VET_CHECKUP", onOpenDocuments: { _ in })
             .environment(\.dynamicTypeSize, .accessibility3), name: "Quest-Detail-Large-Text", dark: false)
         try await snapshot(QuestDetailView(store: store, taskID: "document:11"), name: "Quest-Detail-Collected", dark: false)
     }
@@ -674,7 +671,7 @@ private actor QuestFixture: QuestServing {
         calls.append("document:\(entitlementID)"); try await claimGate()
         if let documentOverride { return documentOverride }
         return DocumentCollectionReceipt(entitlementID: entitlementID, kind: .council, dogID: 7, points: 300,
-                                       balance: 420, collectedAt: Self.timestamp, created: calls.count == 1)
+                                       balance: 420, collectedAt: Self.timestamp, created: calls.count == 1, validTo: "2027-06-15")
     }
     func collectStreak(_ request: StreakCollectRequest) async throws -> StreakCollectResponse {
         calls.append("streak:\(request.runStartDate):\(request.milestoneDays)")
@@ -715,22 +712,22 @@ private actor QuestFixture: QuestServing {
             rewardPoints: points ?? (milestone == 7 ? 20 : 100), progress: nil, dogID: nil, entitlementID: nil,
             collectedAt: nil, currentDays: current, milestoneDays: milestone, runStartDate: run)
     }
-    nonisolated static func council(year: Int, status: QuestTaskStatus = .inProgress, entitlementID: Int? = nil) -> QuestTask {
-        QuestTask(id: "council:7:\(year)", kind: "COUNCIL_REGISTRATION", status: status,
+    nonisolated static func council(expiry: String? = nil, status: QuestTaskStatus = .inProgress, entitlementID: Int? = nil) -> QuestTask {
+        QuestTask(id: "council:7:" + (entitlementID.map { "entitlement:\($0)" } ?? "new"), kind: "COUNCIL_REGISTRATION", status: status,
             title: "Council registration", subjectName: "Milo", photo: nil, icon: "doc.text",
-            detail: "300 points per dog each Victorian registration year, from 10 April to 9 April.",
+            detail: "Submit renewed proof after the expiry printed on your registration.",
             rewardPoints: 300, progress: nil, dogID: 7, entitlementID: entitlementID, collectedAt: nil,
-            registrationYear: year)
+            validTo: expiry)
     }
     nonisolated static var tasks: [QuestTask] { try! JSONDecoder().decode(QuestSnapshot.self, from: Data(json.utf8)).tasks }
     nonisolated static let awardJSON = #"{"award":{"id":4,"kind":"BIRTHDAY","dog_id":7,"year":2026,"points":60,"awarded_at":"2026-09-25T01:00:00Z"},"balance":180,"created":true}"#
-    nonisolated static let documentJSON = #"{"entitlement_id":10,"kind":"COUNCIL_REGISTRATION","dog_id":7,"points":300,"balance":420,"collected_at":"2026-09-25T01:00:00Z","created":true}"#
+    nonisolated static let documentJSON = #"{"entitlement_id":10,"kind":"COUNCIL_REGISTRATION","valid_to":"2027-06-15","dog_id":7,"points":300,"balance":420,"collected_at":"2026-09-25T01:00:00Z","created":true}"#
     nonisolated static let streakAwardJSON = #"{"award":{"id":5,"kind":"STREAK","run_start_date":"2026-09-01","milestone_days":7,"points":20,"awarded_at":"2026-09-25T01:00:00Z"},"balance":120,"created":true}"#
     nonisolated static let streakTaskJSON = #"{"id":"streak:2026-09-01:7","kind":"STREAK","status":"READY","title":"Walking streak","subject_name":"Walking streak","photo":null,"icon":"flame.fill","detail":"Finish and upload a qualifying walk each day.","reward_points":20,"progress":1,"dog_id":null,"entitlement_id":null,"collected_at":null,"current_days":8,"milestone_days":7,"run_start_date":"2026-09-01"}"#
     nonisolated static let json = #"""
     {"server_time":"2026-09-25T01:00:00Z","timezone":"Australia/Melbourne","local_date":"2026-09-25","next_reset_at":"2026-09-25T14:00:00Z","tasks":[
     {"id":"birthday:7:2026","kind":"BIRTHDAY","status":"READY","title":"Birthday treat","subtitle":"Ready to collect","subject_name":"Milo","photo":null,"icon":"birthday.cake","detail":"Celebrate Milo's birthday with 60 points. One birthday treat each year.","reward_points":60,"progress":1,"dog_id":7,"entitlement_id":null,"collected_at":null},
-    {"id":"document:10","kind":"COUNCIL_REGISTRATION","status":"READY","title":"Council registration","subtitle":"Ready to collect","subject_name":"Milo","photo":null,"icon":"doc.text","detail":"Your registration document is saved. Collect your 300 points. This reward is available once per dog each registration year.","reward_points":300,"progress":1,"dog_id":7,"entitlement_id":10,"collected_at":null},
+    {"id":"document:10","kind":"COUNCIL_REGISTRATION","valid_to":"2027-06-15","status":"READY","title":"Council registration","subtitle":"Ready to collect","subject_name":"Milo","photo":null,"icon":"doc.text","detail":"Your registration document is saved. Collect your 300 points. Renew after the actual registration expiry.","reward_points":300,"progress":1,"dog_id":7,"entitlement_id":10,"collected_at":null},
     {"id":"document:8:VET_CHECKUP","kind":"VET_CHECKUP","status":"IN_PROGRESS","title":"Vet check-up","subtitle":"Add a document","subject_name":"Luna","photo":null,"icon":"doc.text","detail":"Add a photo of Luna's vet check-up. Eligible visits earn 200 points, up to twice a year and at least 60 days apart.","reward_points":200,"progress":null,"dog_id":8,"entitlement_id":null,"collected_at":null},
     {"id":"document:11","kind":"MICROCHIP_REGISTRATION","status":"COLLECTED","title":"Microchip registration","subtitle":"Collected","subject_name":"Luna","photo":null,"icon":"doc.text","detail":"Your lifetime microchip registration reward was collected.","reward_points":300,"progress":1,"dog_id":8,"entitlement_id":11,"collected_at":"2026-09-25T00:00:00Z"}]}
     """#
