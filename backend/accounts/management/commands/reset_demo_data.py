@@ -16,6 +16,7 @@ from accounts.models import CafeProfile, User
 from dogs.models import Dog
 from rewards.models import CafeOrderFeedState, PointEntry, Redemption, Reward
 from rewards.services import credit_points
+from venues.models import CheckIn
 from walks.models import Walk
 
 
@@ -153,6 +154,7 @@ class Command(BaseCommand):
     def _delete_account_data():
         # Respect protected foreign keys. DELETE preserves sequences, so a token
         # issued for a removed user cannot acquire a new account with the same ID.
+        CheckIn.objects.all().delete()  # Venues are admin content and stay.
         Walk.dogs.through.objects.all().delete()
         Walk.objects.all().delete()
         Redemption.objects.all().delete()

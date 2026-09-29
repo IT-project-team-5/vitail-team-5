@@ -88,7 +88,7 @@ The server still stores summaries only, not raw routes. See
 `docs/WALK_INTEGRATION.md` for limits and compatibility.
 
 Walk-distance earning is connected in this integration; the feature checklist
-and limits are in `docs/FEATURES.md`. Personalised-goal awards, check-ins, streaks,
+and limits are in `docs/FEATURES.md`. Venue check-ins are connected too (Venues tab; Admins add venues in Django Admin). Personalised-goal awards, streaks,
 charity donations, social sharing and the wider product rules below remain
 **planned**, not claims that those features already work.
 
@@ -361,7 +361,7 @@ a separate, backed-up operation; it never runs automatically on startup.
 For real earning, add/select a dog in Walk, allow precise location and record an
 outdoor walk. End/upload it while online; server-validated distance awards
 8 points/km, up to 40 walking points per Melbourne day, to the same wallet.
-Goal and check-in bonuses are not awarded yet. Use a real iPhone for GPS tests;
+Venue check-ins award 12 points (max once per venue per day, inside the 72-point daily cap); goal bonuses are not awarded yet. Use a real iPhone for GPS tests;
 simulated-location samples are intentionally rejected.
 
 Compose runs `expire_rewards --watch --interval 60` after the API starts, so

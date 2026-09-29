@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/", include("accounts.cafe_urls")),
     path("api/", include("dogs.urls")),
     path("api/", include("walks.urls")),
+    path("api/", include("venues.urls")),
     path("api/", include("rewards.urls")),
 ]
 

@@ -11,6 +11,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from dogs.models import Breed, Dog
 from rewards.models import PointEntry, Redemption, Reward
+from venues.models import CheckIn, Venue
 from walks.models import Walk
 
 
@@ -118,6 +119,22 @@ class WalkApiTests(APITestCase):
         )
         self.assert_wallet(40)
         self.assertEqual(PointEntry.objects.filter(type=PointEntry.Type.EARN).count(), 2)
+
+    def test_walking_points_share_the_72_point_cap_with_check_ins(self):
+        earlier = self.now - timedelta(hours=6)
+        for index in range(5):  # 60 points from check-ins leaves 12 for walking
+            venue = Venue.objects.create(
+                name=f"Cap Park {index}", venue_type=Venue.VenueType.DOG_PARK,
+                latitude=0, longitude=0)
+            CheckIn.objects.create(
+                owner=self.owner, venue=venue, status=CheckIn.Status.COMPLETED,
+                entered_at=earlier, last_report_at=earlier, dwell_completed_at=earlier,
+                completed_local_date=self.now.date(), awarded_points=12)
+        response = self.submit(self.payload(distance_m=5001, start_seconds=-22000))
+        self.assertEqual(response.data["points_awarded"], 12)
+        self.assert_wallet(12)
+        again = self.submit(self.payload(distance_m=5001, start_seconds=-10000))
+        self.assertEqual(again.data["points_awarded"], 0)
 
     def test_daily_cap_resets_using_melbourne_end_date_even_across_midnight(self):
         self.now = self.now.replace(hour=0, minute=15)

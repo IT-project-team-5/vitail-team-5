@@ -7,6 +7,7 @@ struct RootView: View {
     let dogService: any DogServicing
     let redemptionService: any RedemptionServing
     let walkService: any WalkServing
+    let venueService: any VenueServing
     let cafeProfileService: any CafeProfileServing
     let cafeProductsService: any CafeProductsServing
 
@@ -47,7 +48,7 @@ struct RootView: View {
             OwnerHomeView(
                 user: user, session: session,
                 dogService: dogService, redemptionService: redemptionService,
-                walkService: walkService
+                walkService: walkService, venueService: venueService
             )
             .id(user.id)
         case .cafe:
