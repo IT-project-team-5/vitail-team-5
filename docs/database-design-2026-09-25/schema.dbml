@@ -451,6 +451,7 @@ Table DocumentEntitlement {
   event_date date
   valid_from date
   valid_to date
+  renewal_blocked_through date
   point_entry_id bigint [unique, ref: - PointEntry.id, note: 'Django on_delete=PROTECT']
   collected_at datetime
   promised_points int [not null, note: 'nonnegative integer; ORM default: 0']

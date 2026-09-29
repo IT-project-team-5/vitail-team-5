@@ -122,8 +122,8 @@ They do not remain alongside the new task. Historical files, receipts and ledger
 entries remain private records; hiding a task does not delete those records.
 
 Only one Council qualification is active per dog. An unexpired paid registration
-blocks a new reward; its confirmed expiry cannot be changed to create another
-qualification. Once it expires, renewed evidence with a later valid expiry may
+blocks a new reward. Profile corrections can update its actual expiry but cannot
+advance its reward renewal boundary or create another qualification. Once it expires, renewed evidence with a later valid expiry may
 reserve the next reward. The same animal number may recur after renewal; an
 identical file cannot support another qualification. Ownership transfers do not
 reset eligibility. Explicit collection rechecks expiry under the dog lock.
@@ -155,6 +155,16 @@ payloads under one UUID conflict. An already paid collection can replay its
 original receipt but never credits again. Account changes reject late client
 responses; confirmed success survives a failed refresh and queues the wallet
 refresh. Private originals remain owner/admin-readable for later spot checks.
+Dog settings now provides **Registration documents** for Council and microchip.
+It shows the current record even after collection or expiry, permits corrections
+and attachment replacement, and separates renewal from editing. Corrections create
+an immutable evidence version under the same entitlement and award zero points.
+The actual expiry is editable; the latest confirmed expiry remains the earliest
+renewal boundary. Shortening expiry cannot advance a reward, while extending it
+postpones renewal. Settings shows both dates when relevant. Original records remain
+private and the dog's separate profile chip number stays unchanged. A successful
+edit invalidates cached registration Quest rows before a fresh server read.
+
 File limits, expiry selection and migration compatibility are documented in
 [evidence documentation](../backend/evidence/README.md).
 
@@ -169,8 +179,9 @@ also permit ADMIN.
 | GET | `/api/quests` | `server_time`, `timezone`, `local_date`, `next_reset_at`, `tasks` |
 | POST | `/api/quests/birthdays/{dog_id}/collect` | Existing or newly created birthday credit receipt and balance |
 | POST | `/api/quests/streaks/collect` | Collect one server-qualified run/milestone; replay returns its existing credit |
-| GET | `/api/quests/documents` | Dogs, evidence versions, current entitlements and eligibility |
+| GET | `/api/quests/documents` | Dogs, evidence versions, management records, current entitlements and eligibility |
 | POST | `/api/quests/documents` | Saved evidence and reserved entitlement; no new credit |
+| POST | `/api/quests/documents/{id}/corrections` | Latest registration version corrected under its original entitlement; no credit |
 | POST | `/api/quests/documents/entitlements/{id}/collect` | One entitlement's collection receipt and balance |
 | GET | `/api/quests/documents/{id}/file` | Authenticated original-file download |
 
