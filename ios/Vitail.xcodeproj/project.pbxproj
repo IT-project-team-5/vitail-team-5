@@ -82,6 +82,11 @@
 		F10000000000000000000002 /* DogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DogDetailView.swift */; };
 		F10000000000000000000003 /* AvatarProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* AvatarProfileTests.swift */; };
 		F10000000000000000000004 /* SlideToCollect.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* SlideToCollect.swift */; };
+		000000000000000000000080 /* ActivityShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000080 /* ActivityShareModels.swift */; };
+		000000000000000000000081 /* DogIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000081 /* DogIllustration.swift */; };
+		000000000000000000000082 /* ActivityShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000082 /* ActivityShareCard.swift */; };
+		000000000000000000000083 /* ActivityShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000083 /* ActivityShareView.swift */; };
+		000000000000000000000084 /* ActivityShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000084 /* ActivityShareTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +183,11 @@
 		F20000000000000000000002 /* DogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDetailView.swift; sourceTree = "<group>"; };
 		F20000000000000000000003 /* AvatarProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarProfileTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000004 /* SlideToCollect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideToCollect.swift; sourceTree = "<group>"; };
+		100000000000000000000080 /* ActivityShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareModels.swift; sourceTree = "<group>"; };
+		100000000000000000000081 /* DogIllustration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogIllustration.swift; sourceTree = "<group>"; };
+		100000000000000000000082 /* ActivityShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareCard.swift; sourceTree = "<group>"; };
+		100000000000000000000083 /* ActivityShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareView.swift; sourceTree = "<group>"; };
+		100000000000000000000084 /* ActivityShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -308,6 +318,7 @@
 				20C000000000000000000001 /* OwnerHome */,
 				20D000000000000000000001 /* CafeOrders */,
 				213000000000000000000001 /* CafeProfile */,
+				216000000000000000000001 /* Sharing */,
 				214000000000000000000001 /* CafeProducts */,
 				20F000000000000000000001 /* OwnerProfile */,
 				210000000000000000000001 /* Dog */,
@@ -368,6 +379,7 @@
 				00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */,
 				00000000000000000000E210 /* WalkMVPIntegrationTests.swift */,
 				10000000000000000000002F /* CafeProfileTests.swift */,
+				100000000000000000000084 /* ActivityShareTests.swift */,
 				100000000000000000000034 /* CafeProductsTests.swift */,
 				10000000000000000000002A /* WalkTests.swift */,
 				100000000000000000000024 /* APIIntegrationTests.swift */,
@@ -445,6 +457,17 @@
 				100000000000000000000033 /* CafeProductsView.swift */,
 			);
 			path = CafeProducts;
+			sourceTree = "<group>";
+		};
+		216000000000000000000001 /* Sharing */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000080 /* ActivityShareModels.swift */,
+				100000000000000000000081 /* DogIllustration.swift */,
+				100000000000000000000082 /* ActivityShareCard.swift */,
+				100000000000000000000083 /* ActivityShareView.swift */,
+			);
+			path = Sharing;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -561,6 +584,10 @@
 				000000000000000000000032 /* CafeProductsViewModel.swift in Sources */,
 				000000000000000000000033 /* CafeProductsView.swift in Sources */,
 				00000000000000000000002E /* CafeProfileView.swift in Sources */,
+				000000000000000000000080 /* ActivityShareModels.swift in Sources */,
+				000000000000000000000081 /* DogIllustration.swift in Sources */,
+				000000000000000000000082 /* ActivityShareCard.swift in Sources */,
+				000000000000000000000083 /* ActivityShareView.swift in Sources */,
 				00000000000000000000002D /* CafeProfileViewModel.swift in Sources */,
 				00000000000000000000002C /* CafeProfileService.swift in Sources */,
 				00000000000000000000002B /* CafeProfileModels.swift in Sources */,
@@ -620,6 +647,7 @@
 				00000000000000000000E110 /* WalkMVPIntegrationTests.swift in Sources */,
 				000000000000000000000034 /* CafeProductsTests.swift in Sources */,
 				00000000000000000000002F /* CafeProfileTests.swift in Sources */,
+				000000000000000000000084 /* ActivityShareTests.swift in Sources */,
 				00000000000000000000002A /* WalkTests.swift in Sources */,
 				000000000000000000000024 /* APIIntegrationTests.swift in Sources */,
 				000000000000000000000023 /* RedemptionTests.swift in Sources */,
