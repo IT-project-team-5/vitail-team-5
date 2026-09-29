@@ -3,6 +3,9 @@ import SwiftUI
 struct DogDetailView: View {
     @ObservedObject var viewModel: DogViewModel
     let dog: Dog
+    var documentService: any DocumentServing = DocumentService()
+    var session: SessionStore? = nil
+    var onDocumentsChanged: () async -> Void = {}
     @Environment(\.dismiss) private var dismiss
     @State private var isEditing = false
 
@@ -26,6 +29,19 @@ struct DogDetailView: View {
                     .padding(AppSpacing.large)
                     .background(AppColors.surface)
                     .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                    NavigationLink {
+                        DogDocumentsView(dogID: currentDog.id, service: documentService, session: session,
+                                         onChanged: onDocumentsChanged)
+                    } label: {
+                        HStack {
+                            Label("Registration documents", systemImage: "doc.text")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.headline).padding(AppSpacing.large)
+                        .foregroundStyle(AppColors.primaryText)
+                        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+                    }.buttonStyle(.plain)
                 }
                 .padding(AppSpacing.large)
                 .frame(maxWidth: .infinity)

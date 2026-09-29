@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E72026092900000000000011 /* DogDocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092900000000000001 /* DogDocumentsView.swift */; };
 		00000000000000000000E112 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E212 /* Assets.xcassets */; };
 		00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E213 /* BrandAppearanceTests.swift */; };
 		000000000000000000000001 /* VitailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* VitailApp.swift */; };
@@ -108,6 +109,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E72026092900000000000001 /* DogDocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDocumentsView.swift; sourceTree = "<group>"; };
 		00000000000000000000E212 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		00000000000000000000E213 /* BrandAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAppearanceTests.swift; sourceTree = "<group>"; };
 		100000000000000000000001 /* VitailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitailApp.swift; sourceTree = "<group>"; };
@@ -507,6 +509,7 @@
 				BE812BF2460D749B2A393459 /* DocumentService.swift */,
 				25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */,
 				E72026092700000000000001 /* DocumentReader.swift */,
+				E72026092900000000000001 /* DogDocumentsView.swift */,
 			);
 			path = Documents;
 			sourceTree = "<group>";
@@ -615,6 +618,7 @@
 				7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */,
 				2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */,
 				E72026092700000000000011 /* DocumentReader.swift in Sources */,
+				E72026092900000000000011 /* DogDocumentsView.swift in Sources */,
 				18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */,
 				B050D75339160A6E5DED733D /* CheckInProgress.swift in Sources */,
 				0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */,

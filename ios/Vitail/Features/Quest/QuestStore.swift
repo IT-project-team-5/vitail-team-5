@@ -112,6 +112,27 @@ final class QuestStore: ObservableObject {
         if requestGeneration == generation { isRefreshing = false; refreshTask = nil }
     }
 
+    func documentsDidChange() async {
+        // Finish older reads/claims before invalidating registrations changed in dog settings.
+        // Normal refreshes still retain confirmed awards when the network fails.
+        await collectionTask?.value
+        await refreshTask?.value
+        guard isActive, isCurrentOwner else { return }
+        generation += 1
+        refreshTask = nil; collectionTask = nil
+        isRefreshing = false; collectingTaskID = nil
+        confirmedCollections = confirmedCollections.filter {
+            $0.value.documentKind != .council && $0.value.documentKind != .microchip
+        }
+        if let previous = snapshot {
+            snapshot = QuestSnapshot(serverTime: previous.serverTime, timezone: previous.timezone,
+                localDate: previous.localDate, tasks: previous.tasks.filter {
+                    $0.documentKind != .council && $0.documentKind != .microchip
+                })
+        }
+        await refresh()
+    }
+
     func collect(taskID: String) async {
         guard let selected = task(id: taskID), canCollect(selected) else { return }
         let requestGeneration = generation

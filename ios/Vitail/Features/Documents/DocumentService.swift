@@ -23,7 +23,8 @@ actor DocumentService: DocumentServing {
     }
 
     func submit(_ request: DocumentRequest) async throws -> DocumentReceipt {
-        try await apiClient.post("/api/quests/documents", body: request)
+        let path = request.correctsSubmissionID.map { "/api/quests/documents/\($0)/corrections" } ?? "/api/quests/documents"
+        return try await apiClient.post(path, body: request)
     }
 
     func download(submissionID: Int) async throws -> Data {

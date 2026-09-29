@@ -4,6 +4,98 @@ import XCTest
 @testable import Vitail
 
 final class DocumentTests: XCTestCase {
+    func testCorrectionRetainsProofAndAcceptsActualPastExpiryWithoutChangingDogOrKind() throws {
+        let council = savedRegistration()
+        let draft = try DocumentDraft.registration(dogID: 7, kind: .council, method: .upload,
+            number: "A/002", councilName: "Yarra", validTo: "15/06/2020", filename: nil, fileData: nil,
+            expectedEntitlementID: 91, correcting: council)
+        XCTAssertEqual(draft.correctsSubmissionID, council.id)
+        XCTAssertEqual(draft.validTo, "2020-06-15")
+        XCTAssertNil(draft.fileData)
+        let request = DocumentRequest(draft: draft, requestID: UUID())
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+        XCTAssertEqual(request.correctsSubmissionID, council.id)
+        XCTAssertNil(json["corrects_submission_id"])
+        XCTAssertNil(json["file_base64"])
+        XCTAssertThrowsError(try DocumentDraft.registration(dogID: 8, kind: .council, method: .upload,
+            number: "A/002", councilName: "Yarra", validTo: "15/06/2020", filename: nil, fileData: nil, correcting: council))
+        XCTAssertThrowsError(try DocumentDraft.registration(dogID: 7, kind: .microchip, method: .upload,
+            number: "0012345678", councilName: "", filename: nil, fileData: nil, correcting: council))
+        let chip = savedRegistration(kind: .microchip)
+        let legacy = try DocumentDraft.registration(dogID: 7, kind: .microchip, method: .upload,
+            number: "0012345678", councilName: "", registryName: "CAR", filename: nil, fileData: nil, correcting: chip)
+        XCTAssertEqual(legacy.registrationNumber, "0012345678")
+        XCTAssertNil(legacy.validTo)
+    }
+
+    @MainActor func testManagementIncludesCollectedAndExpiredRecordsButNeverAnotherDog() async {
+        let service = DocumentControlledService(registrations: [registrationRecord()])
+        let model = DocumentViewModel(service: service)
+        await model.load()
+        XCTAssertEqual(model.managedSubmission(dogID: 7, kind: .council)?.id, 41)
+        XCTAssertEqual(model.managedSubmission(dogID: 7, kind: .council)?.rewardStatus, .collected)
+        XCTAssertNil(model.currentSubmission(dogID: 7, kind: .council))
+        XCTAssertNil(model.managedSubmission(dogID: 8, kind: .council))
+        XCTAssertNil(model.managedSubmission(dogID: 7, kind: .microchip))
+    }
+
+    @MainActor func testCorrectionRequiresMatchingZeroCreditReceiptAndIgnoresLateOwnerResponse() async {
+        var draft = makeDraft(number: "ABC-42")
+        draft.correctsSubmissionID = 41
+        draft.expectedEntitlementID = 91
+        for fault in [DocumentReceiptFault.correctionTarget, .amount] {
+            let model = DocumentViewModel(service: DocumentControlledService(fault: fault, readySubmission: true))
+            let saved = await model.submit(draft)
+            XCTAssertFalse(saved)
+            XCTAssertNil(model.receipt)
+        }
+        let accepted = DocumentViewModel(service: DocumentControlledService(readySubmission: true))
+        let saved = await accepted.submit(draft)
+        XCTAssertTrue(saved)
+        XCTAssertEqual(accepted.receipt?.awardedPoints, 0)
+        XCTAssertEqual(accepted.receipt?.correctsSubmissionID, 41)
+        let session = await makeSession()
+        let service = DocumentControlledService(readySubmission: true)
+        await service.pause("submit")
+        let model = DocumentViewModel(service: service, session: session)
+        let operation = Task { await model.submit(draft) }
+        await service.waitFor("submit")
+        await session.logout()
+        await service.release("submit")
+        let late = await operation.value
+        XCTAssertFalse(late)
+        XCTAssertNil(model.receipt)
+    }
+
+    @MainActor func testDogRegistrationManagementAppearanceSnapshots() async throws {
+        let records = [registrationRecord(), registrationRecord(kind: .microchip)]
+        let service = DocumentControlledService(registrations: records)
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            try await snapshot(DogDocumentsView(dogID: 7, service: service), name: "Dog-Documents-\(mode)", dark: dark)
+            try await snapshot(DocumentSubmissionView(service: service, initialDogID: 7, initialKind: .council,
+                manageRegistration: true), name: "Dog-Expired-Council-\(mode)", dark: dark)
+            try await snapshot(DocumentSubmissionView(service: service, initialDogID: 7, initialKind: .microchip,
+                manageRegistration: true), name: "Dog-Microchip-\(mode)", dark: dark)
+        }
+    }
+
+    private func savedRegistration(kind: DocumentKind = .council) -> DocumentSubmission {
+        DocumentSubmission(id: kind == .council ? 41 : 42, requestID: UUID(), dogID: 7, dogName: "Coco", kind: kind,
+            status: "SELF_REPORTED", registrationNumber: kind == .council ? "A/001" : "0012345678",
+            eventDate: nil, validFrom: nil, validTo: kind == .council ? "2020-06-15" : nil,
+            filename: "registration.pdf", fileURL: "/api/quests/documents/41/file", awardedPoints: 0,
+            submittedAt: "2020-01-01T00:00:00Z", entitlementID: kind == .council ? 91 : 92,
+            rewardStatus: .collected, rewardPoints: 300, collectedAt: "2020-01-01T00:00:00Z",
+            councilName: kind == .council ? "City of Melbourne" : nil, registryName: kind == .microchip ? "CAR" : nil,
+            documentDogName: "Coco")
+    }
+
+    private func registrationRecord(kind: DocumentKind = .council) -> DogRegistrationRecord {
+        DogRegistrationRecord(dogID: 7, kind: kind, submission: savedRegistration(kind: kind),
+            canCorrect: true, canRenew: kind == .council, renewalAfter: kind == .council ? "2020-06-15" : nil)
+    }
+
     @MainActor func testReadingSuggestionsRequireConfirmationAndEditsInvalidateIt() async {
         let reader = ControlledDocumentReader()
         let model = DocumentReviewModel(reader: reader)
@@ -539,7 +631,7 @@ private actor DocumentAuthFixture: AuthServing {
 }
 
 private enum DocumentReceiptFault: CaseIterable, Sendable {
-    case id, request, dog, kind, status, date, number, council, expiry, amount, submissionAmount, balance
+    case id, request, dog, kind, status, date, number, council, expiry, amount, submissionAmount, balance, correctionTarget
 }
 
 private enum DocumentCollectionFault: CaseIterable, Sendable { case id, dog, kind, amount, balance, date }
@@ -553,6 +645,7 @@ private actor DocumentControlledService: DocumentServing {
     private let award: Int
     private let readySubmission: Bool
     private let expiryOverride: String?
+    private let registrations: [DogRegistrationRecord]
     private var failFetch = false
     private var failCollection = false
     private var paused: Set<String> = []
@@ -560,18 +653,21 @@ private actor DocumentControlledService: DocumentServing {
     private var started: [String: CheckedContinuation<Void, Never>] = [:]
 
     init(fault: DocumentReceiptFault? = nil, award: Int = 300, readySubmission: Bool = false,
-         collectionFault: DocumentCollectionFault? = nil, expiryOverride: String? = nil) {
+         collectionFault: DocumentCollectionFault? = nil, expiryOverride: String? = nil,
+         registrations: [DogRegistrationRecord] = []) {
         self.fault = fault
         self.award = award
         self.readySubmission = readySubmission
         self.collectionFault = collectionFault
         self.expiryOverride = expiryOverride
+        self.registrations = registrations
     }
     func fetchDocuments() async throws -> DocumentDashboard {
         fetchCount += 1
         await suspendIfNeeded("fetch")
         if failFetch { failFetch = false; throw APIError.network("Connection lost") }
-        return DocumentDashboard(dogs: [DocumentDog(id: 7, name: "Coco", photo: nil)], submissions: [], eligibility: [])
+        return DocumentDashboard(dogs: [DocumentDog(id: 7, name: "Coco", photo: nil)],
+            submissions: registrations.compactMap(\.submission), eligibility: [], registrations: registrations)
     }
     func submit(_ request: DocumentRequest) async throws -> DocumentReceipt {
         requests.append(request)
@@ -595,7 +691,8 @@ private actor DocumentControlledService: DocumentServing {
             registryName: request.registryName, documentDogName: request.documentDogName
         ), balance: fault == .balance ? -1 : 300, awardedPoints: amount, created: true,
            entitlementID: readySubmission ? 91 : nil, rewardStatus: readySubmission ? .ready : nil,
-           rewardPoints: readySubmission ? 300 : nil)
+           rewardPoints: readySubmission ? 300 : nil,
+           correctsSubmissionID: fault == .correctionTarget ? 999 : request.correctsSubmissionID)
     }
     func download(submissionID: Int) async throws -> Data {
         await suspendIfNeeded("download")

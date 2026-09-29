@@ -81,7 +81,12 @@ struct OwnerHomeView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $selection) {
-                    OwnerProfileView(user: user, session: session, dogService: dogService)
+                    OwnerProfileView(user: user, session: session, dogService: dogService,
+                                     documentService: documentService ?? DocumentService(), onDocumentsChanged: {
+                                         async let quests: Void = questStore.documentsDidChange()
+                                         async let wallet: Void = redemptionViewModel.refresh()
+                                         _ = await (quests, wallet)
+                                     })
                         .id(accountRefreshID)
                         .tag(Page.account)
                     WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns)
@@ -121,7 +126,7 @@ struct OwnerHomeView: View {
                                                    async let quests: Void = questStore.refresh()
                                                    async let wallet: Void = redemptionViewModel.refresh()
                                                    _ = await (quests, wallet)
-                                               }, onChanged: { await questStore.refresh() })
+                                               }, onChanged: { await questStore.documentsDidChange() })
                         .id(selectedDocument.id)
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {

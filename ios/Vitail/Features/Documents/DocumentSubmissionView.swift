@@ -12,6 +12,7 @@ struct DocumentSubmissionView: View {
     private let kind: DocumentKind
     private let expectedEntitlementID: Int?
     private let needsExpiry: Bool
+    private let manageRegistration: Bool
     @StateObject private var review: DocumentReviewModel
     private let onSubmitted: () async -> Void
     private let onChanged: () async -> Void
@@ -24,6 +25,8 @@ struct DocumentSubmissionView: View {
     @State private var filename: String?
     @State private var validationMessage: String?
     @State private var isEditing = false
+    @State private var correcting: DocumentSubmission?
+    @State private var isRenewing = false
     @State private var preview: DocumentPreviewFile?
     @State private var previewDirectory: URL?
     @State private var isDownloading = false
@@ -34,7 +37,7 @@ struct DocumentSubmissionView: View {
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil,
          initialDogID: Int, initialKind: DocumentKind,
          expectedEntitlementID: Int? = nil, needsExpiry: Bool = false,
-         initialMethod: DocumentEvidenceMethod = .upload,
+         initialMethod: DocumentEvidenceMethod = .upload, manageRegistration: Bool = false,
          reader: any DocumentReading = DocumentReader(),
          onSubmitted: @escaping () async -> Void = {}, onChanged: @escaping () async -> Void = {}) {
         _model = StateObject(wrappedValue: DocumentViewModel(service: service, session: session))
@@ -42,6 +45,7 @@ struct DocumentSubmissionView: View {
         _review = StateObject(wrappedValue: DocumentReviewModel(reader: reader))
         self.expectedEntitlementID = expectedEntitlementID
         self.needsExpiry = needsExpiry
+        self.manageRegistration = manageRegistration
         dogID = initialDogID
         kind = initialKind
         self.onSubmitted = onSubmitted
@@ -49,7 +53,8 @@ struct DocumentSubmissionView: View {
     }
 
     private var currentSubmission: DocumentSubmission? {
-        model.currentSubmission(dogID: dogID, kind: kind, entitlementID: expectedEntitlementID)
+        manageRegistration ? model.managedSubmission(dogID: dogID, kind: kind)
+            : model.currentSubmission(dogID: dogID, kind: kind, entitlementID: expectedEntitlementID)
     }
 
     var body: some View {
@@ -61,10 +66,28 @@ struct DocumentSubmissionView: View {
                             AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
                             Text(dog.name).font(.headline)
                         }
-                        tutorial
+                        if !manageRegistration || currentSubmission == nil || isRenewing { tutorial }
                         if let submission = currentSubmission, !isEditing {
                             submissionCard(submission)
-                            Button(kind == .vet ? "Add another check-up" : "Update submission") { isEditing = true }
+                            if manageRegistration {
+                                if model.registration(dogID: dogID, kind: kind)?.canCorrect == true {
+                                    Button("Edit document details") { beginCorrection(submission) }
+                                }
+                                if let record = model.registration(dogID: dogID, kind: kind), kind == .council {
+                                    if record.canRenew {
+                                        PrimaryButton(title: "Submit renewed registration") {
+                                            clearAttachment(); correcting = nil; isRenewing = true; isEditing = true
+                                        }
+                                    } else if let date = record.renewalAfter, DogBirthday.date(from: date) != nil {
+                                        Text("Next renewal reward after \(DogBirthday.display(date)).")
+                                            .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                                    }
+                                }
+                            } else {
+                                Button(kind == .vet ? "Add another check-up" : "Update submission") {
+                                    if kind == .vet { isEditing = true } else { beginCorrection(submission) }
+                                }
+                            }
                         } else {
                             submissionForm
                         }
@@ -94,7 +117,7 @@ struct DocumentSubmissionView: View {
         .disabled(model.isSubmitting || model.collectingID != nil || !model.isActive)
         .task { await model.load() }
         .onChange(of: method) { _, _ in
-            clearAttachment()
+            if correcting == nil { clearAttachment() }
             validationMessage = nil
         }
         .fileImporter(isPresented: $importingFile, allowedContentTypes: [.pdf, .jpeg, .png]) { result in
@@ -179,10 +202,14 @@ struct DocumentSubmissionView: View {
 
     private var submissionForm: some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            if kind != .vet {
+            if kind != .vet && correcting == nil {
                 Picker("Submission method", selection: $method) {
                     ForEach(DocumentEvidenceMethod.allCases) { method in Text(method.rawValue).tag(method) }
                 }.pickerStyle(.segmented)
+            }
+            if correcting != nil {
+                Text("Changes update this document and do not award points or bring renewal rewards forward.")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
             }
             if kind == .vet || method == .upload { attachmentPicker }
             if kind == .vet {
@@ -195,10 +222,10 @@ struct DocumentSubmissionView: View {
                     Spacer()
                     Button("Cancel") { review.cancelReading() }
                 }
-            } else if method == .details || (fileData != nil && review.didRead) {
+            } else if correcting != nil || method == .details || (fileData != nil && review.didRead) {
                 reviewFields
             }
-            PrimaryButton(title: model.isSubmitting ? "Submitting…" : "Submit",
+            PrimaryButton(title: model.isSubmitting ? "Saving…" : (correcting == nil ? "Submit" : "Save changes"),
                           isLoading: model.isSubmitting,
                           isDisabled: review.isReading || (kind != .vet && !review.isConfirmed)) {
                 Task { await submit() }
@@ -206,7 +233,7 @@ struct DocumentSubmissionView: View {
             Text("Submitted details are self-reported and may be checked later.")
                 .font(.caption).foregroundStyle(AppColors.secondaryText)
             if isEditing {
-                Button("Cancel") { isEditing = false; validationMessage = nil }
+                Button("Cancel") { isEditing = false; isRenewing = false; correcting = nil; clearAttachment(); validationMessage = nil }
             }
         }
         .padding(AppSpacing.medium)
@@ -262,7 +289,8 @@ struct DocumentSubmissionView: View {
 
     private var attachmentPicker: some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            Text(kind == .vet ? "Upload visit evidence" : "Upload proof").font(.headline)
+            Text(kind == .vet ? "Upload visit evidence" : (correcting == nil ? "Upload proof" : "Replace or add attachment"))
+                .font(.headline)
             if kind != .vet {
                 Text(kind == .council
                      ? "Show the council, your dog, registration number and expiry date on a certificate or completed-registration email."
@@ -275,6 +303,12 @@ struct DocumentSubmissionView: View {
             }
             Text(kind == .vet ? "A clear photo, up to 4 MB." : "PDF, JPG or PNG · up to 4 MB. Photos and screenshots are welcome.")
                 .font(.caption).foregroundStyle(AppColors.secondaryText)
+            if fileData == nil, let saved = correcting, saved.fileURL != nil {
+                Label(saved.filename, systemImage: "paperclip").font(.subheadline)
+                Text("Your existing attachment will be kept unless you choose a replacement.")
+                    .font(.caption).foregroundStyle(AppColors.secondaryText)
+                Button("View current attachment") { Task { await open(saved) } }
+            }
             if let filename {
                 Label(filename, systemImage: "paperclip").font(.subheadline)
                 Button("Remove attachment", role: .destructive, action: clearAttachment)
@@ -290,8 +324,13 @@ struct DocumentSubmissionView: View {
                 Text(submission.registrationNumber).font(.subheadline).textSelection(.enabled)
             }
             if let council = submission.councilName, !council.isEmpty { Text(council).font(.subheadline) }
+            if let registry = submission.registryName, !registry.isEmpty { Text(registry).font(.subheadline) }
+            if let dogName = submission.documentDogName, !dogName.isEmpty { Text("Dog on document: \(dogName)").font(.subheadline) }
             if kind == .council, let expiry = submission.validTo, DogBirthday.date(from: expiry) != nil {
                 Text("Valid through \(DogBirthday.display(expiry))").font(.subheadline)
+                if !DocumentRegistration.isCurrent(expiry) {
+                    Text("Expired").font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                }
             }
             if needsExpiry, submission.rewardStatus == .collected {
                 Text("Expiry updated. No additional points awarded.").font(.footnote).foregroundStyle(AppColors.secondaryText)
@@ -339,22 +378,38 @@ struct DocumentSubmissionView: View {
                 draft = DocumentDraft(dogID: dogID, kind: kind, registrationNumber: "",
                                       eventDate: DogBirthday.string(from: eventDate), filename: filename, fileData: fileData)
             } else {
-                draft = try DocumentDraft.registration(dogID: dogID, kind: kind, method: method,
+                draft = try DocumentDraft.registration(dogID: dogID, kind: kind, method: correcting != nil && fileData == nil && correcting?.fileURL == nil ? .details : method,
                     number: review.registrationNumber, councilName: review.councilName, validTo: review.expiryText,
                     registryName: review.registryName, documentDogName: review.dogName,
-                    filename: filename, fileData: fileData, expectedEntitlementID: expectedEntitlementID,
-                    needsExpiry: needsExpiry, documentReading: review.readingAudit)
+                    filename: filename, fileData: fileData, expectedEntitlementID: correcting?.entitlementID ?? expectedEntitlementID,
+                    needsExpiry: needsExpiry, documentReading: review.readingAudit, correcting: correcting)
             }
             if await model.submit(draft), model.isActive, isVisible {
                 isEditing = false
+                isRenewing = false
+                correcting = nil
                 clearAttachment()
-                if kind == .council, let expiry = model.receipt?.submission.validTo,
+                if !manageRegistration, kind == .council, let expiry = model.receipt?.submission.validTo,
                    !DocumentRegistration.isCurrent(expiry) {
                     validationMessage = "Expiry updated. This document has expired. Close this page and open the refreshed Quest with renewed registration proof."
                 }
                 await onChanged()
             }
         } catch { validationMessage = error.localizedDescription }
+    }
+
+    private func beginCorrection(_ submission: DocumentSubmission) {
+        clearAttachment()
+        correcting = submission
+        method = .upload
+        isRenewing = false
+        isEditing = true
+        review.registrationNumber = submission.registrationNumber
+        review.councilName = submission.councilName ?? ""
+        review.registryName = submission.registryName ?? ""
+        review.dogName = submission.documentDogName ?? ""
+        review.expiryText = submission.validTo.map(DocumentRegistration.expiryInputText) ?? ""
+        validationMessage = nil
     }
 
     private func importFile(_ url: URL) throws {

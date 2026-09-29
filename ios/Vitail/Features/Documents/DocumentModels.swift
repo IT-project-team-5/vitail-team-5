@@ -90,6 +90,7 @@ struct DocumentDashboard: Decodable, Sendable {
     let submissions: [DocumentSubmission]
     let eligibility: [DocumentEligibility]
     var entitlements: [DocumentEntitlement]? = nil
+    var registrations: [DogRegistrationRecord]? = nil
 
     func latestPendingSubmission(dogID: Int, kind: DocumentKind, entitlementID: Int? = nil,
                                  today: Date = Date()) -> DocumentSubmission? {
@@ -107,6 +108,20 @@ struct DocumentDashboard: Decodable, Sendable {
 
 }
 
+struct DogRegistrationRecord: Decodable, Identifiable, Sendable {
+    let dogID: Int
+    let kind: DocumentKind
+    let submission: DocumentSubmission?
+    let canCorrect: Bool
+    let canRenew: Bool
+    let renewalAfter: String?
+    var id: String { "\(dogID)-\(kind.rawValue)" }
+    enum CodingKeys: String, CodingKey {
+        case kind, submission
+        case dogID = "dog_id", canCorrect = "can_correct", canRenew = "can_renew", renewalAfter = "renewal_after"
+    }
+}
+
 struct DocumentReceipt: Decodable, Sendable {
     let submission: DocumentSubmission
     let balance: Int
@@ -116,8 +131,10 @@ struct DocumentReceipt: Decodable, Sendable {
     var rewardStatus: DocumentRewardStatus? = nil
     var rewardPoints: Int? = nil
     var collectedAt: String? = nil
+    var correctsSubmissionID: Int? = nil
 
     enum CodingKeys: String, CodingKey {
+        case correctsSubmissionID = "corrects_submission_id"
         case submission, balance, created
         case awardedPoints = "awarded_points"
         case entitlementID = "entitlement_id", rewardStatus = "reward_status"
@@ -186,24 +203,35 @@ struct DocumentDraft: Equatable, Sendable {
     var documentDogName: String? = nil
     var expectedEntitlementID: Int? = nil
     var documentReading: DocumentReadingAudit? = nil
+    var correctsSubmissionID: Int? = nil
 
     static func registration(dogID: Int, kind: DocumentKind, method: DocumentEvidenceMethod,
                              number: String, councilName: String, validTo: String = "", registryName: String = "",
                              documentDogName: String? = nil, filename: String?, fileData: Data?,
                              expectedEntitlementID: Int? = nil, needsExpiry: Bool = false,
-                             documentReading: DocumentReadingAudit? = nil, today: Date = Date()) throws -> DocumentDraft {
+                             documentReading: DocumentReadingAudit? = nil, today: Date = Date(),
+                             correcting: DocumentSubmission? = nil) throws -> DocumentDraft {
         guard kind != .vet else { throw DocumentInputError.invalidKind }
-        if method == .upload {
+        if let correcting {
+            guard correcting.dogID == dogID, correcting.kind == kind,
+                  correcting.entitlementID != nil,
+                  expectedEntitlementID == nil || expectedEntitlementID == correcting.entitlementID else {
+                throw DocumentInputError.invalidDetails
+            }
+        }
+        let hasRetainedProof = correcting?.fileURL != nil
+        let hasProof = (method == .upload && fileData != nil) || hasRetainedProof
+        if method == .upload && !hasRetainedProof {
             guard let fileData, !fileData.isEmpty, let filename, !filename.isEmpty else {
                 throw DocumentInputError.attachmentRequired
             }
         }
-        let number = kind == .microchip && method == .details ? DocumentRegistration.normalizedMicrochip(number)
+        let number = kind == .microchip && !hasProof ? DocumentRegistration.normalizedMicrochip(number)
             : number.trimmingCharacters(in: .whitespacesAndNewlines)
         guard DocumentRegistration.isPrintable(number, required: true) else {
             throw kind == .council ? DocumentInputError.councilNumber : DocumentInputError.microchipNumber
         }
-        if kind == .microchip && method == .details {
+        if kind == .microchip && !hasProof {
             guard number.utf8.count == 15, number.utf8.allSatisfy({ (48...57).contains($0) }) else {
                 throw DocumentInputError.microchipNumber
             }
@@ -217,7 +245,7 @@ struct DocumentDraft: Equatable, Sendable {
         var expiry: String?
         if kind == .council {
             guard DocumentRegistration.isPrintable(council, required: true) else { throw DocumentInputError.councilName }
-            if method == .details {
+            if !hasProof {
                 let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -")
                 guard number.unicodeScalars.allSatisfy(allowed.contains),
                       number.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else {
@@ -225,7 +253,7 @@ struct DocumentDraft: Equatable, Sendable {
                 }
             }
             guard let parsed = DocumentRegistration.normalizedExpiry(validTo) else { throw DocumentInputError.expiryRequired }
-            guard DocumentRegistration.isCurrent(parsed, on: today) || (needsExpiry && expectedEntitlementID != nil) else {
+            guard DocumentRegistration.isCurrent(parsed, on: today) || (needsExpiry && expectedEntitlementID != nil) || correcting != nil else {
                 throw DocumentInputError.expired
             }
             expiry = parsed
@@ -235,7 +263,8 @@ struct DocumentDraft: Equatable, Sendable {
             councilName: kind == .council ? council : nil, validTo: expiry,
             registryName: kind == .microchip && !registry.isEmpty ? registry : nil,
             documentDogName: dogName?.isEmpty == false ? dogName : nil,
-            expectedEntitlementID: expectedEntitlementID, documentReading: method == .upload ? documentReading : nil)
+            expectedEntitlementID: expectedEntitlementID, documentReading: method == .upload ? documentReading : nil,
+            correctsSubmissionID: correcting?.id)
     }
 }
 
@@ -336,6 +365,7 @@ struct DocumentRequest: Encodable, Sendable {
     let documentDogName: String?
     let expectedEntitlementID: Int?
     let documentReading: DocumentReadingAudit?
+    let correctsSubmissionID: Int?
 
     init(draft: DocumentDraft, requestID: UUID = UUID()) {
         self.requestID = requestID
@@ -351,6 +381,7 @@ struct DocumentRequest: Encodable, Sendable {
         documentDogName = draft.documentDogName
         expectedEntitlementID = draft.expectedEntitlementID
         documentReading = draft.documentReading
+        correctsSubmissionID = draft.correctsSubmissionID
     }
     enum CodingKeys: String, CodingKey {
         case kind, filename

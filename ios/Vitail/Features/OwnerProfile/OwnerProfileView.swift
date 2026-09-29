@@ -7,8 +7,13 @@ struct OwnerProfileView: View {
     @State private var isEditingProfile = false
     @State private var isAddingDog = false
     @State private var selectedDog: Dog?
+    let documentService: any DocumentServing
+    let onDocumentsChanged: () async -> Void
 
-    init(user: User, session: SessionStore, dogService: any DogServicing = DogService()) {
+    init(user: User, session: SessionStore, dogService: any DogServicing = DogService(),
+         documentService: any DocumentServing = DocumentService(), onDocumentsChanged: @escaping () async -> Void = {}) {
+        self.documentService = documentService
+        self.onDocumentsChanged = onDocumentsChanged
         self.user = user
         self.session = session
         _dogViewModel = StateObject(wrappedValue: DogViewModel(service: dogService))
@@ -35,7 +40,8 @@ struct OwnerProfileView: View {
             DogFormView(viewModel: dogViewModel)
         }
         .sheet(item: $selectedDog) { dog in
-            DogDetailView(viewModel: dogViewModel, dog: dog)
+            DogDetailView(viewModel: dogViewModel, dog: dog, documentService: documentService, session: session,
+                          onDocumentsChanged: onDocumentsChanged)
         }
     }
 

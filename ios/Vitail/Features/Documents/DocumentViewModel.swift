@@ -227,6 +227,17 @@ final class DocumentViewModel: ObservableObject {
             needsExpiry: submission.kind == .council && submission.validTo == nil)
     }
 
+    func registration(dogID: Int, kind: DocumentKind) -> DogRegistrationRecord? {
+        dashboard?.registrations?.first { $0.dogID == dogID && $0.kind == kind }
+    }
+
+    func managedSubmission(dogID: Int, kind: DocumentKind) -> DocumentSubmission? {
+        let current = registration(dogID: dogID, kind: kind)?.submission
+        if let saved = receipt?.submission, saved.dogID == dogID, saved.kind == kind,
+           saved.id >= (current?.id ?? 0) { return saved }
+        return current
+    }
+
     func currentSubmission(dogID: Int, kind: DocumentKind, entitlementID: Int? = nil, today: Date = Date()) -> DocumentSubmission? {
         if let submission = receipt?.submission, submission.dogID == dogID, submission.kind == kind {
             if (entitlementID == nil || submission.entitlementID == entitlementID)
@@ -339,7 +350,9 @@ final class DocumentViewModel: ObservableObject {
 
     private func validate(_ result: DocumentReceipt, for request: DocumentRequest) throws {
         let submission = result.submission
-        guard submission.id > 0, submission.requestID == request.requestID,
+        guard result.correctsSubmissionID == request.correctsSubmissionID,
+              request.correctsSubmissionID == nil || (result.awardedPoints == 0 && result.entitlementID != nil),
+              submission.id > 0, submission.requestID == request.requestID,
               submission.dogID == request.dogID, submission.kind == request.kind,
               submission.status == "SELF_REPORTED",
               submission.eventDate == request.eventDate,

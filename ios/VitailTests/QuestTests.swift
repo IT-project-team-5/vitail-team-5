@@ -405,6 +405,41 @@ final class QuestTests: XCTestCase {
         XCTAssertEqual(laterCalls, calls)
     }
 
+    func testDocumentCorrectionInvalidatesOldRowsEvenWhenReloadFails() async {
+        let session = await makeSession()
+        let service = QuestFixture()
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        await store.collect(taskID: "document:10")
+        await service.setTasks([])
+        await service.failNextFetch()
+        await store.documentsDidChange()
+        XCTAssertNil(store.task(id: "document:10"))
+        XCTAssertNotNil(store.task(id: "birthday:7:2026"))
+        XCTAssertNotNil(store.errorMessage)
+        XCTAssertTrue(store.confirmedCollections.values.allSatisfy { $0.documentKind != .council })
+        await store.refresh()
+        XCTAssertNil(store.task(id: "document:10"))
+    }
+
+    func testDocumentChangeWaitsForOlderRefreshThenFetchesAgain() async {
+        let session = await makeSession()
+        let service = QuestFixture()
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await service.suspendFetch()
+        let older = Task { await store.refresh() }
+        await service.waitForFetch()
+        let changed = Task { await store.documentsDidChange() }
+        await Task.yield()
+        await service.setTasks([])
+        await service.releaseFetch()
+        await older.value; await changed.value
+        let count = await service.fetchCount
+        XCTAssertEqual(count, 2)
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        XCTAssertFalse(store.isRefreshing)
+    }
+
     func testDocumentSuccessSurvivesFailedReloadAndStaleReadyResponse() async {
         let session = await makeSession()
         let service = QuestFixture()
@@ -544,7 +579,7 @@ final class QuestTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
-    func testServicesUseSharedCredentialsAndCorrectCollectionEndpoints() async throws {
+    func testServicesUseSharedCredentialsAndCorrectCollectionAndCorrectionEndpoints() async throws {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [QuestURLProtocol.self]
         let network = URLSession(configuration: config)
@@ -563,6 +598,12 @@ final class QuestTests: XCTestCase {
                 XCTAssertEqual(request.httpMethod, "POST"); return (201, QuestFixture.awardJSON)
             case "/api/quests/documents/entitlements/10/collect/":
                 XCTAssertEqual(request.httpMethod, "POST"); return (200, QuestFixture.documentJSON)
+            case "/api/quests/documents/41/corrections":
+                XCTAssertEqual(request.httpMethod, "POST")
+                let body = try? questRequestBody(request)
+                XCTAssertEqual(body?["registration_number"] as? String, "00042")
+                XCTAssertNil(body?["corrects_submission_id"])
+                return (201, #"{"submission":{"id":42,"request_id":"11111111-1111-1111-1111-111111111111","dog_id":7,"dog_name":"Coco","kind":"COUNCIL_REGISTRATION","status":"SELF_REPORTED","registration_number":"00042","filename":"","awarded_points":0,"submitted_at":"2026-09-29T00:00:00Z"},"balance":300,"awarded_points":0,"created":true,"corrects_submission_id":41}"#)
             case "/api/quests/streaks/collect/":
                 XCTAssertEqual(request.httpMethod, "POST")
                 let body = try? questRequestBody(request)
@@ -585,6 +626,11 @@ final class QuestTests: XCTestCase {
         XCTAssertEqual(document.kind, .council)
         XCTAssertEqual(streak.award.kind, "STREAK")
         XCTAssertEqual(streak.award.points, 20)
+        let draft = DocumentDraft(dogID: 7, kind: .council, registrationNumber: "00042", eventDate: nil,
+            filename: nil, fileData: nil, correctsSubmissionID: 41)
+        let corrected = try await DocumentService(apiClient: authenticated).submit(DocumentRequest(draft: draft, requestID: UUID()))
+        XCTAssertEqual(corrected.correctsSubmissionID, 41)
+        XCTAssertEqual(corrected.awardedPoints, 0)
     }
 
     func testCompactRowsAndDetailsAppearanceSnapshots() async throws {
