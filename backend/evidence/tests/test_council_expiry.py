@@ -271,4 +271,3 @@ class CouncilExpiryConcurrencyTests(TransactionTestCase):
         self.assertEqual(PointEntry.objects.count(), 1)
         old.refresh_from_db()
         self.assertIsNone(old.point_entry_id)
-
