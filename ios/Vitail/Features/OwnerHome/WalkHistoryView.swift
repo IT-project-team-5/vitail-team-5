@@ -119,6 +119,7 @@ struct WalkHistoryCard: View {
 struct WalkHistoryDetailView: View {
     let walk: WalkRecord
     @Environment(\.dismiss) private var dismiss
+    @State private var isSharing = false
 
     private var points: [WalkRoutePoint] { walk.routeSegments.flatMap { $0 } }
 
@@ -172,9 +173,18 @@ struct WalkHistoryDetailView: View {
             .navigationTitle("Walk Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { isSharing = true } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityHint("Creates a shareable card with your distance and time. It never includes your route.")
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $isSharing) {
+                ActivityShareView(summary: ActivityShareSummary(walk: walk))
             }
             .tint(AppColors.brand)
         }
