@@ -73,16 +73,44 @@ class CouncilAnnualMigrationTests(TransactionTestCase):
             annual_entitlements = list(annual_apps.get_model("evidence", "DocumentEntitlement").objects.order_by("id").values())
             annual_submissions = list(annual_apps.get_model("evidence", "DocumentSubmission").objects.order_by("id").values())
             MigrationExecutor(connection).migrate(latest)
-            self.assertEqual(list(DocumentEntitlement.objects.order_by("id").values()), annual_entitlements)
+            self.assertEqual(list(DocumentEntitlement.objects.order_by("id").values(*annual_entitlements[0].keys())), annual_entitlements)
             self.assertEqual(list(DocumentSubmission.objects.order_by("id").values(*annual_submissions[0].keys())), annual_submissions)
             self.assertTrue(all(row.valid_to is None for row in DocumentEntitlement.objects.all()))
             self.assertTrue(all(row.document_reading is None and row.registry_name == "" and row.document_dog_name == ""
                                 for row in DocumentSubmission.objects.all()))
-            actual = list(DocumentEntitlement.objects.order_by("id").values())
+            actual = list(DocumentEntitlement.objects.order_by("id").values(*annual_entitlements[0].keys()))
             for row in actual:
                 self.assertEqual(row.pop("registration_year"), expected[row["id"]])
             self.assertEqual(actual, old_entitlements)
             self.assertEqual(list(DocumentSubmission.objects.order_by("id").values(*old_submissions[0].keys())), old_submissions)
             self.assertEqual(list(PointEntry.objects.order_by("id").values()), old_entries)
+        finally:
+            MigrationExecutor(connection).migrate(latest)
+
+
+class RegistrationCorrectionMigrationTests(TransactionTestCase):
+    def test_boundary_is_copied_only_from_known_council_expiry_without_changing_history(self):
+        from datetime import date
+        from django.db.migrations.executor import MigrationExecutor
+
+        executor = MigrationExecutor(connection)
+        latest = executor.loader.graph.leaf_nodes()
+        before = [("evidence", "0006_council_document_expiry") if app == "evidence" else (app, name)
+                  for app, name in latest]
+        try:
+            executor.migrate(before)
+            apps = executor.loader.project_state(before).apps
+            owner = apps.get_model("accounts", "User").objects.create(email="correction-migration@example.com")
+            Entitlement = apps.get_model("evidence", "DocumentEntitlement")
+            for dog_id, kind, expiry in ((810, "COUNCIL_REGISTRATION", date(2027, 6, 15)),
+                                         (811, "COUNCIL_REGISTRATION", None),
+                                         (812, "MICROCHIP_REGISTRATION", None)):
+                Entitlement.objects.create(owner_id=owner.pk, dog_id_snapshot=dog_id, kind=kind,
+                    entitlement_key="legacy", valid_to=expiry, promised_points=300)
+            original = list(Entitlement.objects.order_by("id").values())
+            MigrationExecutor(connection).migrate(latest)
+            self.assertEqual(list(DocumentEntitlement.objects.order_by("id").values(*original[0].keys())), original)
+            self.assertEqual(list(DocumentEntitlement.objects.order_by("id").values_list("renewal_blocked_through", flat=True)),
+                             [date(2027, 6, 15), None, None])
         finally:
             MigrationExecutor(connection).migrate(latest)

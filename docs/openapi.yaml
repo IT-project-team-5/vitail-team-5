@@ -696,6 +696,9 @@ paths:
         rewards; can_collect also checks current dog ownership and quest
         availability. Existing submissions remain readable when the document
         quest is disabled. File contents require a separate authenticated download.
+        registrations contains Council and microchip management records for each
+        currently owned dog, including paid/expired records; former-owner submissions
+        are never exposed through those records.
       responses:
         '200':
           description: Owned documents and per-dog eligibility
@@ -722,7 +725,7 @@ paths:
         a held or rejected reservation cannot be bypassed by a newer one.
         Re-uploading a current Council registration or lifetime microchip record
         never creates another reward. Council renewal appears the day after
-        valid_to in Melbourne time; the expiry day is inclusive. Expired and
+        its renewal boundary (normally valid_to) in Melbourne time; the expiry day is inclusive. Expired and
         superseded pending rewards disappear from Quest and cannot collect.
         Unknown legacy expiry must be bound once, without another award for an
         already paid record. No dates are inferred from old registration_year.
@@ -764,6 +767,53 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/quests/documents/{submission_id}/corrections:
+    parameters:
+      - name: submission_id
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    post:
+      summary: Correct the latest Council or microchip record from dog settings
+      description: >-
+        Current dog owner only, using their own latest submission for the canonical
+        or most recent expired qualification. Dog, kind and entitlement cannot change.
+        A correction creates an immutable evidence version, awards zero points and
+        leaves collection/ledger history unchanged. Omitting the file retains the
+        previous original and reading metadata, including proof-backed identifier
+        validation. A replacement file uses normal upload and reading limits.
+        Council expiry may be corrected, including to a past date. The greatest
+        confirmed expiry remains the renewal boundary, preventing an earlier date
+        from reopening a reward; extending expiry postpones renewal. Expired pending
+        rewards cannot collect. New renewal awards use the normal submission route
+        after the boundary. Corrections remain available when Documents is disabled.
+        Reuse the exact UUID/payload for retries; switching operation/base conflicts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DocumentRequest'}
+      responses:
+        '201':
+          description: Corrected version under the same entitlement; corrects_submission_id identifies the base and awarded_points is zero
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentReceipt'}
+        '200':
+          description: Exact original correction receipt replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentReceipt'}
+        '400':
+          description: Invalid details, file, changed dog/kind/entitlement or no longer the current dog owner
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentValidationError'}
+        '404':
+          description: Missing submission or submission belonging to another owner
+        '409':
+          description: Stale version, superseded qualification or request UUID conflict
         default: {$ref: '#/components/responses/Error'}
   /api/quests/documents/entitlements/{entitlement_id}/collect:
     parameters:
@@ -1099,12 +1149,27 @@ components:
         can_collect: {type: boolean, description: Current owner has evidence for this eligible uncredited entitlement and the quest is enabled; superseded legacy microchip reservations are false even when their historical status remains READY}
     DocumentDashboard:
       type: object
-      required: [dogs, submissions, eligibility, entitlements]
+      required: [dogs, submissions, eligibility, entitlements, registrations]
       properties:
         dogs: {type: array, items: {$ref: '#/components/schemas/DocumentDog'}}
         submissions: {type: array, items: {$ref: '#/components/schemas/DocumentSubmission'}}
         eligibility: {type: array, items: {$ref: '#/components/schemas/DocumentEligibility'}}
         entitlements: {type: array, items: {$ref: '#/components/schemas/DocumentEntitlement'}}
+        registrations: {type: array, items: {$ref: '#/components/schemas/DogRegistrationRecord'}}
+    DogRegistrationRecord:
+      type: object
+      required: [dog_id, kind, submission, can_correct, can_renew, renewal_after]
+      properties:
+        dog_id: {type: integer, minimum: 1}
+        kind: {type: string, enum: [COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION]}
+        submission:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DocumentSubmission'
+          description: Current owner's latest submission for this qualification; null when missing or only a former owner submitted
+        can_correct: {type: boolean, description: Current owner has an editable latest registration version}
+        can_renew: {type: boolean, description: Council history exists and its renewal boundary has passed; does not bypass disabled quests or other submission validation}
+        renewal_after: {type: string, format: date, nullable: true, description: Inclusive Council renewal boundary; greatest confirmed expiry for this qualification. Null for unknown expiry or microchip}
     DocumentReading:
       type: object
       nullable: true
@@ -1150,7 +1215,8 @@ components:
         Registration PDFs must be unencrypted and 1–20 pages; JPEG/PNG images
         contain at most 16 megapixels. Optional document_reading requires the file.
         expected_entitlement_id guards an existing Quest against concurrent
-        qualification changes. An active confirmed expiry cannot change.
+        qualification changes. The normal submission route cannot change an active
+        confirmed expiry; the correction route can, while retaining its renewal boundary.
         An unknown legacy expiry can be bound once, even to a past date, without
         another award; other new Council submissions require a current expiry.
         Vet requires event_date no later than today and no earlier than a known birthday,
@@ -1191,6 +1257,7 @@ components:
         immediate award and omit the additive entitlement fields. A replay never
         creates another credit; use GET documents to refresh current reward state.
       properties:
+        corrects_submission_id: {type: integer, minimum: 1, description: Present only for a correction receipt; identifies the corrected version}
         valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
         needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
         submission: {$ref: '#/components/schemas/DocumentSubmission'}

@@ -55,12 +55,21 @@ class DocumentRequestSerializer(serializers.Serializer):
     def validate(self, attrs):
         today = timezone.localdate(timezone=ZoneInfo("Australia/Melbourne"))
         kind = attrs["kind"]
+        correction = self.context.get("correction")
+        if correction:
+            attrs["_correction_of"] = correction.pk
+            if kind not in (DocumentKind.COUNCIL, DocumentKind.MICROCHIP) or kind != correction.kind or attrs["dog_id"] != correction.dog_id_snapshot:
+                raise serializers.ValidationError("A correction must keep the same dog and registration type.")
+            if attrs.get("expected_entitlement_id") not in (None, correction.entitlement_id):
+                raise serializers.ValidationError("The correction must use the original reward.")
         number = attrs.get("registration_number", "").strip()
         attrs["registration_number"] = number
         if attrs.get("file_base64"):
             attrs["upload"] = validate_upload(attrs.pop("file_base64"), attrs.pop("filename", ""), kind)
         else:
             attrs.pop("filename", None)
+
+        has_proof = bool(attrs.get("upload") or (correction and correction.file))
 
         # Already accepted requests keep their original receipt even when new
         # rules or expiry would reject a fresh submission.
@@ -73,7 +82,7 @@ class DocumentRequestSerializer(serializers.Serializer):
             normalized = re.sub(r"[\s-]", "", number)
             # Older upload receipts normalized the number too. Try that exact
             # accepted representation before applying new upload semantics.
-            if previous or not attrs.get("upload"):
+            if previous or not has_proof:
                 number = normalized
                 attrs["registration_number"] = number
         if previous:
@@ -103,10 +112,10 @@ class DocumentRequestSerializer(serializers.Serializer):
             if kind == DocumentKind.MICROCHIP:
                 if attrs.get("council_name") or attrs.get("valid_to"):
                     raise serializers.ValidationError("Microchip registration does not expire and does not use Council details.")
-                if not attrs.get("upload") and not re.fullmatch(r"[0-9]{15}", number):
+                if not has_proof and not re.fullmatch(r"[0-9]{15}", number):
                     raise serializers.ValidationError({"registration_number": "Enter 15 digits, or upload proof for a different microchip format."})
             else:
-                if not attrs.get("upload") and (not re.fullmatch(r"[A-Za-z0-9 -]+", number) or not re.search(r"[A-Za-z0-9]", number)):
+                if not has_proof and (not re.fullmatch(r"[A-Za-z0-9 -]+", number) or not re.search(r"[A-Za-z0-9]", number)):
                     raise serializers.ValidationError({"registration_number": "Use letters, numbers, spaces and hyphens from your Animal ID or registration number."})
                 if not attrs.get("council_name"):
                     raise serializers.ValidationError({"council_name": "Confirm the Council named on your registration."})

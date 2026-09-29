@@ -1,7 +1,7 @@
 # Self-reported document rewards
 
 `GET /api/quests/documents` returns the owner's dogs, immutable submissions,
-current eligibility and entitlements. `POST` submits evidence and reserves a
+current eligibility, entitlements and two `registrations` management records per owned dog (Council/microchip). `POST` submits evidence and reserves a
 reward; it awards **zero points**. `POST /api/quests/documents/entitlements/{id}/collect`
 credits the reserved reward exactly once. Evidence stays `SELF_REPORTED` until
 an actual audit; text recognition is not registration or authenticity verification.
@@ -35,7 +35,7 @@ YYYY-MM-DD. Vet dates cannot be future or before a known birthday.
 15 June is current until midnight starting 16 June. No fixed 10 April reset,
 upload-date anniversary or expiry inferred from a legacy year is used.
 
-An active entitlement's confirmed expiry cannot be changed by a re-upload.
+The normal submission endpoint cannot change an active entitlement's confirmed expiry; use the correction endpoint below.
 Updated evidence attaches to the same reward. Once expired, a fresh current
 registration creates a new entitlement (`expiry:YYYY-MM-DD`); the Animal ID may
 stay the same. The same file cannot support another Council qualification for
@@ -47,7 +47,7 @@ receipt snapshots and ledger entries remain intact. A previous paid reward can
 still replay to its original recipient without another credit.
 
 The newest paid Council qualification by creation order blocks another reward
-until its known expiry passes. Then only a newer pending qualification, if any,
+until its renewal boundary passes (normally the confirmed expiry). Then only a newer pending qualification, if any,
 is current. Without paid history, only the latest pending qualification is current.
 This prevents legacy pending rows from becoming extra rewards.
 
@@ -60,6 +60,41 @@ or expired route returns 409 rather than updating a different qualification.
 
 Migration `0006` removes obsolete annual constraints and adds reading metadata.
 It preserves existing values, including historical years, and never invents dates.
+
+## Editing from dog settings
+
+Account → dog → Registration documents shows the latest Council and lifetime
+microchip record, including paid or expired records that no longer appear in Quest.
+The user can view the private attachment, edit confirmed details, or replace the file.
+Council renewal is a separate action when eligible. Vet evidence is unchanged.
+
+`POST /api/quests/documents/{submission_id}/corrections` accepts the same confirmed
+fields and a new request UUID. It requires the current owner and the latest version
+of the selected qualification. A stale version returns 409; another owner's version
+returns 404. An exact retry replays its original receipt. The operation and base ID
+are included in the request fingerprint, preventing retries from switching routes.
+The receipt adds `corrects_submission_id`; `awarded_points` is always zero.
+
+A correction keeps the same entitlement, collection and ledger. Without a new file,
+it reuses the previous file and reading metadata; a new upload is read and confirmed
+again. Saved proof supports legacy identifier formats. Original submissions, files
+and receipts remain unchanged. The app displays the latest version, not a history list.
+The dog's separate profile chip number is not overwritten automatically.
+
+Council `valid_to` is editable, including an actual past expiry. To prevent changing
+an expiry from reopening the same reward, `renewal_blocked_through` retains the
+latest confirmed expiry reached by that qualification. It never moves earlier.
+For example, correcting 15 June to 1 June shows the document as expired after 1 June,
+but the next renewal reward still opens on 16 June. Extending to 30 June postpones
+renewal to 1 July. Settings separately shows expiry and `renewal_after` (inclusive
+boundary); an expired pending reward cannot collect during the intervening period.
+A correction after expiry still updates the old qualification with no new award;
+use **Submit renewed registration** to reserve the next eligible reward.
+
+Management is available even if the Documents quest is disabled; collection still
+requires it to be enabled. The current owner never receives a former owner's private
+submission in `registrations`. Migration `0007` initializes the boundary from known
+Council expiry only, preserving unknown dates, receipts, files and point balances.
 
 ## Document reading
 

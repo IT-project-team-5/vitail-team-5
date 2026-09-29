@@ -18,7 +18,7 @@ from rewards.services import credit_points, get_balance
 
 from .models import DocumentEntitlement, DocumentKind, DocumentSubmission, EvidenceFingerprint
 from .fingerprints import request_fingerprint
-from .policy import council_entitlement, needs_expiry, reward_status
+from .policy import council_entitlement, needs_expiry, renewal_boundary, reward_status
 from .serializers import DocumentSubmissionSerializer
 from .storage import private_storage
 
@@ -62,7 +62,8 @@ def _entitlement(owner, dog, data):
                 # Bind an unknown legacy qualification once, including an actual
                 # past expiry. This updates no receipt, ledger or promised reward.
                 current.valid_to = expiry
-                current.save(update_fields=["valid_to"])
+                current.renewal_blocked_through = expiry
+                current.save(update_fields=["valid_to", "renewal_blocked_through"])
             elif current.valid_to != expiry:
                 raise ValidationError({"valid_to": "This registration already has a confirmed expiry. A new reward is available after it expires."})
             return current, False
@@ -90,11 +91,31 @@ def _entitlement(owner, dog, data):
     return DocumentEntitlement.objects.create(
         owner=owner, dog=dog, dog_id_snapshot=dog.pk, kind=kind, entitlement_key=key,
         registration_year=None,
+        renewal_blocked_through=data.get("valid_to") if kind == DocumentKind.COUNCIL else None,
         promised_points=POINTS[kind],
         rules_version=("council-expiry-2026-09-27" if kind == DocumentKind.COUNCIL else
                        "microchip-lifetime-2026-09-25" if kind == DocumentKind.MICROCHIP else "documents-2026-09-25"),
         event_date=data.get("event_date"), valid_from=data.get("valid_from"), valid_to=data.get("valid_to"),
     ), True
+
+
+def _corrected_entitlement(owner, dog, data):
+    base = DocumentSubmission.objects.filter(pk=data["_correction_of"], owner=owner,
+        dog_id_snapshot=dog.pk, kind=data["kind"]).select_related("entitlement").first()
+    if base is None or base.kind == DocumentKind.VET:
+        raise Http404
+    rows = list(DocumentEntitlement.objects.filter(dog_id_snapshot=dog.pk, kind=base.kind))
+    selected = (council_entitlement(rows) or max(rows, key=lambda row: (row.created_at, row.pk))) if base.kind == DocumentKind.COUNCIL else _lifetime_entitlement(rows)
+    latest = DocumentSubmission.objects.filter(entitlement=selected, owner=owner).first()
+    if selected.pk != base.entitlement_id or latest is None or latest.pk != base.pk:
+        raise RequestConflict("This document has changed. Refresh it before saving your correction.")
+    if base.kind == DocumentKind.COUNCIL:
+        # Editing the document never moves its reward renewal boundary earlier.
+        boundary = renewal_boundary(selected)
+        selected.valid_to = data["valid_to"]
+        selected.renewal_blocked_through = max(boundary, selected.valid_to) if boundary else selected.valid_to
+        selected.save(update_fields=["valid_to", "renewal_blocked_through"])
+    return selected, base
 
 
 def submit_document(*, owner, data):
@@ -111,14 +132,18 @@ def submit_document(*, owner, data):
                     raise RequestConflict()
                 # Replay the original receipt, including its balance, unchanged.
                 return previous.response_snapshot, False
-            if not QuestDefinition.objects.filter(code=QuestDefinition.Code.DOCUMENTS, is_enabled=True).exists():
+            if not data.get("_correction_of") and not QuestDefinition.objects.filter(code=QuestDefinition.Code.DOCUMENTS, is_enabled=True).exists():
                 raise DocumentsUnavailable()
             dog = Dog.objects.select_for_update().filter(pk=data["dog_id"], owner=owner).first()
             if dog is None:
                 raise ValidationError({"dog_id": "Choose one of your dogs."})
             if data["kind"] == DocumentKind.VET and dog.date_of_birth and data["event_date"] < dog.date_of_birth:
                 raise ValidationError({"event_date": "The check-up date cannot be before your dog's birthday."})
-            entitlement, _is_new = _entitlement(owner, dog, data)
+            base = None
+            if data.get("_correction_of"):
+                entitlement, base = _corrected_entitlement(owner, dog, data)
+            else:
+                entitlement, _is_new = _entitlement(owner, dog, data)
             upload = data.get("upload")
             fingerprints = []
             if data["registration_number"]:
@@ -154,18 +179,20 @@ def submit_document(*, owner, data):
                 entitlement=entitlement, registration_number=data["registration_number"],
                 council_name=data.get("council_name", ""), registration_year=data.get("registration_year"),
                 registry_name=data.get("registry_name", ""), document_dog_name=data.get("document_dog_name", ""),
-                document_reading=data.get("document_reading"),
+                document_reading=data.get("document_reading") if upload or not base else base.document_reading,
                 event_date=data.get("event_date"), valid_from=data.get("valid_from"), valid_to=data.get("valid_to"),
-                file=stored_name or "", filename=upload["filename"] if upload else "",
-                file_content_type=upload["content_type"] if upload else "",
-                file_sha256=upload["sha256"] if upload else "", awarded_points=awarded,
-                file_size_bytes=len(upload["bytes"]) if upload else None,
+                file=stored_name or (base.file.name if base else ""), filename=upload["filename"] if upload else (base.filename if base else ""),
+                file_content_type=upload["content_type"] if upload else (base.file_content_type if base else ""),
+                file_sha256=upload["sha256"] if upload else (base.file_sha256 if base else ""), awarded_points=awarded,
+                file_size_bytes=len(upload["bytes"]) if upload else (base.file_size_bytes if base else None),
             )
             receipt = {"submission": dict(DocumentSubmissionSerializer(submission).data),
                        "balance": get_balance(owner), "awarded_points": awarded, "created": True,
                        "entitlement_id": entitlement.pk, "reward_status": reward_status(entitlement), "valid_to": _iso(entitlement.valid_to),
                        "needs_expiry": needs_expiry(entitlement),
                        "reward_points": entitlement.promised_points, "collected_at": _iso(entitlement.collected_at)}
+            if base:
+                receipt["corrects_submission_id"] = base.pk
             submission.response_snapshot = receipt
             submission.save(update_fields=["response_snapshot"])
             return receipt, True
@@ -213,7 +240,7 @@ def collect_document(*, owner, entitlement_id, now=None):
         current = council_entitlement(DocumentEntitlement.objects.filter(
             dog_id_snapshot=entitlement.dog_id_snapshot, kind=DocumentKind.COUNCIL,
         ), _local_today(now))
-        if current is None or current.pk != entitlement.pk:
+        if current is None or current.pk != entitlement.pk or (entitlement.valid_to and entitlement.valid_to < _local_today(now)):
             raise ValidationError({"code": "EXPIRED", "detail": "This registration expired or was superseded. Submit your current registration."})
         if entitlement.valid_to is None:
             raise ValidationError({"code": "EXPIRY_REQUIRED", "detail": "Confirm the expiry printed on the registration before collecting."})
@@ -267,6 +294,27 @@ def entitlements_for(owner):
     return result
 
 
+def registrations_for(owner, dogs):
+    """Current-owner management cards, including paid and expired registrations."""
+    rows = list(DocumentEntitlement.objects.filter(dog_id_snapshot__in=[dog.pk for dog in dogs],
+        kind__in=(DocumentKind.COUNCIL, DocumentKind.MICROCHIP)).prefetch_related("documentsubmission_set"))
+    result = []
+    today = _local_today()
+    for dog in dogs:
+        for kind in (DocumentKind.COUNCIL, DocumentKind.MICROCHIP):
+            matches = [row for row in rows if row.dog_id_snapshot == dog.pk and row.kind == kind]
+            row = None
+            if matches:
+                row = (council_entitlement(matches, today) or max(matches, key=lambda item: (item.created_at, item.pk))) if kind == DocumentKind.COUNCIL else _lifetime_entitlement(matches)
+            submission = next((item for item in row.documentsubmission_set.all() if item.owner_id == owner.pk), None) if row else None
+            result.append({"dog_id": dog.pk, "kind": kind,
+                "submission": dict(DocumentSubmissionSerializer(submission).data) if submission else None,
+                "can_correct": submission is not None,
+                "can_renew": kind == DocumentKind.COUNCIL and bool(matches) and council_entitlement(matches, today) is None,
+                "renewal_after": _iso(renewal_boundary(row)) if row and kind == DocumentKind.COUNCIL else None})
+    return result
+
+
 def eligibility_for(owner, dogs):
     today = _local_today()
     rows = list(DocumentEntitlement.objects.filter(dog_id_snapshot__in=[dog.pk for dog in dogs]))
@@ -289,6 +337,8 @@ def eligibility_for(owner, dogs):
                     "Ready to collect. Updated evidence will use the same reward." if pending else "Reward already collected. Updated evidence earns no extra points.")
                 if canonical and needs_expiry(canonical):
                     message = "Confirm the expiry printed on this registration. Updating an already collected reward earns no extra points."
+                elif canonical and kind == DocumentKind.COUNCIL and canonical.valid_to < today:
+                    message = f"This document has expired. The next renewal reward is available after {renewal_boundary(canonical).isoformat()}."
                 if canonical and canonical.eligibility_status != "ELIGIBLE":
                     message = "This reward is unavailable pending a review outcome."
             else:
@@ -353,6 +403,8 @@ def quest_tasks(*, owner, dogs, request=None, now=None):
                 current = council_entitlement(reserved, today)
                 if current is None:
                     tasks.append(task(dog, kind, "IN_PROGRESS"))
+                elif current.valid_to and current.valid_to < today:
+                    continue
                 elif current.eligibility_status == "ELIGIBLE":
                     if needs_expiry(current):
                         tasks.append(task(dog, kind, "IN_PROGRESS", current))

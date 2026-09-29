@@ -1,4 +1,5 @@
 from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,7 +14,7 @@ from rewards.permissions import IsOwnerRole
 
 from .models import DocumentSubmission
 from .serializers import DocumentRequestSerializer, DocumentSubmissionSerializer
-from .services import collect_document, eligibility_for, entitlements_for, submit_document
+from .services import collect_document, eligibility_for, entitlements_for, registrations_for, submit_document
 from .uploads import DocumentJSONParser
 
 
@@ -29,10 +30,23 @@ class DocumentListCreateView(APIView):
             "submissions": DocumentSubmissionSerializer(DocumentSubmission.objects.filter(owner=request.user).select_related("entitlement"), many=True).data,
             "eligibility": eligibility_for(request.user, dogs),
             "entitlements": entitlements_for(request.user),
+            "registrations": registrations_for(request.user, dogs),
         })
 
     def post(self, request):
         serializer = DocumentRequestSerializer(data=request.data, context={"owner": request.user})
+        serializer.is_valid(raise_exception=True)
+        receipt, created = submit_document(owner=request.user, data=serializer.validated_data)
+        return Response(receipt, status=201 if created else 200)
+
+
+class DocumentCorrectionView(APIView):
+    permission_classes = [IsOwnerRole]
+    parser_classes = [DocumentJSONParser]
+
+    def post(self, request, submission_id):
+        base = get_object_or_404(DocumentSubmission, pk=submission_id, owner=request.user)
+        serializer = DocumentRequestSerializer(data=request.data, context={"owner": request.user, "correction": base})
         serializer.is_valid(raise_exception=True)
         receipt, created = submit_document(owner=request.user, data=serializer.validated_data)
         return Response(receipt, status=201 if created else 200)

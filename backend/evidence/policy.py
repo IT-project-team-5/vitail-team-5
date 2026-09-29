@@ -2,6 +2,11 @@
 from rewards.policy import local_date
 
 
+def renewal_boundary(row):
+    dates = [value for value in (row.valid_to, row.renewal_blocked_through) if value is not None]
+    return max(dates) if dates else None
+
+
 def council_entitlement(rows, today=None):
     """Keep the latest paid qualification blocking until its known expiry passes.
 
@@ -13,11 +18,11 @@ def council_entitlement(rows, today=None):
     rows = list(rows)
     order = lambda row: (row.created_at, row.pk)
     paid = max((row for row in rows if row.point_entry_id), key=order, default=None)
-    if paid and (paid.valid_to is None or paid.valid_to >= today):
+    if paid and (renewal_boundary(paid) is None or renewal_boundary(paid) >= today):
         return paid
     pending = [row for row in rows if not row.point_entry_id and (paid is None or order(row) > order(paid))]
     current = max(pending, key=order, default=None)
-    return current if current and (current.valid_to is None or current.valid_to >= today) else None
+    return current if current and (renewal_boundary(current) is None or renewal_boundary(current) >= today) else None
 
 
 def needs_expiry(row):

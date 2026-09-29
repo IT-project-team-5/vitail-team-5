@@ -20,6 +20,7 @@ class DocumentEntitlement(models.Model):
     event_date = models.DateField(null=True, blank=True)
     valid_from = models.DateField(null=True, blank=True)
     valid_to = models.DateField(null=True, blank=True)
+    renewal_blocked_through = models.DateField(null=True, blank=True)
     point_entry = models.OneToOneField("rewards.PointEntry", null=True, on_delete=models.PROTECT)
     collected_at = models.DateTimeField(null=True, blank=True)
     promised_points = models.PositiveIntegerField(default=0)
