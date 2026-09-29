@@ -82,6 +82,12 @@
 		F10000000000000000000002 /* DogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DogDetailView.swift */; };
 		F10000000000000000000003 /* AvatarProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* AvatarProfileTests.swift */; };
 		F10000000000000000000004 /* SlideToCollect.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* SlideToCollect.swift */; };
+		000000000000000000000060 /* VenueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000060 /* VenueModels.swift */; };
+		000000000000000000000061 /* VenueService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000061 /* VenueService.swift */; };
+		000000000000000000000062 /* CheckInLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000062 /* CheckInLocationManager.swift */; };
+		000000000000000000000063 /* VenuesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000063 /* VenuesViewModel.swift */; };
+		000000000000000000000064 /* VenuesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000064 /* VenuesView.swift */; };
+		000000000000000000000065 /* VenuesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000065 /* VenuesTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +184,12 @@
 		F20000000000000000000002 /* DogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDetailView.swift; sourceTree = "<group>"; };
 		F20000000000000000000003 /* AvatarProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarProfileTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000004 /* SlideToCollect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideToCollect.swift; sourceTree = "<group>"; };
+		100000000000000000000060 /* VenueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueModels.swift; sourceTree = "<group>"; };
+		100000000000000000000061 /* VenueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueService.swift; sourceTree = "<group>"; };
+		100000000000000000000062 /* CheckInLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInLocationManager.swift; sourceTree = "<group>"; };
+		100000000000000000000063 /* VenuesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuesViewModel.swift; sourceTree = "<group>"; };
+		100000000000000000000064 /* VenuesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuesView.swift; sourceTree = "<group>"; };
+		100000000000000000000065 /* VenuesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuesTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -309,6 +321,7 @@
 				20D000000000000000000001 /* CafeOrders */,
 				213000000000000000000001 /* CafeProfile */,
 				214000000000000000000001 /* CafeProducts */,
+				215000000000000000000001 /* Venues */,
 				20F000000000000000000001 /* OwnerProfile */,
 				210000000000000000000001 /* Dog */,
 				212000000000000000000001 /* Walk */,
@@ -369,6 +382,7 @@
 				00000000000000000000E210 /* WalkMVPIntegrationTests.swift */,
 				10000000000000000000002F /* CafeProfileTests.swift */,
 				100000000000000000000034 /* CafeProductsTests.swift */,
+				100000000000000000000065 /* VenuesTests.swift */,
 				10000000000000000000002A /* WalkTests.swift */,
 				100000000000000000000024 /* APIIntegrationTests.swift */,
 				100000000000000000000023 /* RedemptionTests.swift */,
@@ -445,6 +459,18 @@
 				100000000000000000000033 /* CafeProductsView.swift */,
 			);
 			path = CafeProducts;
+			sourceTree = "<group>";
+		};
+		215000000000000000000001 /* Venues */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000060 /* VenueModels.swift */,
+				100000000000000000000061 /* VenueService.swift */,
+				100000000000000000000062 /* CheckInLocationManager.swift */,
+				100000000000000000000063 /* VenuesViewModel.swift */,
+				100000000000000000000064 /* VenuesView.swift */,
+			);
+			path = Venues;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -560,6 +586,11 @@
 				000000000000000000000031 /* CafeProductsService.swift in Sources */,
 				000000000000000000000032 /* CafeProductsViewModel.swift in Sources */,
 				000000000000000000000033 /* CafeProductsView.swift in Sources */,
+				000000000000000000000060 /* VenueModels.swift in Sources */,
+				000000000000000000000061 /* VenueService.swift in Sources */,
+				000000000000000000000062 /* CheckInLocationManager.swift in Sources */,
+				000000000000000000000063 /* VenuesViewModel.swift in Sources */,
+				000000000000000000000064 /* VenuesView.swift in Sources */,
 				00000000000000000000002E /* CafeProfileView.swift in Sources */,
 				00000000000000000000002D /* CafeProfileViewModel.swift in Sources */,
 				00000000000000000000002C /* CafeProfileService.swift in Sources */,
@@ -619,6 +650,7 @@
 				00000000000000000000E10F /* WalkSessionCoordinatorTests.swift in Sources */,
 				00000000000000000000E110 /* WalkMVPIntegrationTests.swift in Sources */,
 				000000000000000000000034 /* CafeProductsTests.swift in Sources */,
+				000000000000000000000065 /* VenuesTests.swift in Sources */,
 				00000000000000000000002F /* CafeProfileTests.swift in Sources */,
 				00000000000000000000002A /* WalkTests.swift in Sources */,
 				000000000000000000000024 /* APIIntegrationTests.swift in Sources */,

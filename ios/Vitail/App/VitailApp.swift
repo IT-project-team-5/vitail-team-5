@@ -7,6 +7,7 @@ struct VitailApp: App {
     private let dogService: DogService
     private let redemptionService: RedemptionService
     private let walkService: WalkService
+    private let venueService: VenueService
     private let cafeProfileService: CafeProfileService
     private let cafeProductsService: CafeProductsService
 
@@ -19,6 +20,7 @@ struct VitailApp: App {
         dogService = dependencies.dogService
         redemptionService = dependencies.redemptionService
         walkService = dependencies.walkService
+        venueService = dependencies.venueService
         cafeProfileService = dependencies.cafeProfileService
         cafeProductsService = dependencies.cafeProductsService
     }
@@ -31,6 +33,7 @@ struct VitailApp: App {
                 dogService: dogService,
                 redemptionService: redemptionService,
                 walkService: walkService,
+                venueService: venueService,
                 cafeProfileService: cafeProfileService,
                 cafeProductsService: cafeProductsService
             )

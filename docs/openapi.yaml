@@ -242,6 +242,79 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+  /api/venues:
+    get:
+      summary: List active partner venues with today's check-in status (OWNER only)
+      responses:
+        '200':
+          description: Venues, with the effective dwell time for each venue type
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Venue'}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/venues/{venue_id}/check-ins:
+    post:
+      summary: Start a check-in after the owner taps Start check-in (OWNER only)
+      description: >-
+        Requires a precise (30 m or better), non-simulated location inside the venue's
+        check-in radius. Starting a new check-in abandons any other open one. Returns 409
+        ALREADY_CHECKED_IN if this venue was already completed today (Melbourne date).
+        Errors carry a `code`: OUTSIDE_RADIUS, LOW_ACCURACY, SIMULATED_LOCATION.
+      parameters:
+        - {name: venue_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LocationReport'}
+      responses:
+        '201':
+          description: Check-in in progress
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckIn'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/{check_in_id}/locations:
+    post:
+      summary: Report a location during a check-in (OWNER only)
+      description: >-
+        The app sends about one report every 25 seconds, including in the background. The
+        server decides completion from its own receipt times, never from client timestamps
+        or a client-reported status. Completing awards 12 points once, limited by the 72-point
+        daily cap shared with walking. Leaving the radius, a simulated location, or more than
+        90 seconds without an accurate in-radius report abandons the check-in with no penalty.
+        Reports for a finished check-in return it unchanged.
+      parameters:
+        - {name: check_in_id, in: path, required: true, schema: {type: integer}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LocationReport'}
+      responses:
+        '200':
+          description: Current check-in state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckIn'}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/{check_in_id}/abandon:
+    post:
+      summary: Cancel an in-progress check-in (OWNER only)
+      parameters:
+        - {name: check_in_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200':
+          description: Check-in, abandoned with reason CANCELLED (unchanged if already finished)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckIn'}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
   /api/wallet:
     get:
       summary: Read the OWNER's unexpired point balance
@@ -662,6 +735,42 @@ components:
         points_awarded: {type: integer, minimum: 0, maximum: 40}
         point_date: {type: string, format: date}
         dog_ids: {type: array, items: {type: integer}}
+    Venue:
+      type: object
+      required: [id, name, venue_type, latitude, longitude, checkin_radius_m, required_dwell_s, checked_in_today]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        venue_type: {type: string, enum: [VET, DOG_PARK, CAFE, RESTAURANT, OTHER]}
+        description: {type: string}
+        address: {type: string}
+        opening_hours: {type: string}
+        latitude: {type: number}
+        longitude: {type: number}
+        checkin_radius_m: {type: integer}
+        required_dwell_s: {type: integer, description: 'Vet 180, dog park 300, café 600, restaurant 1200 unless Admin overrides'}
+        checked_in_today: {type: boolean}
+    LocationReport:
+      type: object
+      required: [latitude, longitude, accuracy_m]
+      properties:
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        accuracy_m: {type: number, minimum: 0}
+        is_simulated: {type: boolean, default: false}
+    CheckIn:
+      type: object
+      required: [id, venue_id, venue_name, status, abandon_reason, entered_at, required_dwell_s, verified_seconds, awarded_points]
+      properties:
+        id: {type: integer}
+        venue_id: {type: integer}
+        venue_name: {type: string}
+        status: {type: string, enum: [IN_PROGRESS, COMPLETED, ABANDONED]}
+        abandon_reason: {type: string, enum: ['', LEFT_RADIUS, SIGNAL_LOST, SIMULATED, CANCELLED, REPLACED]}
+        entered_at: {type: string, format: date-time}
+        required_dwell_s: {type: integer}
+        verified_seconds: {type: integer, description: Server-measured dwell so far, capped at required_dwell_s}
+        awarded_points: {type: integer, minimum: 0, maximum: 12, description: 0 when the daily cap was already reached}
     PointEntry:
       type: object
       required: [id, amount, type, expires_at, created_at]

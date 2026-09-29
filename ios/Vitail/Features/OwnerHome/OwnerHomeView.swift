@@ -5,6 +5,7 @@ struct OwnerHomeView: View {
     private enum Page: String, CaseIterable, Identifiable {
         case account = "Account"
         case walk = "Walk"
+        case venues = "Venues"
         case redeem = "Redeem"
 
         var id: Self { self }
@@ -15,6 +16,8 @@ struct OwnerHomeView: View {
                 return "person.crop.circle"
             case .walk:
                 return "figure.walk"
+            case .venues:
+                return "mappin.and.ellipse"
             case .redeem:
                 return "gift"
             }
@@ -26,6 +29,8 @@ struct OwnerHomeView: View {
                 return "person.crop.circle.fill"
             case .walk:
                 return "figure.walk"
+            case .venues:
+                return "mappin.circle.fill"
             case .redeem:
                 return "gift.fill"
             }
@@ -37,6 +42,7 @@ struct OwnerHomeView: View {
     let dogService: any DogServicing
     let walkService: any WalkServing
     @StateObject private var redemptionViewModel: RedemptionViewModel
+    @StateObject private var venuesViewModel: VenuesViewModel
     @StateObject private var walkCoordinator: WalkSessionCoordinator
     @StateObject private var onboardingDogs: DogViewModel
     @State private var selection: Page = .walk
@@ -48,7 +54,8 @@ struct OwnerHomeView: View {
         user: User, session: SessionStore,
         dogService: any DogServicing = DogService(),
         redemptionService: any RedemptionServing = RedemptionService(),
-        walkService: any WalkServing = WalkService()
+        walkService: any WalkServing = WalkService(),
+        venueService: any VenueServing = VenueService()
     ) {
         self.user = user
         self.session = session
@@ -61,6 +68,7 @@ struct OwnerHomeView: View {
         _redemptionViewModel = StateObject(
             wrappedValue: RedemptionViewModel(service: redemptionService)
         )
+        _venuesViewModel = StateObject(wrappedValue: VenuesViewModel(service: venueService))
     }
 
     var body: some View {
@@ -74,6 +82,8 @@ struct OwnerHomeView: View {
                         selection = .account
                     }
                     .tag(Page.walk)
+                    VenuesView(viewModel: venuesViewModel)
+                        .tag(Page.venues)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
                 }
@@ -100,7 +110,11 @@ struct OwnerHomeView: View {
             .task(id: "\(selection.rawValue)-\(scenePhase == .active)") {
                 guard scenePhase == .active else { return }
                 walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel] in await redemptionViewModel?.refresh() }
-                session.beforeLogout = { [weak walkCoordinator] in await walkCoordinator?.prepareForLogout() }
+                venuesViewModel.onPointsAwarded = { [weak redemptionViewModel] in await redemptionViewModel?.refresh() }
+                session.beforeLogout = { [weak walkCoordinator, weak venuesViewModel] in
+                    await venuesViewModel?.prepareForLogout()
+                    await walkCoordinator?.prepareForLogout()
+                }
                 await walkCoordinator.sync.refreshAndUpload()
                 await redemptionViewModel.refresh()
             }

@@ -19,6 +19,7 @@ from rest_framework.exceptions import ValidationError
 from dogs.models import Dog
 from rewards.models import PointEntry
 from rewards.services import credit_points
+from venues.daily_cap import remaining_daily_cap
 
 from .models import Walk
 
@@ -160,7 +161,9 @@ def create_walk(*, owner, request_id, started_at, ended_at, dog_ids, samples):
         distance=Sum("distance_m"), awarded=Sum("points_awarded")
     )
     daily_distance = (daily["distance"] or Decimal(0)) + distance_m
-    points_awarded = max(0, points_for_daily_distance(daily_distance) - (daily["awarded"] or 0))
+    earned = max(0, points_for_daily_distance(daily_distance) - (daily["awarded"] or 0))
+    # Walking shares the 72-point daily cap with venue check-ins; earlier awards stand.
+    points_awarded = min(earned, remaining_daily_cap(owner, point_date))
     walk = Walk.objects.create(
         owner=owner, request_id=request_id, request_fingerprint=fingerprint,
         started_at=started_at, ended_at=ended_at, point_date=point_date,

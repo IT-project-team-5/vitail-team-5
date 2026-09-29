@@ -20,6 +20,7 @@ from accounts.models import CafeProfile, User
 from dogs.models import Breed, Dog
 from rewards.models import CafeOrderFeedState, PointEntry, Redemption, Reward
 from rewards.services import create_redemption, credit_points, get_balance
+from venues.models import CheckIn, Venue
 from walks.models import Walk
 
 
@@ -45,6 +46,10 @@ class DemoResetTests(TestCase):
             point_date=now.date(), distance_m=1000, points_awarded=10,
         )
         cls.walk.dogs.add(cls.dog)
+        cls.venue = Venue.objects.create(
+            name="Old Park", venue_type=Venue.VenueType.DOG_PARK, latitude=-37.8, longitude=145.0)
+        CheckIn.objects.create(
+            owner=cls.owner, venue=cls.venue, entered_at=now, last_report_at=now)
         cls.reward = Reward.objects.create(cafe_user=cls.cafe, name="Old Coffee", point_cost=40)
         credit_points(user=cls.owner, amount=100)
         cls.order = create_redemption(owner=cls.owner, reward_id=cls.reward.pk)
@@ -200,7 +205,8 @@ class DemoResetTests(TestCase):
                     self.assertTrue(reward.is_available)
                     self.assertGreaterEqual(reward.point_cost, 40)
                     self.assertLessEqual(reward.point_cost, 180)
-        for model in (Dog, Walk, Walk.dogs.through, Redemption, CafeOrderFeedState, Session, LogEntry):
+        self.assertEqual(Venue.objects.filter(pk=self.venue.pk).count(), 1)
+        for model in (Dog, Walk, Walk.dogs.through, CheckIn, Redemption, CafeOrderFeedState, Session, LogEntry):
             with self.subTest(model=model._meta.label):
                 self.assertEqual(model.objects.count(), 0)
         self.assertEqual(list(Breed.objects.order_by("pk").values()), self.previous_data["dogs.Breed"])
