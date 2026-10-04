@@ -81,7 +81,8 @@ No-dog walks remain local with zero points. Protected local drafts/history,
 paused recovery and stable upload IDs preserve work without duplicate awards.
 Only server receipts confirm points. See [Walk integration](docs/WALK_INTEGRATION.md).
 
-Quest shows actionable birthday and document tasks, plus one walking-streak
+Quest shows per-dog daily goals and seven-day goal streaks, actionable birthday
+and document tasks, plus one walking-streak
 progress bar, with explicit Collect. Collected birthday/document rows leave
 the list after Melbourne midnight; their history remains. Streak advances to
 its next milestone after collection.
@@ -118,6 +119,7 @@ See [feature status](docs/FEATURES.md) before treating a capability as available
 
 | Document | Authority |
 |---|---|
+| [Daily walking goals](docs/DAILY_GOALS.md) | Manual configuration, calendar rules, preserved history and pending multi-dog payout decisions |
 | [Quest and point policy](docs/QUESTS.md) | Canonical reward amounts, limits, current delivery and check-in handoff |
 | [Decisions](docs/DECISIONS.md) | Current choices and unresolved questions |
 | [Feature status](docs/FEATURES.md) | What can be tested now versus foundations/future work |

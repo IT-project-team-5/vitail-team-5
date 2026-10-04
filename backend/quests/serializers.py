@@ -24,12 +24,31 @@ class QuestTaskSerializer(serializers.Serializer):
     run_start_date = serializers.DateField(required=False, allow_null=True)
 
 
+class GoalDaySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    state = serializers.ChoiceField(choices=("NOT_ELIGIBLE", "COMPLETED", "INCOMPLETE", "MISSED"))
+    active_seconds = serializers.IntegerField()
+    target_seconds = serializers.IntegerField(allow_null=True)
+
+
+class DogGoalSerializer(serializers.Serializer):
+    dog_id = serializers.IntegerField()
+    dog_name = serializers.CharField()
+    active_seconds = serializers.IntegerField()
+    target_seconds = serializers.IntegerField(allow_null=True)
+    completed = serializers.BooleanField()
+    current_streak = serializers.IntegerField()
+    days = GoalDaySerializer(many=True)
+
+
 class QuestDashboardSerializer(serializers.Serializer):
     server_time = serializers.DateTimeField()
     timezone = serializers.CharField()
     local_date = serializers.DateField()
     next_reset_at = serializers.DateTimeField()
     tasks = QuestTaskSerializer(many=True)
+    daily_goals = DogGoalSerializer(many=True)
+    goal_rewards_status = serializers.CharField()
 
 
 class BirthdayAwardSerializer(serializers.Serializer):

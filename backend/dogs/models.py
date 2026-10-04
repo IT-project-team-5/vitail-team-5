@@ -83,7 +83,7 @@ class Dog(models.Model):
 
 
 class DogDailyGoal(models.Model):
-    """Frozen target; dormant until the client approves a goal formula."""
+    """Frozen daily target and result; no inferred personalised formula."""
     dog = models.ForeignKey(Dog, null=True, blank=True, on_delete=models.SET_NULL, related_name="daily_goals")
     dog_id_snapshot = models.BigIntegerField()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="dog_daily_goals")
@@ -117,3 +117,40 @@ class DogDailyGoal(models.Model):
             raise ValidationError({"dog_id_snapshot": "The snapshot must identify the same dog."})
         if self._state.adding and self.dog_id and self.owner_id != self.dog.owner_id:
             raise ValidationError({"owner": "The goal belongs to the dog's owner when created."})
+
+
+class DogGoalTarget(models.Model):
+    """Append-only, manually approved targets configured through existing Admin."""
+    dog = models.ForeignKey(Dog, null=True, on_delete=models.SET_NULL, related_name="goal_targets")
+    dog_id_snapshot = models.BigIntegerField(editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    effective_from = models.DateField()
+    target_active_seconds = models.PositiveIntegerField(null=True, blank=True,
+        help_text="Approved daily walking seconds. Leave empty to pause goals; no default formula.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("effective_from", "pk")
+        constraints = [
+            models.UniqueConstraint(fields=("dog_id_snapshot", "effective_from"), name="dog_target_effective_unique"),
+            models.CheckConstraint(condition=models.Q(dog_id_snapshot__gt=0), name="dog_target_identity_positive"),
+            models.CheckConstraint(condition=models.Q(target_active_seconds__isnull=True)
+                | models.Q(target_active_seconds__gt=0), name="dog_target_positive"),
+        ]
+
+    def clean(self):
+        from datetime import timedelta
+        from rewards.policy import local_date
+        super().clean()
+        if not self._state.adding:
+            raise ValidationError("Targets are immutable. Add a new effective-dated target.")
+        if self.dog_id:
+            if self.dog_id_snapshot != self.dog_id:
+                raise ValidationError("The target must identify the same dog.")
+            if self.owner_id != self.dog.owner_id:
+                raise ValidationError("The target must belong to the dog's current owner.")
+            earliest = local_date()
+            if type(self).objects.filter(dog_id=self.dog_id).exists():
+                earliest += timedelta(days=1)
+            if self.effective_from and self.effective_from < earliest:
+                raise ValidationError({"effective_from": f"Choose {earliest} or later to preserve today's target."})

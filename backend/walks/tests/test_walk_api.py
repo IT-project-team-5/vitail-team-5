@@ -84,6 +84,16 @@ class WalkApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["balance"], points)
 
+    def test_goal_credits_reduce_shared_allowance_for_walking(self):
+        from rewards.services import credit_points
+        for amount, category in ((20, "DAILY_GOAL"), (36, "CHECK_IN")):
+            credit_points(user=self.owner, amount=amount, type="EARN", earn_category=category,
+                earned_on=self.now.date(), rules_version="test-goal-cap")
+        response = self.submit(self.payload(distance_m=3001))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["points_awarded"], 16)
+        self.assert_wallet(72)
+
     def test_server_distance_credits_wallet_and_ignores_forged_totals(self):
         payload = self.payload()
         payload.update({"distance_m": 50000, "points_awarded": 9999})

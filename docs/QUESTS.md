@@ -1,6 +1,6 @@
 # Quest and Point Policy
 
-Canonical reward reference, updated 27 September 2026. Latest source:
+Canonical reward reference, updated 4 October 2026. Latest source:
 [New Point Retrieval / Calculation](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation),
 24 September, plus subsequent confirmed collection/UI decisions.
 [Open questions](DECISIONS.md#open-decisions) remain explicit; a published reward
@@ -11,7 +11,7 @@ amount does not mean its qualification engine is implemented.
 | Source | Policy | Current delivery |
 |---|---|---|
 | Walking | 8 points/km; maximum 40 per Melbourne day; dog count does not multiply the award | Connected: server validates confirmed uploads and rounds cumulative daily distance down |
-| Daily goal | 20 points/day per account; per-dog progress for participating dogs | Not enabled: target formula, evaluation units and attribution remain open |
+| Daily goal | 20-point baseline; per-dog/account scope remains open | Per-dog manual targets, progress and goal streaks connected; payouts disabled pending multi-dog rules |
 | Venue check-in | 12 points; at most one daily opportunity per type, four types total | Persisted collection/cap service and shared UI foundation; no production GPS provider or enabled iOS service |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
@@ -20,10 +20,12 @@ amount does not mean its qualification engine is implemented.
 | Streak | Each consecutive run: 7 days earns 20 points; 30/60/90… days earn 100 points each | Connected: validated walking days, one progress bar and explicit Collect |
 | Net-walk | 2 points/km, maximum 10/day | Data foundation only; no proximity matcher or award implementation |
 
-The implemented shared activity cap is **72 points per Melbourne day for walking
-plus check-ins**. Wallet balance is not this counter: spending/refunds, admin
+The implemented shared activity cap is **72 points per Melbourne day for walking, daily goals
+and check-ins**. Wallet balance is not this counter: spending/refunds, admin
 grants and birthday/document credits do not change the activity-earned total.
-Goal and net-walk membership in this cap remains unresolved. Earlier documents
+Goal cap membership was confirmed on 4 October (40 walking + 20 goal + 12
+check-in). Multi-dog reward/cap scope and net-walk membership remain unresolved.
+Earlier documents
 that simply sum all proposed sources must not silently change the service.
 
 A check-in with less than its full promised reward remaining cannot currently
@@ -81,6 +83,12 @@ birthdays. Known birthdays determine age. The observed non-leap-year date for
 uniqueness survives ownership changes; an old recipient can replay their own
 receipt without giving a new owner another award.
 
+## Daily goals
+
+[Daily goals](DAILY_GOALS.md) documents per-dog manual target configuration,
+seven-day calendars, duration eligibility, history and the disabled payout path.
+The goal-completion streak is separate from the following existing reward.
+
 ## Walking streaks
 
 A qualifying day has at least one server-validated walk with actual movement.
@@ -101,7 +109,7 @@ credits on reads.
 The server recomputes eligibility before collection and locks the owner's
 account. `QuestAward` identifies owner, run start and milestone, and links one
 canonical ledger credit. Repeated or simultaneous requests return the same
-award. Streak credits do not consume the walking/check-in daily cap. No new
+award. Streak credits do not consume the walking/goal/check-in daily cap. No new
 progress table or client-generated qualification is used.
 
 ## Evidence: submit, then collect
@@ -236,6 +244,6 @@ collection, account changes, stale responses, midnight, cap presentation and
 wallet refresh races, with light/dark/large-text snapshots.
 
 These tests do not certify a real check-in provider, physical GPS behavior,
-social/location APIs or unimplemented goal/net rewards. Record actual
+social/location APIs or disabled goal/net rewards. Record actual
 run results with the build under test; use [feature status](FEATURES.md) and
 [Walk device tests](WALK_TESTING.md) for remaining acceptance work.

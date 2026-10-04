@@ -48,17 +48,18 @@ class CheckInFixture:
 
 
 class CheckInServiceTests(CheckInFixture, TestCase):
-    def test_cap_counts_only_walk_and_checkin_earned_on_the_business_day(self):
+    def test_cap_counts_walk_goal_and_checkin_earned_on_the_business_day(self):
         self.credit(20)
         self.credit(12, category="CHECK_IN")
-        for category in ("NET_WALK", "DAILY_GOAL", "STREAK", "BIRTHDAY", "DOCUMENT"):
+        self.credit(20, category="DAILY_GOAL")
+        for category in ("NET_WALK", "STREAK", "BIRTHDAY", "DOCUMENT"):
             self.credit(60, category=category)
         self.credit(100, type="ADMIN")
         self.credit(100, type="REFUND")
         self.credit(40, day=local_date(self.now) - timedelta(days=1))
         self.credit(40, owner=self.other)
         spend_points(user=self.owner, amount=30, source_reference="test-spend")
-        self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 32)
+        self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 52)
 
     def test_collect_is_idempotent_and_remains_replayable_after_disable_and_midnight(self):
         row = self.opportunity()
@@ -224,3 +225,15 @@ class CheckInConstraintTests(CheckInFixture, TestCase):
             with self.subTest(metadata=metadata), self.assertRaises(IntegrityError), transaction.atomic():
                 PointEntry.objects.create(user=self.owner, amount=12, remaining_points=12, type="EARN",
                                           expires_at=self.now + timedelta(days=365), **metadata)
+
+
+class GoalCapInteractionTests(CheckInFixture, TestCase):
+    def test_40_walk_20_goal_allows_one_12_point_checkin(self):
+        self.credit(40)
+        self.credit(20, category="DAILY_GOAL")
+        receipt = collect_checkin(owner=self.owner, checkin_id=self.opportunity().pk, now=self.now)
+        self.assertEqual(receipt["daily_earned_points"], 72)
+        self.assertEqual(receipt["wallet_balance"], 72)
+        with self.assertRaises(ValidationError):
+            collect_checkin(owner=self.owner, checkin_id=self.opportunity("PARK").pk, now=self.now)
+        self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 72)

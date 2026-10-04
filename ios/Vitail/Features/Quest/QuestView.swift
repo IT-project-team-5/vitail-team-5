@@ -44,6 +44,20 @@ struct QuestView: View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             ScrollView {
                 VStack(spacing: AppSpacing.small) {
+                    if let goals = store.dailyGoals {
+                        if goals.isEmpty {
+                            Text("Add a dog to start configuring daily walking goals.")
+                                .font(.subheadline).padding(AppSpacing.medium)
+                        }
+                        ForEach(goals) { goal in DailyWalkingGoalCard(goal: goal) }
+                        if !goals.isEmpty {
+                            Text("Goal rewards await confirmation of the multi-dog rules. Progress uses Melbourne calendar days.")
+                                .font(.caption).foregroundStyle(AppColors.secondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else if store.snapshot?.dailyGoals != nil {
+                        Text("Refresh to see today's walking goals.").font(.subheadline)
+                    }
                     taskRows(store.readyTasks)
                     checkInRows(checkIns.activeItems.filter { $0.status == .ready })
                     taskRows(store.inProgressTasks)
@@ -217,5 +231,53 @@ struct QuestDetailView: View {
         .tint(AppColors.brand)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+    }
+}
+
+struct DailyWalkingGoalCard: View {
+    let goal: DogDailyGoalProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.small) {
+            Text("\(goal.dogName)'s daily walk").font(.headline)
+            if let target = goal.targetSeconds, target > 0 {
+                Text(goal.timeLabel).font(.subheadline.monospacedDigit())
+                ProgressView(value: min(Double(goal.activeSeconds) / Double(target), 1))
+                    .tint(AppColors.brand)
+                    .accessibilityLabel("\(goal.dogName)'s walking goal")
+                    .accessibilityValue("\(goal.activeSeconds) of \(target) seconds. \(goal.completed ? "Completed" : "Incomplete")")
+                Label(goal.completed ? "Goal completed" : "Keep walking", systemImage: goal.completed ? "checkmark.circle.fill" : "figure.walk")
+                    .font(.subheadline).foregroundStyle(goal.completed ? AppColors.success : AppColors.secondaryText)
+            } else {
+                Text("Daily target not configured").font(.subheadline)
+                Text("An approved walking target is needed before progress can count toward a goal.")
+                    .font(.caption).foregroundStyle(AppColors.secondaryText)
+            }
+            Text("Goal streak: \(goal.currentStreak) \(goal.currentStreak == 1 ? "day" : "days")")
+                .font(.subheadline.weight(.semibold))
+            // Horizontal scrolling preserves readable dates at accessibility sizes.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.small) {
+                    ForEach(goal.days) { day in
+                        VStack(spacing: 6) {
+                            Text(day.shortDateLabel).font(.caption.monospacedDigit())
+                            Image(systemName: day.symbol)
+                                .foregroundStyle(day.state == "COMPLETED" ? AppColors.success : AppColors.secondaryText)
+                        }
+                        .frame(minWidth: 42, minHeight: 44)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(day.date): \(day.stateLabel)")
+                        .accessibilityValue(day.targetSeconds.map { "\(day.activeSeconds) of \($0) seconds" } ?? "No target")
+                    }
+                }
+            }
+            Text("✓ Completed · × Missed · ◌ Today incomplete · − Not eligible")
+                .font(.caption).foregroundStyle(AppColors.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(AppSpacing.medium)
+        .background(AppColors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
     }
 }

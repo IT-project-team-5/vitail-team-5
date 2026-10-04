@@ -175,7 +175,7 @@ struct OwnerHomeView: View {
     private func configureCallbacks() {
         walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel, weak questStore] in
             async let wallet: Void? = redemptionViewModel?.refresh()
-            async let quests: Void? = questStore?.refresh()
+            async let quests: Void? = questStore?.walksDidChange()
             _ = await (wallet, quests)
         }
         questStore.onAward = { [weak redemptionViewModel] _ in

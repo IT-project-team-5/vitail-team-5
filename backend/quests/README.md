@@ -5,6 +5,16 @@ creating qualifications, awarding points or changing walk records. The catalogue
 controls visibility and new collections; already-collected rewards remain
 replayable by their recipient after a capability is disabled.
 
+## Daily goals
+
+The envelope also includes `daily_goals`, with one duration target/progress and
+seven-day goal calendar per active owned dog, and `goal_rewards_status` set to
+`PENDING_MULTI_DOG_POLICY`. Reads may freeze daily snapshots but never create
+reward qualifications or points. See [daily goals](../../docs/DAILY_GOALS.md)
+for configuration, midnight/late-upload rules and the unexposed settlement
+foundation. Goal credits belong in the combined activity cap; per-dog/account
+reward and cap scope and any/all participant qualification still need approval.
+
 ## Walking streak
 
 An enabled `STREAK` produces exactly one task. A day qualifies from a persisted

@@ -38,6 +38,10 @@ final class QuestStore: ObservableObject {
     var readyTasks: [QuestTask] { visibleTasks.filter { $0.status == .ready } }
     var inProgressTasks: [QuestTask] { visibleTasks.filter { $0.status == .inProgress } }
     var collectedTodayTasks: [QuestTask] { visibleTasks.filter { $0.status == .collected } }
+    var dailyGoals: [DogDailyGoalProgress]? {
+        guard snapshot?.localDate == displayDate else { return nil }
+        return snapshot?.dailyGoals
+    }
     var visibleTasks: [QuestTask] {
         allTasks.filter { task in
             guard task.isSupported else { return false }
@@ -128,8 +132,20 @@ final class QuestStore: ObservableObject {
             snapshot = QuestSnapshot(serverTime: previous.serverTime, timezone: previous.timezone,
                 localDate: previous.localDate, tasks: previous.tasks.filter {
                     $0.documentKind != .council && $0.documentKind != .microchip
-                })
+                }, dailyGoals: previous.dailyGoals, goalRewardsStatus: previous.goalRewardsStatus)
         }
+        await refresh()
+    }
+
+    func walksDidChange() async {
+        // A read already in flight can predate the committed walk. Wait for it
+        // and any collection, then request a fresh server projection.
+        await collectionTask?.value
+        await refreshTask?.value
+        guard isActive, isCurrentOwner else { return }
+        generation += 1
+        refreshTask = nil; collectionTask = nil
+        isRefreshing = false; collectingTaskID = nil
         await refresh()
     }
 

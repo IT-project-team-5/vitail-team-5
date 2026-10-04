@@ -6,6 +6,63 @@ import XCTest
 
 @MainActor
 final class QuestTests: XCTestCase {
+    private var goalSample: DogDailyGoalProgress {
+        DogDailyGoalProgress(dogID: 7, dogName: "Milo", activeSeconds: 120, targetSeconds: 180,
+            completed: false, currentStreak: 2, days: (19...25).map { day in
+                GoalCalendarDay(date: "2026-09-\(day)", state: day == 25 ? "INCOMPLETE" : day >= 23 ? "COMPLETED" : day == 22 ? "MISSED" : "NOT_ELIGIBLE",
+                    activeSeconds: day >= 23 && day < 25 ? 180 : day == 25 ? 120 : 0,
+                    targetSeconds: day >= 22 ? 180 : nil)
+            })
+    }
+
+    func testGoalCalendarLabelsAndUnconfiguredState() throws {
+        XCTAssertEqual(goalSample.timeLabel, "2m 0s / 3m 0s")
+        XCTAssertEqual(goalSample.days.last?.stateLabel, "Today, incomplete")
+        XCTAssertEqual(goalSample.days.first?.stateLabel, "Not eligible")
+        let unconfigured = DogDailyGoalProgress(dogID: 7, dogName: "Milo", activeSeconds: 0,
+            targetSeconds: nil, completed: false, currentStreak: 0, days: [])
+        XCTAssertEqual(unconfigured.timeLabel, "Daily target not configured")
+        XCTAssertFalse(unconfigured.completed)
+        let json = #"{"dog_id":7,"dog_name":"Milo","active_seconds":0,"target_seconds":null,"completed":false,"current_streak":0,"days":[]}"#
+        XCTAssertEqual(try JSONDecoder().decode(DogDailyGoalProgress.self, from: Data(json.utf8)), unconfigured)
+    }
+
+    func testGoalCalendarHidesAfterMelbourneMidnight() async {
+        let session = await makeSession()
+        let service = QuestFixture(serverTime: "2026-09-25T13:59:50Z")
+        await service.setGoals([goalSample])
+        var now = QuestCalendar.parse("2026-09-25T13:59:50Z")!
+        let store = QuestStore(ownerID: 1, session: session, service: service, now: { now })
+        await store.refresh()
+        XCTAssertEqual(store.dailyGoals?.count, 1)
+        now = now.addingTimeInterval(20)
+        XCTAssertNil(store.dailyGoals)
+    }
+
+    func testWalkCompletionFetchesAgainAfterAnInFlightRead() async {
+        let session = await makeSession()
+        let service = QuestFixture()
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await service.suspendFetch()
+        let olderRead = Task { await store.refresh() }
+        await service.waitForFetch()
+        let committedWalk = Task { await store.walksDidChange() }
+        await Task.yield()
+        await service.releaseFetch()
+        await olderRead.value
+        await committedWalk.value
+        let count = await service.fetchCount
+        XCTAssertEqual(count, 2)
+    }
+
+    func testDailyGoalAppearanceSnapshots() async throws {
+        for dark in [false, true] {
+            try await snapshot(DailyWalkingGoalCard(goal: goalSample), name: "Daily-Goal-\(dark)", dark: dark)
+        }
+        try await snapshot(DailyWalkingGoalCard(goal: goalSample).environment(\.dynamicTypeSize, .accessibility3),
+            name: "Daily-Goal-Large-Text", dark: false)
+    }
+
     func testStreakProgressSupportsSevenThenThirtyDayMilestones() throws {
         for (current, target) in [(0, 7), (3, 7), (7, 7), (8, 30), (29, 30), (30, 30), (45, 60), (60, 60), (89, 90)] {
             let progress = try XCTUnwrap(StreakProgressValue(currentDays: current, targetDays: target))
@@ -689,6 +746,7 @@ private actor QuestAuthFixture: AuthServing {
 private actor QuestFixture: QuestServing {
     private(set) var fetchCount = 0
     private(set) var calls: [String] = []
+    private var goalsValue: [DogDailyGoalProgress]?
     private var tasksValue: [QuestTask]
     private var serverTime: String
     private var failFetch = false, failClaim = false, pauseFetch = false, pauseClaim = false
@@ -705,7 +763,7 @@ private actor QuestFixture: QuestServing {
         if pauseFetch { await withCheckedContinuation { fetchContinuation = $0; fetchStarted?.resume(); fetchStarted = nil } }
         if failFetch { failFetch = false; throw APIError.network("Connection interrupted") }
         return QuestSnapshot(serverTime: serverTime, timezone: "Australia/Melbourne", localDate: QuestCalendar.dateString(QuestCalendar.parse(serverTime)!),
-                             tasks: tasksValue)
+                             tasks: tasksValue, dailyGoals: goalsValue)
     }
     func collectBirthday(dogID: Int) async throws -> BirthdayCollectResponse {
         calls.append("birthday:\(dogID)"); try await claimGate()
@@ -731,6 +789,7 @@ private actor QuestFixture: QuestServing {
         if pauseClaim { await withCheckedContinuation { claimContinuation = $0; claimStarted?.resume(); claimStarted = nil } }
         if failClaim { failClaim = false; throw APIError.network("Response interrupted") }
     }
+    func setGoals(_ goals: [DogDailyGoalProgress]) { goalsValue = goals }
     func setTasks(_ tasks: [QuestTask]) { tasksValue = tasks }
     func setServerTime(_ value: String) { serverTime = value }
     func failNextFetch() { failFetch = true }

@@ -7,9 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E72026092900000000000011 /* DogDocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092900000000000001 /* DogDocumentsView.swift */; };
-		00000000000000000000E112 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E212 /* Assets.xcassets */; };
-		00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E213 /* BrandAppearanceTests.swift */; };
 		000000000000000000000001 /* VitailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* VitailApp.swift */; };
 		000000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* RootView.swift */; };
 		000000000000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000003 /* APIClient.swift */; };
@@ -54,6 +51,11 @@
 		00000000000000000000002D /* CafeProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002D /* CafeProfileViewModel.swift */; };
 		00000000000000000000002E /* CafeProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002E /* CafeProfileView.swift */; };
 		00000000000000000000002F /* CafeProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002F /* CafeProfileTests.swift */; };
+		000000000000000000000030 /* CafeProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000030 /* CafeProductModels.swift */; };
+		000000000000000000000031 /* CafeProductsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000031 /* CafeProductsService.swift */; };
+		000000000000000000000032 /* CafeProductsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000032 /* CafeProductsViewModel.swift */; };
+		000000000000000000000033 /* CafeProductsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000033 /* CafeProductsView.swift */; };
+		000000000000000000000034 /* CafeProductsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000034 /* CafeProductsTests.swift */; };
 		00000000000000000000E100 /* WalkMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E200 /* WalkMapView.swift */; };
 		00000000000000000000E101 /* WalkDogSelectionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E201 /* WalkDogSelectionViewModel.swift */; };
 		00000000000000000000E102 /* WalkDogSelectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E202 /* WalkDogSelectionCard.swift */; };
@@ -71,31 +73,29 @@
 		00000000000000000000E10E /* WalkBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E20E /* WalkBackgroundTests.swift */; };
 		00000000000000000000E10F /* WalkSessionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */; };
 		00000000000000000000E110 /* WalkMVPIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E210 /* WalkMVPIntegrationTests.swift */; };
-		000000000000000000000030 /* CafeProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000030 /* CafeProductModels.swift */; };
-		000000000000000000000031 /* CafeProductsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000031 /* CafeProductsService.swift */; };
-		000000000000000000000032 /* CafeProductsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000032 /* CafeProductsViewModel.swift */; };
-		000000000000000000000033 /* CafeProductsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000033 /* CafeProductsView.swift */; };
-		000000000000000000000034 /* CafeProductsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000034 /* CafeProductsTests.swift */; };
+		00000000000000000000E112 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E212 /* Assets.xcassets */; };
+		00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E213 /* BrandAppearanceTests.swift */; };
+		0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECF0F73A9474B166766F7F /* DocumentTests.swift */; };
+		0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C5A6C711492542BA1C468B /* QuestView.swift */; };
+		18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */; };
+		19B14471CE7DC0423715C4FD /* QuestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F5379B23557A4EF3CFD21D /* QuestService.swift */; };
+		2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */; };
+		6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */; };
+		6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */; };
+		7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE812BF2460D749B2A393459 /* DocumentService.swift */; };
+		9854E00A30D4766CFB62D214 /* QuestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBC97A9308058DE40CEA3E34 /* QuestStore.swift */; };
+		A7F7B2EC02EC98B63A3D3872 /* QuestModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */; };
+		B050D75339160A6E5DED733D /* CheckInProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */; };
+		B3C767A9C15E35A6C2AA554C /* CheckInProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */; };
+		D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */; };
+		DFDB93C3237E58D028699C37 /* QuestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACB97598A23B803F298053B /* QuestTests.swift */; };
+		E72026092700000000000011 /* DocumentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000001 /* DocumentReader.swift */; };
+		E72026092700000000000012 /* DocumentReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000002 /* DocumentReaderTests.swift */; };
+		E72026092900000000000011 /* DogDocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092900000000000001 /* DogDocumentsView.swift */; };
 		F10000000000000000000001 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* AvatarView.swift */; };
 		F10000000000000000000002 /* DogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DogDetailView.swift */; };
 		F10000000000000000000003 /* AvatarProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* AvatarProfileTests.swift */; };
 		F10000000000000000000004 /* SlideToCollect.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* SlideToCollect.swift */; };
-		A7F7B2EC02EC98B63A3D3872 /* QuestModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */; };
-		19B14471CE7DC0423715C4FD /* QuestService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F5379B23557A4EF3CFD21D /* QuestService.swift */; };
-		9854E00A30D4766CFB62D214 /* QuestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBC97A9308058DE40CEA3E34 /* QuestStore.swift */; };
-		0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C5A6C711492542BA1C468B /* QuestView.swift */; };
-		B050D75339160A6E5DED733D /* CheckInProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */; };
-		18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */; };
-		B3C767A9C15E35A6C2AA554C /* CheckInProgressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */; };
-		2EE03A9A81B34A55447770B3 /* DocumentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */; };
-		E72026092700000000000011 /* DocumentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000001 /* DocumentReader.swift */; };
-		7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE812BF2460D749B2A393459 /* DocumentService.swift */; };
-		D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */; };
-		6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */; };
-		0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECF0F73A9474B166766F7F /* DocumentTests.swift */; };
-		E72026092700000000000012 /* DocumentReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000002 /* DocumentReaderTests.swift */; };
-		DFDB93C3237E58D028699C37 /* QuestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACB97598A23B803F298053B /* QuestTests.swift */; };
-		6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,9 +109,27 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		E72026092900000000000001 /* DogDocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDocumentsView.swift; sourceTree = "<group>"; };
+		00000000000000000000E200 /* WalkMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMapView.swift; sourceTree = "<group>"; };
+		00000000000000000000E201 /* WalkDogSelectionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionViewModel.swift; sourceTree = "<group>"; };
+		00000000000000000000E202 /* WalkDogSelectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionCard.swift; sourceTree = "<group>"; };
+		00000000000000000000E203 /* WalkHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryStore.swift; sourceTree = "<group>"; };
+		00000000000000000000E204 /* WalkHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryView.swift; sourceTree = "<group>"; };
+		00000000000000000000E205 /* WalkLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocationManager.swift; sourceTree = "<group>"; };
+		00000000000000000000E206 /* WalkDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDraftStore.swift; sourceTree = "<group>"; };
+		00000000000000000000E207 /* WalkSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinator.swift; sourceTree = "<group>"; };
+		00000000000000000000E208 /* WalkSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSyncStore.swift; sourceTree = "<group>"; };
+		00000000000000000000E209 /* WalkSyncPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSyncPanel.swift; sourceTree = "<group>"; };
+		00000000000000000000E20A /* WalkDogSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionTests.swift; sourceTree = "<group>"; };
+		00000000000000000000E20B /* WalkHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryTests.swift; sourceTree = "<group>"; };
+		00000000000000000000E20C /* WalkLocationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocationManagerTests.swift; sourceTree = "<group>"; };
+		00000000000000000000E20D /* WalkDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDraftStoreTests.swift; sourceTree = "<group>"; };
+		00000000000000000000E20E /* WalkBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkBackgroundTests.swift; sourceTree = "<group>"; };
+		00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinatorTests.swift; sourceTree = "<group>"; };
+		00000000000000000000E210 /* WalkMVPIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMVPIntegrationTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E212 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		00000000000000000000E213 /* BrandAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAppearanceTests.swift; sourceTree = "<group>"; };
+		020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressTests.swift; sourceTree = "<group>"; };
+		0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSubmissionView.swift; sourceTree = "<group>"; };
 		100000000000000000000001 /* VitailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitailApp.swift; sourceTree = "<group>"; };
 		100000000000000000000002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		100000000000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -134,14 +152,6 @@
 		100000000000000000000014 /* DogListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogListView.swift; sourceTree = "<group>"; };
 		100000000000000000000015 /* DogFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogFormView.swift; sourceTree = "<group>"; };
 		100000000000000000000016 /* DogModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogModelsTests.swift; sourceTree = "<group>"; };
-		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
-		120000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
-		120000000000000000000003 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
-		120000000000000000000004 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
-		120000000000000000000005 /* Local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Local.xcconfig.example; sourceTree = "<group>"; };
-		120000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		100000000000000000000017 /* AuthenticatedAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedAPIClient.swift; sourceTree = "<group>"; };
 		100000000000000000000018 /* CredentialAuthority.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialAuthority.swift; sourceTree = "<group>"; };
 		100000000000000000000019 /* AppDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDependencies.swift; sourceTree = "<group>"; };
@@ -164,48 +174,38 @@
 		10000000000000000000002D /* CafeProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileViewModel.swift; sourceTree = "<group>"; };
 		10000000000000000000002E /* CafeProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileView.swift; sourceTree = "<group>"; };
 		10000000000000000000002F /* CafeProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProfileTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E200 /* WalkMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMapView.swift; sourceTree = "<group>"; };
-		00000000000000000000E201 /* WalkDogSelectionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionViewModel.swift; sourceTree = "<group>"; };
-		00000000000000000000E202 /* WalkDogSelectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionCard.swift; sourceTree = "<group>"; };
-		00000000000000000000E203 /* WalkHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryStore.swift; sourceTree = "<group>"; };
-		00000000000000000000E204 /* WalkHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryView.swift; sourceTree = "<group>"; };
-		00000000000000000000E205 /* WalkLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocationManager.swift; sourceTree = "<group>"; };
-		00000000000000000000E206 /* WalkDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDraftStore.swift; sourceTree = "<group>"; };
-		00000000000000000000E207 /* WalkSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinator.swift; sourceTree = "<group>"; };
-		00000000000000000000E208 /* WalkSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSyncStore.swift; sourceTree = "<group>"; };
-		00000000000000000000E209 /* WalkSyncPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSyncPanel.swift; sourceTree = "<group>"; };
-		00000000000000000000E20A /* WalkDogSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDogSelectionTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E20B /* WalkHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkHistoryTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E20C /* WalkLocationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkLocationManagerTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E20D /* WalkDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkDraftStoreTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E20E /* WalkBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkBackgroundTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinatorTests.swift; sourceTree = "<group>"; };
-		00000000000000000000E210 /* WalkMVPIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMVPIntegrationTests.swift; sourceTree = "<group>"; };
 		100000000000000000000030 /* CafeProductModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductModels.swift; sourceTree = "<group>"; };
 		100000000000000000000031 /* CafeProductsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsService.swift; sourceTree = "<group>"; };
 		100000000000000000000032 /* CafeProductsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsViewModel.swift; sourceTree = "<group>"; };
 		100000000000000000000033 /* CafeProductsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsView.swift; sourceTree = "<group>"; };
 		100000000000000000000034 /* CafeProductsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsTests.swift; sourceTree = "<group>"; };
+		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000003 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000004 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		120000000000000000000005 /* Local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text; path = Local.xcconfig.example; sourceTree = "<group>"; };
+		120000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1ACB97598A23B803F298053B /* QuestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestTests.swift; sourceTree = "<group>"; };
+		25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModels.swift; sourceTree = "<group>"; };
+		36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgress.swift; sourceTree = "<group>"; };
+		47C5A6C711492542BA1C468B /* QuestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestView.swift; sourceTree = "<group>"; };
+		81F5379B23557A4EF3CFD21D /* QuestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestService.swift; sourceTree = "<group>"; };
+		88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRefreshTests.swift; sourceTree = "<group>"; };
+		A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressCard.swift; sourceTree = "<group>"; };
+		A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestModels.swift; sourceTree = "<group>"; };
+		BE812BF2460D749B2A393459 /* DocumentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentService.swift; sourceTree = "<group>"; };
+		D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewModel.swift; sourceTree = "<group>"; };
+		E72026092700000000000001 /* DocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReader.swift; sourceTree = "<group>"; };
+		E72026092700000000000002 /* DocumentReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReaderTests.swift; sourceTree = "<group>"; };
+		E72026092900000000000001 /* DogDocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDocumentsView.swift; sourceTree = "<group>"; };
+		EBC97A9308058DE40CEA3E34 /* QuestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestStore.swift; sourceTree = "<group>"; };
 		F20000000000000000000001 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		F20000000000000000000002 /* DogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDetailView.swift; sourceTree = "<group>"; };
 		F20000000000000000000003 /* AvatarProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarProfileTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000004 /* SlideToCollect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideToCollect.swift; sourceTree = "<group>"; };
-		A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestModels.swift; sourceTree = "<group>"; };
-		81F5379B23557A4EF3CFD21D /* QuestService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestService.swift; sourceTree = "<group>"; };
-		EBC97A9308058DE40CEA3E34 /* QuestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestStore.swift; sourceTree = "<group>"; };
-		47C5A6C711492542BA1C468B /* QuestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestView.swift; sourceTree = "<group>"; };
-		36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgress.swift; sourceTree = "<group>"; };
-		A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressCard.swift; sourceTree = "<group>"; };
-		020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressTests.swift; sourceTree = "<group>"; };
-		25D069AF97FEFC82E93DA8C5 /* DocumentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentModels.swift; sourceTree = "<group>"; };
-		E72026092700000000000001 /* DocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReader.swift; sourceTree = "<group>"; };
-		BE812BF2460D749B2A393459 /* DocumentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentService.swift; sourceTree = "<group>"; };
-		0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSubmissionView.swift; sourceTree = "<group>"; };
-		D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewModel.swift; sourceTree = "<group>"; };
 		F6ECF0F73A9474B166766F7F /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
-		E72026092700000000000002 /* DocumentReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReaderTests.swift; sourceTree = "<group>"; };
-		1ACB97598A23B803F298053B /* QuestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestTests.swift; sourceTree = "<group>"; };
-		88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRefreshTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -480,27 +480,6 @@
 			path = CafeProducts;
 			sourceTree = "<group>";
 		};
-		83A28EB6FFBE5CEDAA98F129 /* Quest */ = {
-			isa = PBXGroup;
-			children = (
-				47C5A6C711492542BA1C468B /* QuestView.swift */,
-				EBC97A9308058DE40CEA3E34 /* QuestStore.swift */,
-				81F5379B23557A4EF3CFD21D /* QuestService.swift */,
-				A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */,
-			);
-			path = Quest;
-			sourceTree = "<group>";
-		};
-
-		58A8F78977627F369AF92B94 /* CheckIn */ = {
-			isa = PBXGroup;
-			children = (
-				A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */,
-				36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */,
-			);
-			path = CheckIn;
-			sourceTree = "<group>";
-		};
 		222CA46EF530402A1EFB0C1D /* Documents */ = {
 			isa = PBXGroup;
 			children = (
@@ -512,6 +491,26 @@
 				E72026092900000000000001 /* DogDocumentsView.swift */,
 			);
 			path = Documents;
+			sourceTree = "<group>";
+		};
+		58A8F78977627F369AF92B94 /* CheckIn */ = {
+			isa = PBXGroup;
+			children = (
+				A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */,
+				36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */,
+			);
+			path = CheckIn;
+			sourceTree = "<group>";
+		};
+		83A28EB6FFBE5CEDAA98F129 /* Quest */ = {
+			isa = PBXGroup;
+			children = (
+				47C5A6C711492542BA1C468B /* QuestView.swift */,
+				EBC97A9308058DE40CEA3E34 /* QuestStore.swift */,
+				81F5379B23557A4EF3CFD21D /* QuestService.swift */,
+				A4F7B09DC1F51ACD461C4679 /* QuestModels.swift */,
+			);
+			path = Quest;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -779,6 +778,7 @@
 			baseConfigurationReference = 120000000000000000000002 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = V5ARB2R379;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;
@@ -798,6 +798,7 @@
 			baseConfigurationReference = 120000000000000000000003 /* Staging.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = V5ARB2R379;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/Info.plist;

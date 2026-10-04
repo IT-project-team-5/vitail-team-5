@@ -1,7 +1,7 @@
 """Shared persisted progress. GPS start/verification belongs to the venue integration.
 
 These services do not accept client progress values or manufacture opportunities.
-Partial awards and unconfirmed goal/net cap membership remain disabled.
+Partial awards and unconfirmed net cap membership remain disabled.
 """
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -20,7 +20,8 @@ from .models import CheckIn
 
 def daily_activity_points(owner, day):
     return PointEntry.objects.filter(user=owner, type=PointEntry.Type.EARN, earned_on=day,
-        earn_category__in=(PointEntry.EarnCategory.WALK, PointEntry.EarnCategory.CHECK_IN)
+        earn_category__in=(PointEntry.EarnCategory.WALK, PointEntry.EarnCategory.CHECK_IN,
+                           PointEntry.EarnCategory.DAILY_GOAL)
     ).aggregate(total=Sum("amount"))["total"] or 0
 
 

@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 27 September 2026. The latest confirmed conversation and
+Current as of 4 October 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -18,7 +18,7 @@ below are retained where other project documents cite them.
 | R6–R10 | Walks start manually, require accurate GPS, use basic speed/accuracy checks, and stop after the inactivity limit; this is not advanced anti-cheat |
 | R12 / R15 / R16 / R33 | Expiring point credits; order creation deducts once and issues a reference; uncollected orders expire at Melbourne midnight and refund |
 | R26 | Personal-data deployment must use an Australian region; provider remains undecided |
-| R31 | Per-dog goal progress; the agreed daily goal reward is once per account when participating dogs meet their targets. Formula/evaluation details remain open |
+| R31 | Per-dog goal progress. The 20-point baseline includes goals in the 72-point combined cap. Per-dog/account reward and cap scope, and any/all participant qualification remain open (clarified 4 October); earlier once-per-account wording is not definitive |
 | R32 | Current app limit: 10 dogs per owner; the relational model supports multiple dogs |
 | R35 / R41 | Native SwiftUI app for iOS 17+; feature-first structure, shared services and a small design system |
 | R37 / R38 | Explicit venue check-in start is intended. OWNER and CAFE use one iOS app; ADMIN uses Django Admin. A table alone does not implement check-in |
@@ -65,7 +65,7 @@ microchip awards once per dog in its lifetime. Legacy
 microchip annual records are retained but do not reopen reward eligibility.
 Private evidence and public profile/venue media remain separate.
 
-The current cap service counts walking/check-in earnings, never wallet balance,
+The current cap service counts walking/goal/check-in earnings, never wallet balance,
 admin grants, refunds or care/birthday rewards. Partial check-in awards are
 rejected until their policy is agreed. The client does not qualify dwell from
 its clock or fabricate venue opportunities.
@@ -74,8 +74,8 @@ its clock or fabricate venue opportunities.
 
 | Reference | Decision still needed | Current safe behavior |
 |---|---|---|
-| O5 | Does the combined daily cap also include goal and net-walk rewards? How should an otherwise valid check-in behave when less than its full reward remains? | Walking/check-in share the cap. Goal/net awards and partial check-in awards are disabled |
-| O6 | Numeric daily-goal formula: duration versus distance, breed/age/size/flat-face adjustments, heat guardrails and live participant attribution | Reward amount is already agreed; targets, percentages and awards remain absent until evaluation rules exist |
+| O5 | Does the cap include net-walk rewards? What are the per-dog/account goal reward and cap scope, any/all participant rule and partial-award rules? | Goal membership confirmed: 40 walking + 20 goal + 12 check-in within 72. Goal payouts remain disabled pending multi-dog scope/eligibility; net and partial rewards remain disabled |
+| O6 | Numeric daily-goal formula: duration versus distance, breed/age/size/flat-face adjustments, heat guardrails and live participant attribution | Manually approved duration targets and per-dog progress are available via existing Admin; no personalised formula. Payouts remain disabled pending multi-dog decisions; see DAILY_GOALS.md |
 | O7 | Final rounding/minimum-walk policy | Current walking implementation rounds cumulative daily distance down; it invents no minimum-duration reward requirement |
 | O8 | Weather source and heat-adjustment inputs | No weather-based goal calculation or provider claim |
 | O9 | Retention, access and erasure policy for GPS, routes, evidence and account history | No new public GPS ingestion; local routes/private originals retained by current behavior. Schema TTL fields alone do not implement a retention job |

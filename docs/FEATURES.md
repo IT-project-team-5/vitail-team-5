@@ -1,6 +1,6 @@
 # Feature Status
 
-Updated 26 September 2026. **Connected** means a real client/API
+Updated 4 October 2026. **Connected** means a real client/API
 flow exists; it does not certify every physical-device acceptance case.
 **Foundation** means data/services are prepared but the end-user feature is not
 complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
@@ -22,7 +22,7 @@ complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 | Expiry/refunds/admin | Connected | Automatic due expiry/refunds; positive admin grants and repeat-safe pending-order cancellation; these controls do not constitute a full audit/dispute system |
 | Venue normalization | Foundation plus existing café integration | Canonical Venue and Reward relationship; café APIs preserved. Public discovery/start-check-in flow is not delivered |
 | Check-in progress/collection | Foundation; provider pending | Persisted service and one shared iOS map/Quest store; no public GPS ingestion or enabled iOS provider. Verified qualification required; shared daily cap, no partial awards |
-| Daily goals | Foundation; formula pending | Dog inputs and daily snapshot schema; reward amount is agreed, but no fabricated target/progress or automatic award |
+| Daily goals | Progress connected; payouts disabled | Admin-configured per-dog duration targets, frozen daily results and seven-day goal streaks in Quest. Personalised formula and multi-dog reward/cap scope remain open; see [daily goals](DAILY_GOALS.md) |
 | Streak rewards | Connected | Verified walking days per Melbourne date; missed-day reset; one x / milestone bar and explicit collection; each run earns 7-day then 30/60/90… rewards; earned claims survive a break |
 | Live sessions/location/net-walk | Foundation | Session, bounded sample and interval schema; no live location API, peer matcher or net-walk award |
 | Friends/blocks/leaderboard | Foundation / teammate integration | Friendship/block schema only; no social API or working leaderboard tab/endpoint in this app |

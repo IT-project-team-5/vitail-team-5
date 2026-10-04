@@ -10,12 +10,11 @@ from rewards.models import PointEntry
 from rewards.policy import local_date
 from rewards.services import credit_points, get_balance
 from walks.models import Walk
+from walks.eligibility import SUMMARY_FIELDS, TRUSTED_WALK_RULES, has_validated_movement
 
 from .models import QuestAward, QuestDefinition
 
 STREAK_RULES_VERSION = "streak-walk-days-2026-09-26"
-# Extend deliberately when another persisted validator has equivalent evidence.
-TRUSTED_WALK_RULES = ("walk-gps-v2",)
 
 
 class StreakClaimError(Exception):
@@ -50,17 +49,11 @@ def _runs(owner, now):
     walks = Walk.objects.filter(
         owner=owner, ended_at__lte=now, distance_m__gt=0, active_seconds__gt=0,
         rules_version__in=TRUSTED_WALK_RULES,
-    ).values("point_date", "started_at", "ended_at", "active_seconds", "validation_summary").order_by("ended_at", "pk")
+    ).values(*SUMMARY_FIELDS).order_by("ended_at", "pk")
     for walk in walks.iterator():
-        summary = walk["validation_summary"]
-        moving = summary.get("accepted_moving_segments") if isinstance(summary, dict) else None
-        if type(moving) is not int or moving <= 0:
-            continue
-        if not 0 < walk["active_seconds"] <= (walk["ended_at"] - walk["started_at"]).total_seconds():
+        if not has_validated_movement(walk, now):
             continue
         day = walk["point_date"]
-        if day != local_date(walk["ended_at"]):
-            continue
         # Credit uses the end's Melbourne day; repeated walks never add a day.
         days.setdefault(day, walk["ended_at"])
     runs, current = [], []

@@ -1,3 +1,5 @@
+from datetime import UTC
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -58,7 +60,7 @@ class Walk(models.Model):
     def clean(self):
         super().clean()
         if self.active_seconds is not None and self.started_at and self.ended_at:
-            if self.active_seconds > (self.ended_at - self.started_at).total_seconds():
+            if self.active_seconds > (self.ended_at.astimezone(UTC) - self.started_at.astimezone(UTC)).total_seconds():
                 raise ValidationError({"active_seconds": "Active time cannot exceed elapsed time."})
         for field in ("base_point_entry", "net_point_entry"):
             entry = getattr(self, field) if getattr(self, field + "_id") else None

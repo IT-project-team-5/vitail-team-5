@@ -57,7 +57,7 @@ sheets and login. Use system text styles and verify large-text layouts.
 | Domain | Responsibility |
 |---|---|
 | `accounts` | Login, roles, owner profile and authenticated café profile endpoints |
-| `dogs` | Owner-scoped dog profiles, nullable birthdays, breed reference data and daily-goal foundation |
+| `dogs` | Owner-scoped dog profiles, nullable birthdays, breed reference data, manual daily-goal targets and frozen results |
 | `venues` | Canonical venue identity/details/photo and optional managing café account |
 | `walks` | Validated walk uploads, participation/history snapshots; live-session, sample and net-walk schema foundations |
 | `rewards` | Canonical PointEntry ledger, Reward products, Redemption orders, café feed and expiry/refunds |
@@ -86,7 +86,8 @@ An order remains one reward, quantity one; no cart or order-item subsystem is
 needed. Redemption snapshots preserve names, prices, venue/café identity and
 applicable terms after catalogue edits.
 
-Daily-goal rows preserve per-dog inputs/results; session/sample/net-interval and
+Daily-goal rows preserve per-dog inputs/results, with append-only manual target
+revisions configured in Admin and progress/calendars in Quest; session/sample/net-interval and
 friendship rows preserve data needed by later features. Their existence does
 not enable a target formula, location matcher, social API, leaderboard or
 reward. Do not start storing raw GPS through the current walk-upload endpoint
@@ -170,7 +171,7 @@ match. Physical-device checks remain necessary for GPS, background execution,
 photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
-Future work includes real venue/GPS integration, personalized goal evaluation,
-streak/net-walk earning, friends/leaderboards, OAuth, password reset/account
+Future work includes real venue/GPS integration, personalized goal evaluation and approved multi-dog goal earning,
+net-walk earning, friends/leaderboards, OAuth, password reset/account
 deletion, notifications, sharing, chat and charity. Schema preparation must not
 be presented as completed functionality. See [open decisions](docs/DECISIONS.md).

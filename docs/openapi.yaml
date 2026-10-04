@@ -1015,12 +1015,17 @@ components:
         run_start_date: {type: string, format: date, nullable: true, description: STREAK only; null when no run or earned milestone is available}
     QuestDashboard:
       type: object
-      required: [server_time, timezone, local_date, next_reset_at, tasks]
+      required: [server_time, timezone, local_date, next_reset_at, tasks, daily_goals, goal_rewards_status]
       properties:
         server_time: {type: string, format: date-time}
         timezone: {type: string, enum: [Australia/Melbourne]}
         local_date: {type: string, format: date}
         next_reset_at: {type: string, format: date-time, description: Next Melbourne midnight; not a fixed 24-hour offset}
+        goal_rewards_status: {type: string, enum: [PENDING_MULTI_DOG_POLICY]}
+        daily_goals:
+          type: array
+          items: {$ref: '#/components/schemas/DogDailyGoalProgress'}
+          description: 'Active owned dogs, including unconfigured targets. All validated duration is attributed once to the Melbourne walk end date. No goal payouts are enabled.'
         tasks:
           type: array
           items: {$ref: '#/components/schemas/QuestTask'}
@@ -1029,6 +1034,29 @@ components:
             deterministic kind/dog/ID ordering within each state. Empty is valid.
             Collected rows are retained only on the same Melbourne calendar day;
             removing a row never removes its ledger or document history.
+    GoalCalendarDay:
+      type: object
+      required: [date, state, active_seconds, target_seconds]
+      properties:
+        date: {type: string, format: date}
+        state: {type: string, enum: [COMPLETED, MISSED, INCOMPLETE, NOT_ELIGIBLE]}
+        active_seconds: {type: integer, minimum: 0}
+        target_seconds: {type: integer, minimum: 1, nullable: true}
+    DogDailyGoalProgress:
+      type: object
+      required: [dog_id, dog_name, active_seconds, target_seconds, completed, current_streak, days]
+      properties:
+        dog_id: {type: integer}
+        dog_name: {type: string}
+        active_seconds: {type: integer, minimum: 0}
+        target_seconds: {type: integer, minimum: 1, nullable: true, description: 'Null means unconfigured; never implies completion'}
+        completed: {type: boolean}
+        current_streak: {type: integer, minimum: 0, description: 'Per-dog completed-goal days; incomplete today preserves yesterday'}
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items: {$ref: '#/components/schemas/GoalCalendarDay'}
     BirthdayAward:
       type: object
       required: [id, kind, dog_id, year, points, awarded_at]

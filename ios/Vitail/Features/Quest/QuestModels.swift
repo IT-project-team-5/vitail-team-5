@@ -34,9 +34,72 @@ struct QuestSnapshot: Decodable, Equatable, Sendable {
     let timezone: String
     let localDate: String
     let tasks: [QuestTask]
+    var dailyGoals: [DogDailyGoalProgress]? = nil
+    var goalRewardsStatus: String? = nil
     enum CodingKeys: String, CodingKey {
         case timezone, tasks
         case serverTime = "server_time", localDate = "local_date"
+        case dailyGoals = "daily_goals", goalRewardsStatus = "goal_rewards_status"
+    }
+}
+
+struct DogDailyGoalProgress: Decodable, Equatable, Identifiable, Sendable {
+    let dogID: Int
+    let dogName: String
+    let activeSeconds: Int
+    let targetSeconds: Int?
+    let completed: Bool
+    let currentStreak: Int
+    let days: [GoalCalendarDay]
+    var id: Int { dogID }
+    var timeLabel: String {
+        guard let targetSeconds else { return "Daily target not configured" }
+        return "\(Self.duration(activeSeconds)) / \(Self.duration(targetSeconds))"
+    }
+    static func duration(_ seconds: Int) -> String {
+        "\(seconds / 60)m \(seconds % 60)s"
+    }
+    enum CodingKeys: String, CodingKey {
+        case completed, days
+        case dogID = "dog_id", dogName = "dog_name", activeSeconds = "active_seconds"
+        case targetSeconds = "target_seconds", currentStreak = "current_streak"
+    }
+}
+
+struct GoalCalendarDay: Decodable, Equatable, Identifiable, Sendable {
+    let date: String
+    let state: String
+    let activeSeconds: Int
+    let targetSeconds: Int?
+    var id: String { date }
+    var shortDateLabel: String {
+        guard let value = DogBirthday.date(from: date) else { return date }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_AU")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "Australia/Melbourne")
+        formatter.dateFormat = "d MMM"
+        return formatter.string(from: value)
+    }
+    var stateLabel: String {
+        switch state {
+        case "COMPLETED": "Completed"
+        case "MISSED": "Missed"
+        case "INCOMPLETE": "Today, incomplete"
+        default: "Not eligible"
+        }
+    }
+    var symbol: String {
+        switch state {
+        case "COMPLETED": "checkmark.circle.fill"
+        case "MISSED": "xmark.circle"
+        case "INCOMPLETE": "circle.dotted"
+        default: "minus.circle"
+        }
+    }
+    enum CodingKeys: String, CodingKey {
+        case date, state
+        case activeSeconds = "active_seconds", targetSeconds = "target_seconds"
     }
 }
 

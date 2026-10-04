@@ -8,7 +8,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, timedelta
 from decimal import Decimal, ROUND_DOWN
 from zoneinfo import ZoneInfo
 
@@ -62,6 +62,12 @@ class ValidatedActivity:
 
 
 def validated_activity(*, started_at, ended_at, samples):
+    # Elapsed GPS time is absolute time, including the skipped/repeated hour
+    # when Melbourne changes daylight saving. Keep receipt/fingerprint inputs
+    # unchanged; only validation arithmetic uses UTC.
+    started_at = started_at.astimezone(UTC)
+    ended_at = ended_at.astimezone(UTC)
+    samples = [{**sample, "recorded_at": sample["recorded_at"].astimezone(UTC)} for sample in samples]
     now = timezone.now()
     if ended_at <= started_at:
         raise ValidationError({"ended_at": "A walk must end after it starts."})

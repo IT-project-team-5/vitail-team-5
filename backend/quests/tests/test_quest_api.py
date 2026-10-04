@@ -68,7 +68,10 @@ class QuestApiTests(APITestCase):
         fresh = User.objects.create_user(email="quest-new@example.com", password="QuestTest572!", display_name="New")
         self.client.force_authenticate(fresh)
         data = self.dashboard()
-        self.assertEqual(set(data), {"server_time", "timezone", "local_date", "next_reset_at", "tasks"})
+        self.assertEqual(set(data), {"server_time", "timezone", "local_date", "next_reset_at", "tasks",
+                                     "daily_goals", "goal_rewards_status"})
+        self.assertEqual(data["daily_goals"], [])
+        self.assertEqual(data["goal_rewards_status"], "PENDING_MULTI_DOG_POLICY")
         self.assertEqual([task["kind"] for task in data["tasks"]], ["STREAK"])
         self.assertEqual(data["tasks"][0]["current_days"], 0)
         self.assertFalse(QuestAward.objects.exists())
