@@ -68,7 +68,7 @@ def validated_activity(*, started_at, ended_at, samples):
     started_at = started_at.astimezone(UTC)
     ended_at = ended_at.astimezone(UTC)
     samples = [{**sample, "recorded_at": sample["recorded_at"].astimezone(UTC)} for sample in samples]
-    now = timezone.now()
+    now = timezone.now().astimezone(UTC)
     if ended_at <= started_at:
         raise ValidationError({"ended_at": "A walk must end after it starts."})
     if started_at < now - MAX_WALK_AGE or ended_at - started_at > MAX_WALK_AGE:

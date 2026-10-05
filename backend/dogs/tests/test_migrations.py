@@ -52,6 +52,7 @@ class GoalTargetMigrationTests(TransactionTestCase):
         before = [("dogs", "0004_dog_daily_goal")]
         try:
             executor.migrate(before)
+            executor = MigrationExecutor(connection)
             apps = executor.loader.project_state(list(executor.loader.applied_migrations)).apps
             User = apps.get_model("accounts", "User")
             Breed = apps.get_model("dogs", "Breed")
@@ -77,5 +78,41 @@ class GoalTargetMigrationTests(TransactionTestCase):
             self.assertEqual(preserved.inputs_snapshot, {"original": True})
             preserved_entry = apps.get_model("rewards", "PointEntry").objects.get(pk=entry.pk)
             self.assertEqual((preserved_entry.amount, preserved_entry.remaining_points), (37, 19))
+        finally:
+            MigrationExecutor(connection).migrate(latest)
+
+
+class GoalOwnershipMigrationTests(TransactionTestCase):
+    def test_existing_configuration_snapshots_and_ledger_are_preserved(self):
+        from datetime import date, timedelta
+        from django.utils import timezone
+        executor = MigrationExecutor(connection)
+        latest = executor.loader.graph.leaf_nodes()
+        try:
+            executor.migrate([("dogs", "0005_doggoaltarget")])
+            executor = MigrationExecutor(connection)
+            apps = executor.loader.project_state(list(executor.loader.applied_migrations)).apps
+            owner = apps.get_model("accounts", "User").objects.create(email="ownership-migration@example.com", role="OWNER")
+            breed = apps.get_model("dogs", "Breed").objects.create(name="Preserved", energy_level="LOW", default_size="SMALL")
+            dog = apps.get_model("dogs", "Dog").objects.create(owner=owner, breed=breed, name="Milo",
+                age_months=12, size="SMALL", is_brachycephalic=False)
+            target = apps.get_model("dogs", "DogGoalTarget").objects.create(dog=dog, owner=owner,
+                dog_id_snapshot=dog.pk, effective_from=date(2026, 10, 4), target_active_seconds=90)
+            goal = apps.get_model("dogs", "DogDailyGoal").objects.create(dog=dog, owner=owner,
+                dog_id_snapshot=dog.pk, local_date=target.effective_from, target_active_seconds=90,
+                inputs_snapshot={"target_id": target.pk, "eligible_since": target.created_at.isoformat()},
+                rules_version="manual-duration-v1", finalised_at=timezone.now(), final_active_seconds=100, final_goal_met=True)
+            entry = apps.get_model("rewards", "PointEntry").objects.create(user=owner, type="ADMIN", amount=37,
+                remaining_points=19, expires_at=timezone.now() + timedelta(days=365), source_reference="preserved-goal-owner")
+            before = {model: list(apps.get_model(app, model).objects.values()) for app, model in
+                      (("dogs", "DogDailyGoal"), ("rewards", "PointEntry"))}
+            MigrationExecutor(connection).migrate(latest)
+            apps = MigrationExecutor(connection).loader.project_state(latest).apps
+            self.assertEqual(apps.get_model("dogs", "Dog").objects.get(pk=dog.pk).goal_owner_version, 0)
+            preserved = apps.get_model("dogs", "DogGoalTarget").objects.get(pk=target.pk)
+            self.assertEqual((preserved.owner_version, preserved.target_active_seconds, preserved.created_at),
+                             (0, 90, target.created_at))
+            for app, model in (("dogs", "DogDailyGoal"), ("rewards", "PointEntry")):
+                self.assertEqual(list(apps.get_model(app, model).objects.values()), before[model])
         finally:
             MigrationExecutor(connection).migrate(latest)

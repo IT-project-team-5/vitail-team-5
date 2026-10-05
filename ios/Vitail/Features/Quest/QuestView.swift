@@ -51,7 +51,7 @@ struct QuestView: View {
                         }
                         ForEach(goals) { goal in DailyWalkingGoalCard(goal: goal) }
                         if !goals.isEmpty {
-                            Text("Goal rewards await confirmation of the multi-dog rules. Progress uses Melbourne calendar days.")
+                            Text("Daily goal rewards are not available yet. Progress uses Melbourne calendar days.")
                                 .font(.caption).foregroundStyle(AppColors.secondaryText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -240,8 +240,10 @@ struct DailyWalkingGoalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             Text("\(goal.dogName)'s daily walk").font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
             if let target = goal.targetSeconds, target > 0 {
                 Text(goal.timeLabel).font(.subheadline.monospacedDigit())
+                    .fixedSize(horizontal: false, vertical: true)
                 ProgressView(value: min(Double(goal.activeSeconds) / Double(target), 1))
                     .tint(AppColors.brand)
                     .accessibilityLabel("\(goal.dogName)'s walking goal")
@@ -266,7 +268,7 @@ struct DailyWalkingGoalCard: View {
                         }
                         .frame(minWidth: 42, minHeight: 44)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(day.date): \(day.stateLabel)")
+                        .accessibilityLabel("\(goal.dogName), \(day.date): \(day.stateLabel)")
                         .accessibilityValue(day.targetSeconds.map { "\(day.activeSeconds) of \($0) seconds" } ?? "No target")
                     }
                 }
@@ -277,6 +279,7 @@ struct DailyWalkingGoalCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppSpacing.medium)
+        .foregroundStyle(AppColors.primaryText)
         .background(AppColors.surface)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
     }

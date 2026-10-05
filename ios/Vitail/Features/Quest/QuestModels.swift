@@ -59,6 +59,23 @@ struct DogDailyGoalProgress: Decodable, Equatable, Identifiable, Sendable {
     static func duration(_ seconds: Int) -> String {
         "\(seconds / 60)m \(seconds % 60)s"
     }
+    func isValid(on localDate: String) -> Bool {
+        guard dogID > 0, !dogName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              currentStreak >= 0, days.count == 7, let today = DogBirthday.date(from: localDate) else { return false }
+        for (index, day) in days.enumerated() {
+            guard let expected = DogBirthday.calendar.date(byAdding: .day, value: index - 6, to: today),
+                  day.date == QuestCalendar.dateString(expected), day.activeSeconds >= 0 else { return false }
+            if let target = day.targetSeconds {
+                guard target > 0 else { return false }
+                let expectedState = day.activeSeconds >= target ? "COMPLETED" : index == 6 ? "INCOMPLETE" : "MISSED"
+                guard day.state == expectedState else { return false }
+            } else if day.state != "NOT_ELIGIBLE" || day.activeSeconds != 0 { return false }
+        }
+        guard let todayValue = days.last,
+              activeSeconds == todayValue.activeSeconds, targetSeconds == todayValue.targetSeconds,
+              completed == (todayValue.state == "COMPLETED") else { return false }
+        return targetSeconds == nil ? currentStreak == 0 : (!completed || currentStreak > 0)
+    }
     enum CodingKeys: String, CodingKey {
         case completed, days
         case dogID = "dog_id", dogName = "dog_name", activeSeconds = "active_seconds"

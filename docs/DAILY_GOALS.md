@@ -23,7 +23,16 @@ before its first effective target are not missed. Owner transfers do not carry
 another owner's configuration or walking time into the new owner's progress.
 Deleted dogs retain target and daily snapshots via immutable dog IDs.
 
-Only walks started after the target was configured can qualify. Old uploads,
+Admin transfers and normal `Dog.save()` ownership changes advance
+`goal_owner_version`; approved targets record that version. Even a transfer back
+to an earlier owner requires a new target. Use Admin or normal model saves for
+transfers, not bulk `QuerySet.update(owner=...)` or raw SQL, which bypass model
+hooks. Existing dog/date snapshots are never reassigned to another owner.
+Any later revision still starts tomorrow or later, including after a transfer.
+Admin validates duplicate effective dates while holding the same owner/dog locks
+as configuration and uploads. Normal target saves/deletes cannot rewrite history.
+
+Only walks started strictly after the target was configured can qualify. Old uploads,
 unverified legacy walks, local-only records and unselected dogs are excluded.
 There is no migration backfill of goals, points or configuration.
 
@@ -50,7 +59,8 @@ Each dog shows the seven calendar days ending today: completed, missed,
 incomplete today, or not eligible. Its goal streak counts consecutive completed
 days. Incomplete today preserves yesterday's run; a finished missed day breaks
 it, even if nobody opened the app. A gap with no configured target is not called
-missed and cannot bridge two runs. Targets may differ across the run.
+missed and cannot bridge two runs. A paused or unconfigured today has a zero
+current streak. Targets may differ across the run.
 
 The existing upload deadline is 12 elapsed hours from walk start. Yesterday's
 result can therefore be corrected by a valid late upload. Daily results freeze
@@ -83,6 +93,10 @@ foundation with no production caller or qualification producer**. A future
 approved backend qualifier must supply an immutable reward scope, policy
 version, required daily goal IDs and expiry. Settlement rechecks ownership,
 active account, day, progress and cap under the same owner lock as other rewards.
+It also locks the participating dogs, requires their current ownership revision
+and approved target inputs, and rejects missing/deleted/transferred dogs and
+malformed qualification snapshots. Already credited qualifications remain
+replayable by their original recipient without creating another credit.
 The existing unique QuestAward qualification key, one-to-one credit and unique
 PointEntry source reference make repeated/concurrent settlement return one
 credit. No HTTP route or frontend can supply a qualification or grant points.
@@ -97,15 +111,27 @@ and the daily activity total is distinct from spendable balance. Birthday,
 document and existing walking-streak bonuses remain legitimate separate credits;
 net-walk ledger metadata exists without a production earning path. Redemption,
 expiry, refunds and admin grants still use the same ledger. The iOS client never
-increments a wallet locally. Walk completion waits out older Quest requests and
-then refreshes both progress and the wallet; polling, retry and account teardown
-reuse the existing stores.
+increments a wallet locally. Walk completion invalidates older Quest responses
+and queues a fresh read in the same serialized operation. Concurrent polling and
+walk/document notifications cannot discard another request's task handle. The
+wallet uses its existing queued server refresh. Calendar validation checks seven
+ordered dates ending today, identities, durations and completion states before
+display. Time awaiting a response is included when expiring the calendar, so a
+slow pre-midnight response cannot give yesterday's calendar a new cache lifetime.
+Foregrounding, polling, retry and account teardown reuse the existing stores.
 
 ## Migration and verification
 
 `dogs.0005_doggoaltarget` adds only the target revision table, foreign keys and
 positive-target/identity and dog/effective-date uniqueness constraints. Existing
 walks, daily-goal snapshots, awards and balances are preserved.
+
+`dogs.0006_goal_owner_versions` adds ownership revisions to dogs and target
+approvals, initially zero to retain existing configuration. It does not rewrite
+targets, snapshots, walks or ledger entries, or try to infer past transfers.
+Forward preservation is covered by a migration regression test. Apply it through
+the normal deployment migration process; review/test commands do not migrate the
+working database.
 
 Run `DATABASE_ENGINE=sqlite python manage.py test` and the usual Django checks.
 The new tests cover accumulated walks, selected dogs, retry uploads, midnight,
@@ -130,3 +156,10 @@ alone is not evidence of a successful iOS build or MySQL locking test.
 - Docker is not running, so MySQL concurrency checks could not run. SQLite tests
   do not establish real row-lock correctness. Run the MySQL-only cases against a
   disposable database before enabling the future payout path.
+
+### Review on 5 October 2026
+
+See [the local review report](DAILY_GOALS_REVIEW.md) for reproduced failures,
+changes, current verification results and the physical-iPhone retest checklist.
+The earlier macOS/SQLite result above is historical and is not a substitute for
+the current platform-specific results.

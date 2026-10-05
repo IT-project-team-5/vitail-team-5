@@ -3,7 +3,7 @@ import calendar
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -68,6 +68,7 @@ class Dog(models.Model):
     size = models.CharField(max_length=10, choices=Size.choices)
     is_brachycephalic = models.BooleanField()
     created_at = models.DateTimeField(auto_now_add=True)
+    goal_owner_version = models.PositiveIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ("created_at", "id")
@@ -80,6 +81,26 @@ class Dog(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        fields = kwargs.get("update_fields")
+        if self._state.adding or (fields is not None and not {"owner", "owner_id"}.intersection(fields)):
+            return super().save(*args, **kwargs)
+        # Admin is the ownership write path. Keep transfers serialized with
+        # uploads/configuration and invalidate even a transfer back to an old owner.
+        from django.contrib.auth import get_user_model
+        using = kwargs.get("using") or self._state.db
+        with transaction.atomic(using=using):
+            previous_owner = type(self).objects.using(using).values_list("owner_id", flat=True).get(pk=self.pk)
+            list(get_user_model().objects.using(using).select_for_update()
+                 .filter(pk__in={previous_owner, self.owner_id}).order_by("pk"))
+            current = type(self).objects.using(using).select_for_update().get(pk=self.pk)
+            if current.owner_id != previous_owner:
+                raise ValidationError("The dog's owner changed. Reload before saving.")
+            self.goal_owner_version = current.goal_owner_version + (current.owner_id != self.owner_id)
+            if fields is not None:
+                kwargs["update_fields"] = set(fields) | {"goal_owner_version"}
+            return super().save(*args, **kwargs)
 
 
 class DogDailyGoal(models.Model):
@@ -128,6 +149,7 @@ class DogGoalTarget(models.Model):
     target_active_seconds = models.PositiveIntegerField(null=True, blank=True,
         help_text="Approved daily walking seconds. Leave empty to pause goals; no default formula.")
     created_at = models.DateTimeField(auto_now_add=True)
+    owner_version = models.PositiveIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ("effective_from", "pk")
@@ -149,8 +171,18 @@ class DogGoalTarget(models.Model):
                 raise ValidationError("The target must identify the same dog.")
             if self.owner_id != self.dog.owner_id:
                 raise ValidationError("The target must belong to the dog's current owner.")
+            if self.owner_version != self.dog.goal_owner_version:
+                raise ValidationError("The dog's ownership changed. Reload before configuring a target.")
             earliest = local_date()
             if type(self).objects.filter(dog_id=self.dog_id).exists():
                 earliest += timedelta(days=1)
             if self.effective_from and self.effective_from < earliest:
                 raise ValidationError({"effective_from": f"Choose {earliest} or later to preserve today's target."})
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Targets are immutable. Add a new effective-dated target.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Targets are immutable. Add a new effective-dated target.")

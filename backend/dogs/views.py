@@ -33,6 +33,13 @@ class DogDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Dog.objects.filter(owner=self.request.user).select_related("breed")
 
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        owner = self.request.user
+        type(owner).objects.select_for_update().get(pk=owner.pk)
+        dog = get_object_or_404(Dog.objects.select_for_update(), pk=instance.pk, owner=owner)
+        dog.delete()
+
 
 class DogPhotoView(APIView):
     parser_classes = [PhotoJSONParser]

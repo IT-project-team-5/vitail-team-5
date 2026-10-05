@@ -6,6 +6,7 @@ Snapshots are final after the 12-hour upload window; reads never create credits.
 from datetime import UTC, timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -18,10 +19,19 @@ GOAL_RULES_VERSION = "manual-duration-v1"
 
 
 @transaction.atomic
-def configure_target(*, dog, target_active_seconds, effective_from):
+def lock_goal_dog(dog):
     get_user_model().objects.select_for_update().get(pk=dog.owner_id)
-    dog = Dog.objects.select_for_update().get(pk=dog.pk)
+    current = Dog.objects.select_for_update().filter(pk=dog.pk, owner_id=dog.owner_id).first()
+    if current is None:
+        raise ValidationError("The dog's owner changed. Reload before configuring a target.")
+    return current
+
+
+@transaction.atomic
+def configure_target(*, dog, target_active_seconds, effective_from):
+    dog = lock_goal_dog(dog)
     target = DogGoalTarget(dog=dog, dog_id_snapshot=dog.pk, owner_id=dog.owner_id,
+        owner_version=dog.goal_owner_version,
         target_active_seconds=target_active_seconds, effective_from=effective_from)
     target.full_clean()
     target.save()
@@ -39,7 +49,7 @@ def active_seconds(goal, now=None):
         return 0  # Unknown legacy inputs must not establish new eligibility.
     rows = WalkDog.objects.filter(dog_id_snapshot=goal.dog_id_snapshot,
         walk__owner=goal.owner, walk__point_date=goal.local_date,
-        walk__started_at__gte=since, walk__rules_version__in=TRUSTED_WALK_RULES,
+        walk__started_at__gt=since, walk__rules_version__in=TRUSTED_WALK_RULES,
         walk__active_seconds__gt=0, walk__distance_m__gt=0,
         active_seconds__isnull=False).select_related("walk")
     return sum(min(row.active_seconds, row.walk.active_seconds) for row in rows
@@ -53,8 +63,9 @@ def goal_progress(*, owner, now=None):
     now = now or timezone.now()
     today = local_date(now)
     result = []
-    for dog in Dog.objects.filter(owner=owner, archived_at__isnull=True):
-        targets = list(DogGoalTarget.objects.filter(dog=dog, owner=owner, effective_from__lte=today))
+    for dog in Dog.objects.select_for_update().filter(owner=owner, archived_at__isnull=True).order_by("pk"):
+        targets = list(DogGoalTarget.objects.filter(dog=dog, owner=owner,
+            owner_version=dog.goal_owner_version, effective_from__lte=today))
         target_ids = {target.pk for target in targets}
         goals = {g.local_date: g for g in DogDailyGoal.objects.filter(
             dog_id_snapshot=dog.pk, owner=owner, rules_version=GOAL_RULES_VERSION)
@@ -87,7 +98,7 @@ def goal_progress(*, owner, now=None):
                 goal.save(update_fields=("final_active_seconds", "final_goal_met", "finalised_at"))
         streak = 0
         day = today
-        if day not in measured or not measured[day][2]:
+        if day in measured and not measured[day][2]:
             day -= timedelta(days=1)
         while day in measured and measured[day][2]:
             streak += 1

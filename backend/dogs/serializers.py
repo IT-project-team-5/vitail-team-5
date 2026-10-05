@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -87,3 +88,12 @@ class DogSerializer(serializers.ModelSerializer):
                     {"detail": "An account can have at most 10 dogs."}
                 )
             return Dog.objects.create(owner=owner, **validated_data)
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        owner = self.context["request"].user
+        type(owner).objects.select_for_update().get(pk=owner.pk)
+        # The initial API lookup can predate an Admin transfer. Never save its
+        # stale owner field back over the current owner or goal ownership version.
+        instance = get_object_or_404(Dog.objects.select_for_update(), pk=instance.pk, owner=owner)
+        return super().update(instance, validated_data)

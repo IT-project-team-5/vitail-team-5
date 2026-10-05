@@ -82,7 +82,9 @@ class DocumentCorrectionTests(APITestCase):
         replacement = self.correct(corrected.data, self.payload(filename="replacement.jpg", file_base64=base64.b64encode(photo_file("blue")).decode()))
         self.assertEqual(replacement.status_code, 201, replacement.data)
         self.assertNotEqual(DocumentSubmission.objects.get(pk=replacement.data["submission"]["id"]).file.name, old.file.name)
-        self.assertEqual(self.client.get(f"/api/quests/documents/{old.pk}/file").status_code, 200)
+        download = self.client.get(f"/api/quests/documents/{old.pk}/file")
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(b"".join(download.streaming_content), pdf_file())
         self.assertEqual(PointEntry.objects.count(), 1)
 
     def test_backdating_expiry_cannot_advance_renewal_but_expired_task_disappears(self):
@@ -175,7 +177,9 @@ class DocumentCorrectionTests(APITestCase):
         row = DocumentEntitlement.objects.get()
         self.assertEqual((row.valid_to, row.renewal_blocked_through), (date(2027, 6, 15), date(2027, 6, 15)))
         self.assertEqual(DocumentSubmission.objects.count(), 1)
-        self.assertEqual(self.client.get(f"/api/quests/documents/{first['submission']['id']}/file").status_code, 200)
+        download = self.client.get(f"/api/quests/documents/{first['submission']['id']}/file")
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(b"".join(download.streaming_content), pdf_file())
 
 
 @skipUnless(connection.vendor == "mysql", "Requires MySQL row locks")

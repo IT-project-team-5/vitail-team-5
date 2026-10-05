@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 import UIKit
@@ -55,12 +56,133 @@ final class QuestTests: XCTestCase {
         XCTAssertEqual(count, 2)
     }
 
+    func testWalkAndDocumentChangesWithPollingNeverPublishTheOlderCalendar() async {
+        let session = await makeSession()
+        let service = QuestFixture()
+        await service.setGoals([goalSample])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        var publishedSeconds: [Int] = []
+        let subscription = store.$snapshot.sink { value in
+            if let seconds = value?.dailyGoals?.first?.activeSeconds { publishedSeconds.append(seconds) }
+        }
+        defer { subscription.cancel() }
+        await service.suspendFetch()
+        let olderRead = Task { await store.refresh() }
+        await service.waitForFetch()
+        await service.setGoals([completedGoal])
+        let firstWalk = Task { await store.walksDidChange() }
+        let secondWalk = Task { await store.walksDidChange() }
+        let documents = Task { await store.documentsDidChange() }
+        let poll = Task { await store.refresh() }
+        await Task.yield()
+        await service.releaseFetch()
+        await olderRead.value; await firstWalk.value; await secondWalk.value
+        await documents.value; await poll.value
+        XCTAssertEqual(store.dailyGoals?.first?.activeSeconds, 180)
+        XCTAssertFalse(publishedSeconds.contains(120))
+        XCTAssertFalse(store.isRefreshing)
+        let concurrentRequests = await service.maxConcurrentFetches
+        XCTAssertEqual(concurrentRequests, 1)
+    }
+
+    func testSlowInitialResponseCannotReviveYesterdaysCalendar() async {
+        let session = await makeSession()
+        let service = QuestFixture(serverTime: "2026-09-25T13:59:50Z")
+        await service.setGoals([goalSample])
+        var clock = Date(timeIntervalSince1970: 0)
+        let store = QuestStore(ownerID: 1, session: session, service: service, now: { clock })
+        await service.suspendFetch()
+        let read = Task { await store.refresh() }
+        await service.waitForFetch()
+        clock = clock.addingTimeInterval(20)
+        await service.releaseFetch()
+        await read.value
+        XCTAssertNil(store.dailyGoals)
+    }
+
+    func testFailedWalkRefreshKeepsOnlyConfirmedProgressUntilRetry() async {
+        let session = await makeSession()
+        let service = QuestFixture()
+        await service.setGoals([goalSample])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        var awardCount = 0
+        store.onAward = { _ in awardCount += 1 }
+        await store.refresh()
+        await service.setGoals([completedGoal])
+        await service.failNextFetch()
+        await store.walksDidChange()
+        XCTAssertEqual(store.dailyGoals?.first?.activeSeconds, 120)
+        XCTAssertNotNil(store.errorMessage)
+        await store.refresh()
+        XCTAssertEqual(store.dailyGoals?.first?.completed, true)
+        XCTAssertEqual(awardCount, 0)
+    }
+
+    func testOldAccountReadCannotPublishGoalsAfterSameAccountRelogin() async throws {
+        let session = await makeSession()
+        let service = QuestFixture()
+        await service.setGoals([completedGoal])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await service.suspendFetch()
+        let read = Task { await store.refresh() }
+        await service.waitForFetch()
+        let changed = Task { await store.walksDidChange() }
+        await session.logout()
+        try await session.login(email: "owner@example.com", password: "unused", expectedRole: .owner)
+        await service.releaseFetch()
+        await read.value; await changed.value
+        XCTAssertNil(store.dailyGoals)
+        XCTAssertNil(store.snapshot)
+    }
+
+    func testMalformedGoalCalendarNeverPublishesCompletion() async {
+        let session = await makeSession()
+        let service = QuestFixture()
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        let invalid = DogDailyGoalProgress(dogID: 7, dogName: "Milo", activeSeconds: 120,
+            targetSeconds: 180, completed: true, currentStreak: 2, days: goalSample.days)
+        for goals in [[invalid], [goalSample, goalSample]] {
+            await service.setGoals(goals)
+            await store.refresh()
+            XCTAssertNil(store.dailyGoals)
+            XCTAssertNotNil(store.errorMessage)
+        }
+        let invalidDays = [Array(goalSample.days.dropFirst()), Array(repeating: goalSample.days[0], count: 7),
+            Array(goalSample.days.dropLast()) + [GoalCalendarDay(date: "2026-09-25", state: "COMPLETED", activeSeconds: -1, targetSeconds: 0)]]
+        for days in invalidDays {
+            XCTAssertFalse(DogDailyGoalProgress(dogID: 7, dogName: "Milo", activeSeconds: 120,
+                targetSeconds: 180, completed: false, currentStreak: 2, days: days).isValid(on: "2026-09-25"))
+        }
+    }
+
+    private var completedGoal: DogDailyGoalProgress {
+        DogDailyGoalProgress(dogID: 7, dogName: goalSample.dogName, activeSeconds: 180, targetSeconds: 180,
+            completed: true, currentStreak: 3, days: Array(goalSample.days.dropLast()) + [
+                GoalCalendarDay(date: "2026-09-25", state: "COMPLETED", activeSeconds: 180, targetSeconds: 180)])
+    }
+
     func testDailyGoalAppearanceSnapshots() async throws {
+        let longName = DogDailyGoalProgress(dogID: 7, dogName: "Milo Alexander the Very Adventurous Walking Companion",
+            activeSeconds: 0, targetSeconds: nil, completed: false, currentStreak: 0,
+            days: Array(goalSample.days.dropLast()) + [GoalCalendarDay(date: "2026-09-25", state: "NOT_ELIGIBLE", activeSeconds: 0, targetSeconds: nil)])
         for dark in [false, true] {
-            try await snapshot(DailyWalkingGoalCard(goal: goalSample), name: "Daily-Goal-\(dark)", dark: dark)
+            for width in [CGFloat(320), CGFloat(393), CGFloat(430)] {
+                try await snapshot(DailyWalkingGoalCard(goal: goalSample), name: "Daily-Goal-\(width)-\(dark)", dark: dark, width: width)
+                try await snapshot(ScrollView { DailyWalkingGoalCard(goal: longName) }.environment(\.dynamicTypeSize, .accessibility5),
+                    name: "Daily-Goal-Large-Text-\(width)-\(dark)", dark: dark, width: width)
+            }
         }
         try await snapshot(DailyWalkingGoalCard(goal: goalSample).environment(\.dynamicTypeSize, .accessibility3),
             name: "Daily-Goal-Large-Text", dark: false)
+        let session = await makeSession()
+        let service = QuestFixture(tasks: [])
+        await service.setGoals([])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        for dark in [false, true] {
+            try await snapshot(QuestView(store: store, checkIns: CheckInProgressStore(ownerID: 1))
+                .environment(\.dynamicTypeSize, .accessibility3), name: "Daily-Goal-No-Dogs-\(dark)", dark: dark, width: 320)
+        }
     }
 
     func testStreakProgressSupportsSevenThenThirtyDayMilestones() throws {
@@ -712,13 +834,13 @@ final class QuestTests: XCTestCase {
         await session.restore()
         return session
     }
-    private func snapshot<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
+    private func snapshot<Content: View>(_ content: Content, name: String, dark: Bool, width: CGFloat = 393) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let host = UIHostingController(rootView: NavigationStack { content.navigationTitle("Vitail").navigationBarTitleDisplayMode(.inline) }
             .vitailAppearance().preferredColorScheme(dark ? .dark : .light))
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+        window.frame = CGRect(x: 0, y: 0, width: width, height: 852)
         window.overrideUserInterfaceStyle = dark ? .dark : .light
         window.rootViewController = host; window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
@@ -745,6 +867,8 @@ private actor QuestAuthFixture: AuthServing {
 
 private actor QuestFixture: QuestServing {
     private(set) var fetchCount = 0
+    private(set) var maxConcurrentFetches = 0
+    private var concurrentFetches = 0
     private(set) var calls: [String] = []
     private var goalsValue: [DogDailyGoalProgress]?
     private var tasksValue: [QuestTask]
@@ -760,10 +884,14 @@ private actor QuestFixture: QuestServing {
     }
     func fetchQuests() async throws -> QuestSnapshot {
         fetchCount += 1
+        concurrentFetches += 1
+        maxConcurrentFetches = max(maxConcurrentFetches, concurrentFetches)
+        defer { concurrentFetches -= 1 }
+        let captured = QuestSnapshot(serverTime: serverTime, timezone: "Australia/Melbourne", localDate: QuestCalendar.dateString(QuestCalendar.parse(serverTime)!),
+                                     tasks: tasksValue, dailyGoals: goalsValue)
         if pauseFetch { await withCheckedContinuation { fetchContinuation = $0; fetchStarted?.resume(); fetchStarted = nil } }
         if failFetch { failFetch = false; throw APIError.network("Connection interrupted") }
-        return QuestSnapshot(serverTime: serverTime, timezone: "Australia/Melbourne", localDate: QuestCalendar.dateString(QuestCalendar.parse(serverTime)!),
-                             tasks: tasksValue, dailyGoals: goalsValue)
+        return captured
     }
     func collectBirthday(dogID: Int) async throws -> BirthdayCollectResponse {
         calls.append("birthday:\(dogID)"); try await claimGate()

@@ -1,8 +1,9 @@
 from django import forms
 from django.contrib import admin
+from django.db import transaction
 
 from .models import Breed, Dog, DogDailyGoal, DogGoalTarget
-from .goals import configure_target
+from .goals import configure_target, lock_goal_dog
 
 
 @admin.register(Breed)
@@ -54,11 +55,19 @@ class GoalTargetForm(forms.ModelForm):
         model = DogGoalTarget
         fields = ("dog", "effective_from", "target_active_seconds")
 
+    @transaction.atomic
     def clean(self):
         data = super().clean()
         if data.get("dog"):
-            self.instance.owner = data["dog"].owner
-            self.instance.dog_id_snapshot = data["dog"].pk
+            # Admin wraps validation and save in one transaction. Lock before
+            # form validation so competing revisions return form errors, not 500s.
+            dog = data["dog"] = lock_goal_dog(data["dog"])
+            self.instance.owner = dog.owner
+            self.instance.dog_id_snapshot = dog.pk
+            self.instance.owner_version = dog.goal_owner_version
+            if DogGoalTarget.objects.filter(dog_id_snapshot=dog.pk,
+                    effective_from=data.get("effective_from")).exists():
+                self.add_error("effective_from", "A target revision already exists for this dog and date.")
         return data
 
 

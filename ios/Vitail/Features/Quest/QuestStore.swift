@@ -17,6 +17,7 @@ final class QuestStore: ObservableObject {
     private var receivedAt: Date?
     private var serverDate: Date?
     private var generation = 0
+    private var snapshotRevision = 0
     private var isActive = true
     private var refreshTask: Task<Void, Never>?
     private var collectionTask: Task<Void, Never>?
@@ -109,22 +110,24 @@ final class QuestStore: ObservableObject {
         isRefreshing = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            await loadSnapshot(generation: requestGeneration)
+            var requestedRevision: Int
+            repeat {
+                requestedRevision = snapshotRevision
+                await loadSnapshot(generation: requestGeneration, revision: requestedRevision)
+            } while accepts(requestGeneration) && !Task.isCancelled && requestedRevision != snapshotRevision
+            // Release only this operation's state before waking its waiters.
+            if requestGeneration == generation { isRefreshing = false; refreshTask = nil }
         }
         refreshTask = task
         await task.value
-        if requestGeneration == generation { isRefreshing = false; refreshTask = nil }
     }
 
     func documentsDidChange() async {
-        // Finish older reads/claims before invalidating registrations changed in dog settings.
+        // Finish claims before invalidating registrations changed in dog settings.
         // Normal refreshes still retain confirmed awards when the network fails.
-        await collectionTask?.value
-        await refreshTask?.value
+        while let collectionTask { await collectionTask.value }
         guard isActive, isCurrentOwner else { return }
-        generation += 1
-        refreshTask = nil; collectionTask = nil
-        isRefreshing = false; collectingTaskID = nil
+        snapshotRevision += 1
         confirmedCollections = confirmedCollections.filter {
             $0.value.documentKind != .council && $0.value.documentKind != .microchip
         }
@@ -138,14 +141,11 @@ final class QuestStore: ObservableObject {
     }
 
     func walksDidChange() async {
-        // A read already in flight can predate the committed walk. Wait for it
-        // and any collection, then request a fresh server projection.
-        await collectionTask?.value
-        await refreshTask?.value
+        // Invalidate older reads immediately. Their owning operation fetches
+        // again, so polling and simultaneous change notifications stay serialized.
+        snapshotRevision += 1
+        while let collectionTask { await collectionTask.value }
         guard isActive, isCurrentOwner else { return }
-        generation += 1
-        refreshTask = nil; collectionTask = nil
-        isRefreshing = false; collectingTaskID = nil
         await refresh()
     }
 
@@ -157,6 +157,13 @@ final class QuestStore: ObservableObject {
         errorMessage = nil
         let operation = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer {
+                if requestGeneration == generation {
+                    collectingTaskID = nil
+                    isRefreshing = false
+                    collectionTask = nil
+                }
+            }
             do {
                 let receipt: QuestAwardReceipt
                 if selected.isStreak {
@@ -204,18 +211,13 @@ final class QuestStore: ObservableObject {
                 await onAward?(receipt)
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
                 isRefreshing = true
-                await loadSnapshot(generation: requestGeneration, afterAward: true)
+                await loadSnapshot(generation: requestGeneration, revision: snapshotRevision, afterAward: true)
             } catch {
                 if accepts(requestGeneration), !Task.isCancelled { errorMessage = error.localizedDescription }
             }
         }
         collectionTask = operation
         await operation.value
-        if requestGeneration == generation {
-            collectingTaskID = nil
-            isRefreshing = false
-            collectionTask = nil
-        }
     }
 
     func stop() {
@@ -236,13 +238,18 @@ final class QuestStore: ObservableObject {
     private func sortOrder(_ status: QuestTaskStatus) -> Int {
         switch status { case .ready: 0; case .inProgress: 1; case .collected: 2; case .unknown: 3 }
     }
-    private func loadSnapshot(generation requestGeneration: Int, afterAward: Bool = false) async {
+    private func loadSnapshot(generation requestGeneration: Int, revision: Int, afterAward: Bool = false) async {
+        let requestedAt = now()
         do {
             let result = try await service.fetchQuests()
-            guard accepts(requestGeneration), !Task.isCancelled else { return }
+            guard accepts(requestGeneration), revision == snapshotRevision, !Task.isCancelled else { return }
             guard let timestamp = QuestCalendar.parse(result.serverTime), result.timezone == "Australia/Melbourne",
                   QuestCalendar.dateString(timestamp) == result.localDate,
                   Set(result.tasks.map(\.id)).count == result.tasks.count else { throw APIError.invalidResponse }
+            if let goals = result.dailyGoals {
+                guard Set(goals.map(\.dogID)).count == goals.count,
+                      goals.allSatisfy({ $0.isValid(on: result.localDate) }) else { throw APIError.invalidResponse }
+            }
             let streakTasks = result.tasks.filter(\.isStreak)
             guard streakTasks.count <= 1, streakTasks.allSatisfy({ task in
                 task.isSupported && (task.status == .ready || task.status == .inProgress)
@@ -255,10 +262,12 @@ final class QuestStore: ObservableObject {
             }
             snapshot = result
             serverDate = timestamp
-            receivedAt = now()
+            // Include time spent awaiting the response when expiring calendars.
+            // A slow pre-midnight response must not start a fresh cache lifetime.
+            receivedAt = requestedAt
             errorMessage = nil
         } catch {
-            if accepts(requestGeneration), !Task.isCancelled {
+            if accepts(requestGeneration), revision == snapshotRevision, !Task.isCancelled {
                 errorMessage = afterAward ? "Your reward was collected. Pull down to refresh." : error.localizedDescription
             }
         }

@@ -1051,9 +1051,10 @@ components:
         active_seconds: {type: integer, minimum: 0}
         target_seconds: {type: integer, minimum: 1, nullable: true, description: 'Null means unconfigured; never implies completion'}
         completed: {type: boolean}
-        current_streak: {type: integer, minimum: 0, description: 'Per-dog completed-goal days; incomplete today preserves yesterday'}
+        current_streak: {type: integer, minimum: 0, description: 'Consecutive per-dog completed-goal days; eligible incomplete today preserves yesterday, but unconfigured or paused today resets to zero'}
         days:
           type: array
+          description: 'Seven consecutive Melbourne dates, oldest first, ending on local_date; never a fixed Monday-Sunday week'
           minItems: 7
           maxItems: 7
           items: {$ref: '#/components/schemas/GoalCalendarDay'}

@@ -67,6 +67,246 @@ class GoalFixture:
 
 
 class DailyGoalTests(GoalFixture, TestCase):
+    def test_paused_today_breaks_the_current_streak(self):
+        self.configure(60)
+        self.walk()
+        self.configure(None, self.day + timedelta(days=1))
+        self.now += timedelta(days=1)
+        self.assertEqual(self.progress()["current_streak"], 0)
+
+    def test_transfer_back_does_not_reactivate_old_configuration(self):
+        self.configure(60)
+        self.walk()
+        self.progress()
+        other = get_user_model().objects.create_user(email="transfer@example.com", display_name="Other")
+        self.dog.owner = other
+        self.dog.save(update_fields=("owner",))
+        self.assertIsNone(goal_progress(owner=other, now=self.now)[0]["target_seconds"])
+        self.dog.owner = self.owner
+        self.dog.save(update_fields=("owner",))
+        self.assertIsNone(self.progress()["target_seconds"])
+        self.assertEqual(self.progress()["active_seconds"], 0)
+        self.assertEqual(DogGoalTarget.objects.count(), 1)
+        self.assertEqual(DogDailyGoal.objects.count(), 1)
+
+    def test_dormant_settlement_rejects_transferred_dog(self):
+        self.configure(60)
+        self.walk()
+        self.progress()
+        award = self.reserve()
+        other = get_user_model().objects.create_user(email="settlement-transfer@example.com", display_name="Other")
+        self.dog.owner = other
+        self.dog.save(update_fields=("owner",))
+        with self.assertRaises(ValidationError):
+            settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)
+        self.assertFalse(PointEntry.objects.filter(earn_category="DAILY_GOAL").exists())
+
+    def test_admin_form_rejects_duplicate_effective_date(self):
+        from dogs.admin import GoalTargetForm
+        day = self.day + timedelta(days=1)
+        self.configure(60, day)
+        form = GoalTargetForm(data={"dog": self.dog.pk, "effective_from": day, "target_active_seconds": 120})
+        self.assertFalse(form.is_valid())
+
+    def test_future_revisions_use_effective_order_and_pause_cannot_bridge_runs(self):
+        self.configure(60)
+        self.walk()
+        self.configure(180, self.day + timedelta(days=3))
+        self.configure(None, self.day + timedelta(days=1))
+        self.configure(120, self.day + timedelta(days=2))
+        self.now += timedelta(days=2)
+        self.walk(120)
+        result = self.progress()
+        self.assertEqual(result["current_streak"], 1)
+        self.assertEqual(result["target_seconds"], 120)
+        self.assertEqual([day["state"] for day in result["days"][-3:]], ["COMPLETED", "NOT_ELIGIBLE", "COMPLETED"])
+        self.assertEqual([day["date"] for day in result["days"]],
+                         [local_date(self.now) - timedelta(days=offset) for offset in range(6, -1, -1)])
+        self.now += timedelta(days=1)
+        self.assertEqual(self.progress()["target_seconds"], 180)
+
+    def test_new_owner_needs_new_target_and_gets_only_new_walking_time(self):
+        old_target = self.configure(60)
+        self.walk()
+        self.progress()
+        original = self.owner
+        self.owner = get_user_model().objects.create_user(email="new-owner@example.com", display_name="New")
+        self.dog.owner = self.owner
+        self.dog.save(update_fields=("owner",))
+        self.assertIsNone(self.progress()["target_seconds"])
+        target = self.configure(120, self.day + timedelta(days=1))
+        self.assertNotEqual(target.owner_version, old_target.owner_version)
+        self.now += timedelta(days=1)
+        self.walk(60)
+        result = self.progress()
+        self.assertEqual((result["active_seconds"], result["completed"]), (60, False))
+        self.assertEqual(result["days"][-2]["state"], "NOT_ELIGIBLE")
+        self.assertEqual(DogDailyGoal.objects.get(local_date=self.day).owner, original)
+
+    def test_configuration_rejects_a_stale_owner_reference(self):
+        stale = Dog.objects.get(pk=self.dog.pk)
+        self.dog.owner = get_user_model().objects.create_user(email="stale-owner@example.com", display_name="New")
+        self.dog.save(update_fields=("owner",))
+        with self.assertRaises(ModelValidationError):
+            self.configure(dog=stale)
+        self.assertFalse(DogGoalTarget.objects.exists())
+
+    def test_stale_owner_edit_cannot_transfer_the_dog_back(self):
+        from types import SimpleNamespace
+        from django.http import Http404
+        from dogs.serializers import DogSerializer
+        stale = Dog.objects.get(pk=self.dog.pk)
+        other = get_user_model().objects.create_user(email="stale-edit@example.com", display_name="Other")
+        self.dog.owner = other
+        self.dog.save(update_fields=("owner",))
+        serializer = DogSerializer(stale, data={"name": "Stale rename"}, partial=True,
+            context={"request": SimpleNamespace(user=self.owner)})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        with self.assertRaises(Http404):
+            serializer.save()
+        self.dog.refresh_from_db()
+        self.assertEqual(self.dog.owner_id, other.pk)
+
+    def test_stale_owner_delete_cannot_delete_transferred_dog(self):
+        from types import SimpleNamespace
+        from django.http import Http404
+        from dogs.views import DogDetailView
+        stale = Dog.objects.get(pk=self.dog.pk)
+        other = get_user_model().objects.create_user(email="stale-delete@example.com", display_name="Other")
+        self.dog.owner = other
+        self.dog.save(update_fields=("owner",))
+        view = DogDetailView()
+        view.request = SimpleNamespace(user=self.owner)
+        with self.assertRaises(Http404):
+            view.perform_destroy(stale)
+        self.assertTrue(Dog.objects.filter(pk=self.dog.pk, owner=other).exists())
+
+    def test_target_save_and_delete_cannot_rewrite_history(self):
+        target = self.configure(60)
+        target.target_active_seconds = 1
+        with self.assertRaises(ModelValidationError):
+            target.save()
+        with self.assertRaises(ModelValidationError):
+            target.delete()
+        target.refresh_from_db()
+        self.assertEqual(target.target_active_seconds, 60)
+
+    def test_exact_configuration_start_and_unselected_dogs_do_not_qualify(self):
+        self.configure(60)
+        self.now -= timedelta(minutes=1)  # fixture walk starts exactly when configured
+        self.walk()
+        self.assertEqual(self.progress()["active_seconds"], 0)
+        other = Dog.objects.create(owner=self.owner, breed=self.dog.breed, name="Other", age_months=12,
+            size="SMALL", is_brachycephalic=False)
+        self.configure(60, dog=other)
+        self.walk(dogs=[other])
+        result = goal_progress(owner=self.owner, now=self.now)
+        self.assertEqual([row["active_seconds"] for row in result], [0, 60])
+
+    def test_upload_deadline_uses_elapsed_time_across_both_dst_changes(self):
+        from datetime import UTC
+        from walks.services import validated_activity
+        for start in (datetime(2026, 10, 4, 0, 30, tzinfo=MELBOURNE),
+                      datetime(2026, 4, 5, 0, 30, tzinfo=MELBOURNE)):
+            samples = [dict(latitude=0, longitude=i * 0.0001,
+                recorded_at=start + timedelta(seconds=i * 10), accuracy_m=5, is_simulated=False) for i in range(7)]
+            self.now = (start.astimezone(UTC) + timedelta(hours=12)).astimezone(MELBOURNE)
+            self.assertEqual(validated_activity(started_at=start, ended_at=start + timedelta(seconds=60), samples=samples).active_seconds, 60)
+            self.now += timedelta(microseconds=1)
+            with self.assertRaises(ValidationError):
+                validated_activity(started_at=start, ended_at=start + timedelta(seconds=60), samples=samples)
+
+    def test_frozen_results_are_not_recomputed(self):
+        self.configure(60)
+        walk = self.walk()
+        self.now += timedelta(days=1)
+        self.progress()
+        goal = DogDailyGoal.objects.get(local_date=self.day)
+        self.assertTrue(goal.final_goal_met)
+        Walk.objects.filter(pk=walk.pk).update(active_seconds=0)
+        result = self.progress()
+        self.assertEqual(result["days"][-2]["active_seconds"], 60)
+        self.assertEqual(result["days"][-2]["state"], "COMPLETED")
+
+    def test_goal_definition_and_http_requests_cannot_enable_payouts(self):
+        from quests.models import QuestDefinition
+        QuestDefinition.objects.update_or_create(code="DAILY_GOAL", defaults={"is_enabled": True, "title": "Daily goal"})
+        self.configure(60)
+        self.walk()
+        client = APIClient()
+        self.assertEqual(client.get("/api/quests").status_code, 401)
+        client.force_authenticate(self.owner)
+        self.assertTrue(client.get("/api/quests").data["daily_goals"][0]["completed"])
+        self.assertEqual(client.post("/api/quests", {"required_goal_ids": [1]}).status_code, 405)
+        self.assertEqual(client.post("/api/quests/goals/collect/", {}).status_code, 404)
+        self.assertFalse(QuestAward.objects.filter(kind="DAILY_GOAL").exists())
+        self.assertFalse(PointEntry.objects.filter(earn_category="DAILY_GOAL").exists())
+
+    def test_admin_duplicate_returns_form_error_and_history_is_read_only(self):
+        from django.urls import reverse
+        self.owner.is_staff = self.owner.is_superuser = True
+        self.owner.save(update_fields=("is_staff", "is_superuser"))
+        self.client.force_login(self.owner)
+        day = self.day + timedelta(days=1)
+        target = self.configure(60, day)
+        response = self.client.post(reverse("admin:dogs_doggoaltarget_add"), {
+            "dog": self.dog.pk, "effective_from": day.isoformat(), "target_active_seconds": 120, "_save": "Save"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A target revision already exists")
+        self.assertEqual(self.client.post(reverse("admin:dogs_doggoaltarget_change", args=[target.pk]), {}).status_code, 403)
+        self.assertEqual(self.client.post(reverse("admin:dogs_doggoaltarget_delete", args=[target.pk]), {"post": "yes"}).status_code, 403)
+        self.assertEqual(DogGoalTarget.objects.count(), 1)
+        self.owner.is_superuser = False
+        self.owner.save(update_fields=("is_superuser",))
+        self.assertEqual(self.client.get(reverse("admin:dogs_doggoaltarget_add")).status_code, 403)
+
+    def test_dormant_settlement_rejects_malformed_expired_or_foreign_qualifications(self):
+        self.configure(60)
+        self.walk()
+        self.progress()
+        award = self.reserve()
+        original = award.eligibility_snapshot
+        for snapshot in ([1], {**original, "required_goal_ids": [[1]]}, {**original, "required_goal_ids": [True]},
+                         {**original, "reward_scope": {}}, {**original, "approved_policy_version": " "}):
+            QuestAward.objects.filter(pk=award.pk).update(eligibility_snapshot=snapshot)
+            with self.subTest(snapshot=snapshot), self.assertRaises(ValidationError):
+                settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)
+        QuestAward.objects.filter(pk=award.pk).update(eligibility_snapshot=original, claim_expires_at=self.now)
+        with self.assertRaises(ValidationError):
+            settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)
+        other = get_user_model().objects.create_user(email="foreign-award@example.com", display_name="Other")
+        with self.assertRaises(ValidationError):
+            settle_reserved_goal(owner=other, qualification_id=award.pk, now=self.now)
+        self.assertFalse(PointEntry.objects.filter(earn_category="DAILY_GOAL").exists())
+
+    def test_dormant_settlement_rejects_deleted_or_returned_dog(self):
+        self.configure(60)
+        self.walk()
+        self.progress()
+        award = self.reserve()
+        other = get_user_model().objects.create_user(email="return-award@example.com", display_name="Other")
+        for owner in (other, self.owner):
+            self.dog.owner = owner
+            self.dog.save(update_fields=("owner",))
+        with self.assertRaises(ValidationError):
+            settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)
+        self.dog.delete()
+        with self.assertRaises(ValidationError):
+            settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)
+
+    def test_dormant_full_reward_fits_exact_baseline_and_retry_after_expiry_is_not_a_new_credit(self):
+        self.configure(60)
+        self.walk()
+        self.progress()
+        self.credit(40, "WALK")
+        self.credit(12, "CHECK_IN")
+        award = self.reserve()
+        self.assertTrue(settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)["created"])
+        self.assertEqual(daily_activity_points(self.owner, self.day), 72)
+        self.now += timedelta(days=2)
+        self.assertFalse(settle_reserved_goal(owner=self.owner, qualification_id=award.pk, now=self.now)["created"])
+        self.assertEqual(PointEntry.objects.filter(earn_category="DAILY_GOAL").count(), 1)
+
     def test_unconfigured_and_new_days_are_not_missed(self):
         result = self.progress()
         self.assertIsNone(result["target_seconds"])
@@ -302,6 +542,80 @@ class DailyGoalTests(GoalFixture, TestCase):
 
 @skipUnless(connection.vendor == "mysql", "Requires MySQL row locks; SQLite cannot verify concurrency")
 class GoalConcurrencyTests(GoalFixture, TransactionTestCase):
+    def parallel(self, operation):
+        barrier = Barrier(2)
+        def worker(index):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=10)
+                return operation(index)
+            finally:
+                close_old_connections()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(worker, index) for index in range(2)]
+            return [future.result(timeout=20) for future in futures]
+
+    def test_competing_configurations_create_one_revision(self):
+        def configure(index):
+            try:
+                self.configure(60 + index)
+                return "created"
+            except ModelValidationError:
+                return "invalid"
+        self.assertCountEqual(self.parallel(configure), ["created", "invalid"])
+        self.assertEqual(DogGoalTarget.objects.count(), 1)
+
+    def test_parallel_reads_create_one_snapshot(self):
+        self.configure(60)
+        self.parallel(lambda _: self.progress())
+        self.assertEqual(DogDailyGoal.objects.count(), 1)
+
+    def test_upload_and_snapshot_read_are_serialized(self):
+        self.configure(60)
+        start = self.now + timedelta(minutes=1)
+        self.now = start + timedelta(minutes=1)
+        args = dict(owner=self.owner, request_id=uuid4(), started_at=start, ended_at=self.now, dog_ids=[self.dog.pk],
+            samples=[dict(latitude=0, longitude=i * 0.0001, recorded_at=start + timedelta(seconds=i * 10),
+                          accuracy_m=5, is_simulated=False) for i in range(7)])
+        self.parallel(lambda index: create_walk(**args) if index == 0 else self.progress())
+        self.assertEqual(self.progress()["active_seconds"], 60)
+        self.assertEqual(DogDailyGoal.objects.count(), 1)
+
+    def test_transfer_and_configuration_do_not_leak_targets(self):
+        other = get_user_model().objects.create_user(email="concurrent-transfer@example.com", display_name="Other")
+        def operation(index):
+            if index == 0:
+                dog = Dog.objects.get(pk=self.dog.pk)
+                dog.owner = other
+                dog.save(update_fields=("owner",))
+            else:
+                try:
+                    self.configure(60)
+                except ModelValidationError:
+                    pass
+        self.parallel(operation)
+        self.assertIsNone(goal_progress(owner=other, now=self.now)[0]["target_seconds"])
+
+    def test_competing_reserved_qualifications_cannot_exceed_combined_cap(self):
+        self.configure(60)
+        self.walk()
+        self.progress()
+        self.credit(40, "WALK")
+        self.credit(12, "CHECK_IN")
+        first = self.reserve()
+        second = QuestAward.objects.get(pk=first.pk)
+        second.pk = None
+        second.qualification_key += ":second-synthetic-scope"
+        second.save()
+        def settle(index):
+            try:
+                settle_reserved_goal(owner=self.owner, qualification_id=(first.pk, second.pk)[index], now=self.now)
+                return "created"
+            except ValidationError:
+                return "cap"
+        self.assertCountEqual(self.parallel(settle), ["created", "cap"])
+        self.assertEqual(daily_activity_points(self.owner, self.day), 72)
+
     def test_concurrent_reserved_award_settlement_creates_one_credit(self):
         self.configure(60)
         self.walk()
