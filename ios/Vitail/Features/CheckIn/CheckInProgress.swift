@@ -3,8 +3,20 @@ import Combine
 
 /// The venue feature supplies verified progress and the walking/check-in daily total.
 /// Wallet balance and unrelated bonuses never determine venue availability.
-struct VenueCheckInProgress: Equatable, Identifiable, Sendable {
-    enum Status: String, Sendable { case inProgress, ready, collected, cancelled }
+struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
+    enum Status: String, Decodable, Sendable {
+        case inProgress, ready, collected, cancelled
+
+        init(from decoder: Decoder) throws {
+            switch try decoder.singleValueContainer().decode(String.self).uppercased() {
+            case "IN_PROGRESS", "INPROGRESS": self = .inProgress
+            case "READY": self = .ready
+            case "COLLECTED": self = .collected
+            case "CANCELLED": self = .cancelled
+            default: throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Unknown check-in status")
+            }
+        }
+    }
 
     let id: String
     let venueID: Int
@@ -16,6 +28,45 @@ struct VenueCheckInProgress: Equatable, Identifiable, Sendable {
     let updatedAt: Date
     let rewardPoints: Int
     var collectedAt: Date? = nil
+
+    init(id: String, venueID: Int, venueName: String, photo: String?, requiredSeconds: Int,
+         verifiedSeconds: Int, status: Status, updatedAt: Date, rewardPoints: Int, collectedAt: Date? = nil) {
+        self.id = id
+        self.venueID = venueID
+        self.venueName = venueName
+        self.photo = photo
+        self.requiredSeconds = requiredSeconds
+        self.verifiedSeconds = verifiedSeconds
+        self.status = status
+        self.updatedAt = updatedAt
+        self.rewardPoints = rewardPoints
+        self.collectedAt = collectedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, photo, status
+        case venueID = "venue_id"
+        case venueName = "venue_name"
+        case requiredSeconds = "required_seconds"
+        case verifiedSeconds = "verified_seconds"
+        case updatedAt = "updated_at"
+        case rewardPoints = "reward_points"
+        case collectedAt = "collected_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        venueID = try values.decode(Int.self, forKey: .venueID)
+        venueName = try values.decode(String.self, forKey: .venueName)
+        photo = try values.decodeIfPresent(String.self, forKey: .photo)
+        requiredSeconds = try values.decode(Int.self, forKey: .requiredSeconds)
+        verifiedSeconds = try values.decode(Int.self, forKey: .verifiedSeconds)
+        status = try values.decode(Status.self, forKey: .status)
+        updatedAt = try Self.decodeDate(values, key: .updatedAt)
+        rewardPoints = try values.decode(Int.self, forKey: .rewardPoints)
+        collectedAt = try values.decodeIfPresent(String.self, forKey: .collectedAt).flatMap(Self.parseDate)
+    }
 
     var progressRatio: Double {
         guard requiredSeconds > 0 else { return 0 }
@@ -29,13 +80,30 @@ struct VenueCheckInProgress: Equatable, Identifiable, Sendable {
             && (status != .ready || verifiedSeconds >= requiredSeconds)
             && (status != .collected || collectedAt?.timeIntervalSince1970.isFinite == true)
     }
+
+    private static func decodeDate(_ values: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date {
+        let string = try values.decode(String.self, forKey: key)
+        guard let date = parseDate(string) else { throw DecodingError.dataCorruptedError(forKey: key, in: values, debugDescription: "Invalid API date") }
+        return date
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        ISO8601DateFormatter().date(from: value) ?? DateFormatter.vitailAPIDate.date(from: value)
+    }
 }
 
-struct CheckInProgressSnapshot: Equatable, Sendable {
+struct CheckInProgressSnapshot: Decodable, Equatable, Sendable {
     let items: [VenueCheckInProgress]
     let localDate: String
     let earnedPointsToday: Int
     let serverTime: Date
+
+    init(items: [VenueCheckInProgress], localDate: String, earnedPointsToday: Int, serverTime: Date) {
+        self.items = items
+        self.localDate = localDate
+        self.earnedPointsToday = earnedPointsToday
+        self.serverTime = serverTime
+    }
 
     static let dailyLimit = 72
     static let maximumVenues = 4
@@ -56,14 +124,59 @@ struct CheckInProgressSnapshot: Equatable, Sendable {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case localDate = "local_date"
+        case earnedPointsToday = "earned_points_today"
+        case serverTime = "server_time"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        items = try values.decode([VenueCheckInProgress].self, forKey: .items)
+        localDate = try values.decode(String.self, forKey: .localDate)
+        earnedPointsToday = try values.decode(Int.self, forKey: .earnedPointsToday)
+        let value = try values.decode(String.self, forKey: .serverTime)
+        guard let parsed = ISO8601DateFormatter().date(from: value) ?? DateFormatter.vitailAPIDate.date(from: value) else {
+            throw DecodingError.dataCorruptedError(forKey: .serverTime, in: values, debugDescription: "Invalid API date")
+        }
+        serverTime = parsed
+    }
 }
 
-struct CheckInCollectionReceipt: Equatable, Sendable {
+struct CheckInCollectionReceipt: Decodable, Equatable, Sendable {
     let checkIn: VenueCheckInProgress
     let awardedPoints: Int
     let walletBalance: Int
     let dailyEarnedPoints: Int
     let localDate: String
+
+    init(checkIn: VenueCheckInProgress, awardedPoints: Int, walletBalance: Int, dailyEarnedPoints: Int, localDate: String) {
+        self.checkIn = checkIn
+        self.awardedPoints = awardedPoints
+        self.walletBalance = walletBalance
+        self.dailyEarnedPoints = dailyEarnedPoints
+        self.localDate = localDate
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case checkIn = "check_in"
+        case awardedPoints = "awarded_points"
+        case walletBalance = "wallet_balance"
+        case dailyEarnedPoints = "daily_earned_points"
+        case localDate = "local_date"
+    }
+}
+
+private extension DateFormatter {
+    static let vitailAPIDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX"
+        return formatter
+    }()
 }
 
 protocol CheckInProgressServing: Sendable {

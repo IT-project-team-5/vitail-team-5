@@ -33,6 +33,8 @@
 	<string>Vitail shows your position and records walks you start, including while locked or in the background. Routes stay on this device; location samples are sent to your server to validate walking points. Pause or finish to stop background recording.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
+		<key>CheckIn</key>
+		<string>Precise location is needed while you choose to verify a venue check-in.</string>
 		<key>WalkTracking</key>
 		<string>Precise location is needed to validate your walking distance and award points fairly.</string>
 	</dict>
