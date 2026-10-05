@@ -7,6 +7,8 @@ struct VitailApp: App {
     private let dogService: DogService
     private let redemptionService: RedemptionService
     private let walkService: WalkService
+    private let venueCheckInService: VenueCheckInService
+    private let checkInProgressService: CheckInProgressService
     private let cafeProfileService: CafeProfileService
     private let cafeProductsService: CafeProductsService
     private let questService: QuestService
@@ -21,6 +23,8 @@ struct VitailApp: App {
         dogService = dependencies.dogService
         redemptionService = dependencies.redemptionService
         walkService = dependencies.walkService
+        venueCheckInService = dependencies.venueCheckInService
+        checkInProgressService = dependencies.checkInProgressService
         cafeProfileService = dependencies.cafeProfileService
         cafeProductsService = dependencies.cafeProductsService
         questService = dependencies.questService
@@ -35,6 +39,8 @@ struct VitailApp: App {
                 dogService: dogService,
                 redemptionService: redemptionService,
                 walkService: walkService,
+                venueCheckInService: venueCheckInService,
+                checkInProgressService: checkInProgressService,
                 cafeProfileService: cafeProfileService,
                 cafeProductsService: cafeProductsService,
                 questService: questService,

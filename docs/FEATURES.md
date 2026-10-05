@@ -28,7 +28,7 @@ complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 | Friends/blocks/leaderboard | Foundation / teammate integration | Friendship/block schema only; no social API or working leaderboard tab/endpoint in this app |
 | OAuth, password reset, account deletion | Later delivery | Email login remains current; social identity/account erasure flows are not complete |
 | Chat, push, charity | Later delivery | Optional identity/chat/charity/push tables are not created; no working UI/API is claimed |
-| Social sharing | Later delivery | No completed sharing flow; no separate public-post database required by this scope |
+| Social sharing | Connected | Completed walks can render a local image card with optional date, dog names and confirmed points; route and location are excluded, and sharing uses the system sheet with no public-post database |
 
 The 22-table core foundation includes a Walk–Dog relation and excludes Django
 system tables. A migrated table is not proof that its feature is enabled.

@@ -96,6 +96,18 @@
 		F10000000000000000000002 /* DogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DogDetailView.swift */; };
 		F10000000000000000000003 /* AvatarProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000003 /* AvatarProfileTests.swift */; };
 		F10000000000000000000004 /* SlideToCollect.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000004 /* SlideToCollect.swift */; };
+		F51000000000000000000001 /* VenueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000001 /* VenueModels.swift */; };
+		F51000000000000000000002 /* VenueService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000002 /* VenueService.swift */; };
+		F51000000000000000000003 /* CheckInLocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000003 /* CheckInLocationManager.swift */; };
+		F51000000000000000000004 /* VenuesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000004 /* VenuesViewModel.swift */; };
+		F51000000000000000000005 /* VenuesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000005 /* VenuesView.swift */; };
+		F51000000000000000000006 /* CheckInProgressService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000006 /* CheckInProgressService.swift */; };
+		F51000000000000000000007 /* VenuesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50000000000000000000007 /* VenuesTests.swift */; };
+		000000000000000000000080 /* ActivityShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000080 /* ActivityShareModels.swift */; };
+		000000000000000000000081 /* DogIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000081 /* DogIllustration.swift */; };
+		000000000000000000000082 /* ActivityShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000082 /* ActivityShareCard.swift */; };
+		000000000000000000000083 /* ActivityShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000083 /* ActivityShareView.swift */; };
+		000000000000000000000084 /* ActivityShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000084 /* ActivityShareTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -206,6 +218,18 @@
 		F20000000000000000000003 /* AvatarProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarProfileTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000004 /* SlideToCollect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideToCollect.swift; sourceTree = "<group>"; };
 		F6ECF0F73A9474B166766F7F /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
+		F50000000000000000000001 /* VenueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueModels.swift; sourceTree = "<group>"; };
+		F50000000000000000000002 /* VenueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueService.swift; sourceTree = "<group>"; };
+		F50000000000000000000003 /* CheckInLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInLocationManager.swift; sourceTree = "<group>"; };
+		F50000000000000000000004 /* VenuesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuesViewModel.swift; sourceTree = "<group>"; };
+		F50000000000000000000005 /* VenuesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuesView.swift; sourceTree = "<group>"; };
+		F50000000000000000000006 /* CheckInProgressService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressService.swift; sourceTree = "<group>"; };
+		F50000000000000000000007 /* VenuesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenuesTests.swift; sourceTree = "<group>"; };
+		100000000000000000000080 /* ActivityShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareModels.swift; sourceTree = "<group>"; };
+		100000000000000000000081 /* DogIllustration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogIllustration.swift; sourceTree = "<group>"; };
+		100000000000000000000082 /* ActivityShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareCard.swift; sourceTree = "<group>"; };
+		100000000000000000000083 /* ActivityShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareView.swift; sourceTree = "<group>"; };
+		100000000000000000000084 /* ActivityShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -340,6 +364,8 @@
 				20D000000000000000000001 /* CafeOrders */,
 				213000000000000000000001 /* CafeProfile */,
 				214000000000000000000001 /* CafeProducts */,
+				216000000000000000000001 /* Sharing */,
+				F52000000000000000000001 /* Venues */,
 				20F000000000000000000001 /* OwnerProfile */,
 				210000000000000000000001 /* Dog */,
 				212000000000000000000001 /* Walk */,
@@ -405,6 +431,8 @@
 				00000000000000000000E210 /* WalkMVPIntegrationTests.swift */,
 				10000000000000000000002F /* CafeProfileTests.swift */,
 				100000000000000000000034 /* CafeProductsTests.swift */,
+				F50000000000000000000007 /* VenuesTests.swift */,
+				100000000000000000000084 /* ActivityShareTests.swift */,
 				10000000000000000000002A /* WalkTests.swift */,
 				100000000000000000000024 /* APIIntegrationTests.swift */,
 				100000000000000000000023 /* RedemptionTests.swift */,
@@ -480,6 +508,30 @@
 			path = CafeProducts;
 			sourceTree = "<group>";
 		};
+		216000000000000000000001 /* Sharing */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000080 /* ActivityShareModels.swift */,
+				100000000000000000000081 /* DogIllustration.swift */,
+				100000000000000000000082 /* ActivityShareCard.swift */,
+				100000000000000000000083 /* ActivityShareView.swift */,
+			);
+			path = Sharing;
+			sourceTree = "<group>";
+		};
+
+		F52000000000000000000001 /* Venues */ = {
+			isa = PBXGroup;
+			children = (
+				F50000000000000000000001 /* VenueModels.swift */,
+				F50000000000000000000002 /* VenueService.swift */,
+				F50000000000000000000003 /* CheckInLocationManager.swift */,
+				F50000000000000000000004 /* VenuesViewModel.swift */,
+				F50000000000000000000005 /* VenuesView.swift */,
+			);
+			path = Venues;
+			sourceTree = "<group>";
+		};
 		222CA46EF530402A1EFB0C1D /* Documents */ = {
 			isa = PBXGroup;
 			children = (
@@ -498,6 +550,7 @@
 			children = (
 				A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */,
 				36B85E0AEB05C085BEFA3A75 /* CheckInProgress.swift */,
+				F50000000000000000000006 /* CheckInProgressService.swift */,
 			);
 			path = CheckIn;
 			sourceTree = "<group>";
@@ -612,6 +665,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				000000000000000000000080 /* ActivityShareModels.swift in Sources */,
+				000000000000000000000081 /* DogIllustration.swift in Sources */,
+				000000000000000000000082 /* ActivityShareCard.swift in Sources */,
+				000000000000000000000083 /* ActivityShareView.swift in Sources */,
+				F51000000000000000000001 /* VenueModels.swift in Sources */,
+				F51000000000000000000002 /* VenueService.swift in Sources */,
+				F51000000000000000000003 /* CheckInLocationManager.swift in Sources */,
+				F51000000000000000000004 /* VenuesViewModel.swift in Sources */,
+				F51000000000000000000005 /* VenuesView.swift in Sources */,
+				F51000000000000000000006 /* CheckInProgressService.swift in Sources */,
 				6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */,
 				D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */,
 				7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */,
@@ -684,6 +747,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				000000000000000000000084 /* ActivityShareTests.swift in Sources */,
+				F51000000000000000000007 /* VenuesTests.swift in Sources */,
 				6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */,
 				DFDB93C3237E58D028699C37 /* QuestTests.swift in Sources */,
 				0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */,

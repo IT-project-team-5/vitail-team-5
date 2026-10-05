@@ -7,6 +7,7 @@ struct OwnerHomeView: View {
         case account = "Account"
         case walk = "Walk"
         case quest = "Quest"
+        case venues = "Venues"
         case redeem = "Redeem"
 
         var id: Self { self }
@@ -19,6 +20,8 @@ struct OwnerHomeView: View {
                 return "figure.walk"
             case .quest:
                 return "flag"
+            case .venues:
+                return "mappin.and.ellipse"
             case .redeem:
                 return "gift"
             }
@@ -32,6 +35,8 @@ struct OwnerHomeView: View {
                 return "figure.walk"
             case .quest:
                 return "flag.fill"
+            case .venues:
+                return "mappin.and.ellipse"
             case .redeem:
                 return "gift.fill"
             }
@@ -47,6 +52,7 @@ struct OwnerHomeView: View {
     @StateObject private var onboardingDogs: DogViewModel
     @StateObject private var questStore: QuestStore
     @StateObject private var checkIns: CheckInProgressStore
+    @StateObject private var venueCheckIns: VenuesViewModel
     @State private var selection: Page = .walk
     @State private var hasCheckedOnboarding = false
     @State private var isAddingFirstDog = false
@@ -60,6 +66,7 @@ struct OwnerHomeView: View {
         walkService: any WalkServing = WalkService(),
         questService: any QuestServing = QuestService(),
         checkInService: (any CheckInProgressServing)? = nil,
+        venueCheckInService: any VenueCheckInServing = VenueCheckInService(),
         documentService: (any DocumentServing)? = nil
     ) {
         self.user = user
@@ -68,6 +75,7 @@ struct OwnerHomeView: View {
         self.documentService = documentService
         _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
         _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
+        _venueCheckIns = StateObject(wrappedValue: VenuesViewModel(service: venueCheckInService))
         _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService))
         _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
             ownerID: user.id, session: session, dogService: dogService, walkService: walkService
@@ -95,6 +103,8 @@ struct OwnerHomeView: View {
                               onOpenDocuments: documentService != nil
                                 ? { route in documentSelection = route } : nil)
                         .tag(Page.quest)
+                    VenuesView(viewModel: venueCheckIns)
+                        .tag(Page.venues)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)
                 }
@@ -150,14 +160,16 @@ struct OwnerHomeView: View {
                 async let wallet: Void = redemptionViewModel.refresh()
                 async let quests: Void = questStore.refresh()
                 async let venues: Void = checkIns.refresh()
-                _ = await (walks, wallet, quests, venues)
+                async let venueMap: Void = venueCheckIns.load()
+                _ = await (walks, wallet, quests, venues, venueMap)
                 // Both progress surfaces observe the same server-backed store.
                 // Tab changes/backgrounding cancel this task and its polling.
-                while !Task.isCancelled && (selection == .walk || selection == .quest) {
+                while !Task.isCancelled && (selection == .walk || selection == .quest || selection == .venues) {
                     do { try await Task.sleep(for: .seconds(5)) }
                     catch { break }
                     guard !Task.isCancelled else { break }
                     await checkIns.refresh()
+                    if selection == .venues { await venueCheckIns.load() }
                     if selection == .quest { await questStore.refresh() }
                 }
             }
@@ -187,9 +199,18 @@ struct OwnerHomeView: View {
             async let quests: Void? = questStore?.refresh()
             _ = await (wallet, quests)
         }
-        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak checkIns] in
+        venueCheckIns.onProgressChanged = { [weak checkIns] in
+            await checkIns?.refresh()
+        }
+        venueCheckIns.onPointsAwarded = { [weak redemptionViewModel, weak questStore] in
+            async let wallet: Void? = redemptionViewModel?.refresh()
+            async let quests: Void? = questStore?.refresh()
+            _ = await (wallet, quests)
+        }
+        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak checkIns, weak venueCheckIns] in
             questStore?.stop()
             checkIns?.stop()
+            await venueCheckIns?.prepareForLogout()
             await walkCoordinator?.prepareForLogout()
         }
     }

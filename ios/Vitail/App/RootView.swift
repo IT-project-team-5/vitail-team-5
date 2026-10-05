@@ -7,6 +7,8 @@ struct RootView: View {
     let dogService: any DogServicing
     let redemptionService: any RedemptionServing
     let walkService: any WalkServing
+    let venueCheckInService: any VenueCheckInServing
+    let checkInProgressService: any CheckInProgressServing
     let cafeProfileService: any CafeProfileServing
     let cafeProductsService: any CafeProductsServing
     var questService: any QuestServing = QuestService()
@@ -50,6 +52,7 @@ struct RootView: View {
                 user: user, session: session,
                 dogService: dogService, redemptionService: redemptionService,
                 walkService: walkService, questService: questService,
+                checkInService: checkInProgressService, venueCheckInService: venueCheckInService,
                 documentService: documentService
             )
             .id(user.id)

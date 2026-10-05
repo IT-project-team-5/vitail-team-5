@@ -6,6 +6,8 @@ struct AppDependencies: Sendable {
     let dogService: DogService
     let redemptionService: RedemptionService
     let walkService: WalkService
+    let venueCheckInService: VenueCheckInService
+    let checkInProgressService: CheckInProgressService
     let cafeProfileService: CafeProfileService
     let cafeProductsService: CafeProductsService
     let questService: QuestService
@@ -32,6 +34,8 @@ struct AppDependencies: Sendable {
             dogService: DogService(apiClient: authenticatedAPIClient),
             redemptionService: RedemptionService(apiClient: authenticatedAPIClient),
             walkService: WalkService(apiClient: authenticatedAPIClient),
+            venueCheckInService: VenueCheckInService(apiClient: authenticatedAPIClient),
+            checkInProgressService: CheckInProgressService(apiClient: authenticatedAPIClient),
             cafeProfileService: CafeProfileService(apiClient: authenticatedAPIClient),
             cafeProductsService: CafeProductsService(apiClient: authenticatedAPIClient),
             questService: QuestService(apiClient: authenticatedAPIClient),

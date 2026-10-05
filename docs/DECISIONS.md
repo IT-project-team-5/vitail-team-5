@@ -39,6 +39,7 @@ below are retained where other project documents cite them.
 | R59 / O18 resolved | Streak counts valid walking days per account in Melbourne. A missed day breaks the run; each new run can earn seven-day points, then 30/60/90… milestones. One progress bar shows only x / target, stays full until explicit Collect, then advances |
 | R60 (corrected) | Council registration awards 300 points per dog per actual registration period. Renewal opens after the confirmed document expiry, not a fixed 10 April date. Expired/superseded pending rewards disappear and cannot be collected. Unknown legacy expiry requires an evidence update without re-awarding paid points. Historical files, receipts and ledger entries remain private |
 | R61 | Dog settings manages current Council/microchip records, including paid/expired documents. Corrections retain the same entitlement and award zero points. Actual expiry is editable; its maximum confirmed expiry remains the renewal boundary, so edits never advance a reward. Original evidence and receipts remain private and unchanged |
+| R62 | Owners may create a local image card for a completed walk and choose its date, dog names and confirmed points. Routes, coordinates and place details are excluded; the system share sheet is the only distribution path. |
 
 The database foundation normalizes Venue, keeps one PointEntry ledger and adds
 specific daily-goal, check-in, live-location, net-walk and friendship records.
@@ -87,7 +88,7 @@ its clock or fabricate venue opportunities.
 | O19 | Net-walk proximity/time/consent, overlap calculation and cap membership; friend discovery/privacy/blocking behavior | Data foundations only. No matcher, exact live-position sharing or net-walk credit |
 | O20 | Minimum café purchase/offer duration and daily inventory policy | Preserve configured product prices and historical terms; no fiat checkout or automatic merchant settlement |
 
-Account reset/deletion, OAuth delivery, notifications/quiet hours, sharing and
+Account reset/deletion, OAuth delivery, notifications/quiet hours and
 chat need their own acceptance work. Keep exact location private by default;
 location consent, social visibility and ability to earn together are separate
 choices. Never infer consent from a friendship or an account role.
