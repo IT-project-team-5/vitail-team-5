@@ -3,12 +3,12 @@ import SwiftUI
 
 struct FriendsView: View {
     @ObservedObject var store: FriendsStore
-    @State private var query = ""
     @State private var pendingRemoval: SocialProfile?
     @State private var pendingBlock: SocialProfile?
 
     var body: some View {
         List {
+            friendsSection
             if let error = store.errorMessage {
                 Section {
                     Text(error).foregroundStyle(AppColors.error)
@@ -16,25 +16,44 @@ struct FriendsView: View {
                 }
             }
             if let notice = store.notice { Text(notice).foregroundStyle(AppColors.secondaryText) }
-            identitySection
-            privacySection
-            searchSection
             requestsSection
-            friendsSection
             netWalkingSection
             mapSection
+            privacySection
             blockedSection
         }
         .buttonStyle(.borderless)
         .scrollContentBackground(.hidden)
         .background(AppColors.background)
         .navigationTitle("Friends")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    AddFriendsView(store: store)
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "person.2")
+                            .resizable()
+                            .scaledToFit()
+                            .symbolRenderingMode(.monochrome)
+                            .frame(width: 30, height: 22)
+                            .frame(width: 36, height: 34, alignment: .bottomLeading)
+                        Image(systemName: "plus")
+                            .font(.system(size: 9, weight: .semibold))
+                            .frame(width: 9, height: 9)
+                    }
+                    .frame(width: 36, height: 34)
+                    .padding(4)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityHidden(true)
+                }
+                .tint(AppColors.brand)
+                .accessibilityLabel("Add friends")
+                .accessibilityIdentifier("friends-add-button")
+            }
+        }
         .refreshable { await store.refresh() }
         .task { await store.refresh() }
-        .task(id: query) {
-            do { try await Task.sleep(nanoseconds: 350_000_000) } catch { return }
-            await store.search(query)
-        }
         .overlay {
             if store.overview == nil && store.isRefreshing { ProgressView("Loading friends…") }
         }
@@ -54,18 +73,6 @@ struct FriendsView: View {
         } message: { Text("Blocking removes the friendship, ends Net-Walking and hides your profiles from each other.") }
     }
 
-    private var identitySection: some View {
-        Section("Your public ID") {
-            if let me = store.overview?.me {
-                Text(me.publicID).font(.footnote.monospaced()).textSelection(.enabled)
-                Button("Copy public ID") { UIPasteboard.general.string = me.publicID }
-                ShareLink(item: "Add me on Vitail using my public ID: \(me.publicID)") {
-                    Label("Share my Vitail ID", systemImage: "square.and.arrow.up")
-                }
-            } else { Text("Your ID will appear when connected.").foregroundStyle(AppColors.secondaryText) }
-        }
-    }
-
     private var privacySection: some View {
         Section {
             Toggle("Share walk location with friends", isOn: Binding(
@@ -80,31 +87,6 @@ struct FriendsView: View {
             Text("Both options are off by default. Location is shared only while recording a walk. Friends see your current walk location; other consenting walkers see an approximate nearby position. An accepted Net-Walking partner sees your walk location until either of you pauses, finishes or ends the pairing.")
         }
         .disabled(store.overview == nil || store.isWorking)
-    }
-
-    private var searchSection: some View {
-        Section("Find people") {
-            TextField("Name or public ID (at least 2 characters)", text: $query)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .accessibilityLabel("Search people by name or public ID")
-            if store.isSearching { ProgressView("Searching…") }
-            if query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2,
-               !store.isSearching, store.searchResults.isEmpty {
-                Text("No matching people.").foregroundStyle(AppColors.secondaryText)
-            }
-            ForEach(store.searchResults) { user in
-                VStack(alignment: .leading, spacing: 8) {
-                    profile(user)
-                    HStack {
-                        if isFriend(user) { Label("Friend", systemImage: "checkmark") }
-                        else if hasPendingRequest(user) { Text("Request pending").foregroundStyle(AppColors.secondaryText) }
-                        else { Button("Add friend") { Task { await store.sendRequest(user) } } }
-                        Spacer()
-                        Button("Block", role: .destructive) { pendingBlock = user }
-                    }.font(.subheadline).disabled(store.isWorking)
-                }.padding(.vertical, 4)
-            }
-        }
     }
 
     @ViewBuilder private var requestsSection: some View {
@@ -138,7 +120,7 @@ struct FriendsView: View {
     private var friendsSection: some View {
         Section("Friends") {
             if store.overview?.friends.isEmpty != false {
-                Text("Find someone by name or share your public ID to add your first friend.")
+                Text("Tap the add-friend icon to find people or share your public ID and add your first friend.")
                     .foregroundStyle(AppColors.secondaryText)
             }
             ForEach(store.overview?.friends ?? []) { friendship in
@@ -253,22 +235,113 @@ struct FriendsView: View {
     }
 
     private func profile(_ user: SocialProfile) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(AppColors.brand)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(name(user)).fontWeight(.medium)
-                Text(user.publicID).font(.caption.monospaced()).foregroundStyle(AppColors.secondaryText)
-                    .lineLimit(1).textSelection(.enabled)
+        SocialProfileRow(user: user)
+    }
+    private func name(_ user: SocialProfile) -> String { user.displayName.isEmpty ? "Vitail walker" : user.displayName }
+    private func visibleForNet(_ user: SocialProfile) -> Bool {
+        store.mapSnapshot.nearby.contains { $0.user.id == user.id }
+    }
+}
+
+private struct AddFriendsView: View {
+    @ObservedObject var store: FriendsStore
+    @State private var query = ""
+    @State private var pendingBlock: SocialProfile?
+
+    var body: some View {
+        List {
+            searchSection
+            identitySection
+            if let error = store.errorMessage {
+                Section {
+                    Text(error).foregroundStyle(AppColors.error)
+                    Button("Try Again") {
+                        Task {
+                            await store.refresh()
+                            await store.search(query)
+                        }
+                    }
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .scrollContentBackground(.hidden)
+        .background(AppColors.background)
+        .navigationTitle("Add friends")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await store.refresh() }
+        .task { await store.refresh() }
+        .task(id: query) {
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 {
+                do { try await Task.sleep(nanoseconds: 350_000_000) } catch { return }
+            }
+            await store.search(query)
+        }
+        .confirmationDialog("Block this user?", isPresented: Binding(
+            get: { pendingBlock != nil }, set: { if !$0 { pendingBlock = nil } }
+        ), titleVisibility: .visible) {
+            if let user = pendingBlock {
+                Button("Block \(name(user))", role: .destructive) { Task { await store.block(user) } }
+            }
+        } message: { Text("Blocking removes the friendship, ends Net-Walking and hides your profiles from each other.") }
+    }
+
+    private var identitySection: some View {
+        Section("Your public ID") {
+            if let me = store.overview?.me {
+                Text(me.publicID).font(.footnote.monospaced()).textSelection(.enabled)
+                Button("Copy public ID") { UIPasteboard.general.string = me.publicID }
+                ShareLink(item: "Add me on Vitail using my public ID: \(me.publicID)") {
+                    Label("Share my Vitail ID", systemImage: "square.and.arrow.up")
+                }
+            } else { Text("Your ID will appear when connected.").foregroundStyle(AppColors.secondaryText) }
+        }
+    }
+
+    private var searchSection: some View {
+        Section("Find people") {
+            TextField("Name or public ID (at least 2 characters)", text: $query)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .accessibilityLabel("Search people by name or public ID")
+            if store.isSearching { ProgressView("Searching…") }
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2,
+               !store.isSearching, store.searchResults.isEmpty {
+                Text("No matching people.").foregroundStyle(AppColors.secondaryText)
+            }
+            ForEach(store.searchResults) { user in
+                VStack(alignment: .leading, spacing: 8) {
+                    SocialProfileRow(user: user)
+                    HStack {
+                        if isFriend(user) { Label("Friend", systemImage: "checkmark") }
+                        else if hasPendingRequest(user) { Text("Request pending").foregroundStyle(AppColors.secondaryText) }
+                        else { Button("Add friend") { Task { await store.sendRequest(user) } } }
+                        Spacer()
+                        Button("Block", role: .destructive) { pendingBlock = user }
+                    }.font(.subheadline).disabled(store.isWorking)
+                }.padding(.vertical, 4)
             }
         }
     }
+
     private func name(_ user: SocialProfile) -> String { user.displayName.isEmpty ? "Vitail walker" : user.displayName }
     private func isFriend(_ user: SocialProfile) -> Bool { store.overview?.friends.contains { $0.user.id == user.id } == true }
     private func hasPendingRequest(_ user: SocialProfile) -> Bool {
         let requests = (store.overview?.incomingRequests ?? []) + (store.overview?.outgoingRequests ?? [])
         return requests.contains { $0.user.id == user.id }
     }
-    private func visibleForNet(_ user: SocialProfile) -> Bool {
-        store.mapSnapshot.nearby.contains { $0.user.id == user.id }
+}
+
+private struct SocialProfileRow: View {
+    let user: SocialProfile
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "person.crop.circle.fill").font(.title2).foregroundStyle(AppColors.brand)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(user.displayName.isEmpty ? "Vitail walker" : user.displayName).fontWeight(.medium)
+                Text(user.publicID).font(.caption.monospaced()).foregroundStyle(AppColors.secondaryText)
+                    .lineLimit(1).textSelection(.enabled)
+            }
+        }
     }
 }
