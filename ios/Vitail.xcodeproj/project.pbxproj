@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F61000000000000000000001 /* FriendsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000001 /* FriendsModels.swift */; };
+		F61000000000000000000002 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* FriendsService.swift */; };
+		F61000000000000000000003 /* FriendsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000003 /* FriendsStore.swift */; };
+		F61000000000000000000004 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000004 /* FriendsView.swift */; };
+		F61000000000000000000005 /* FriendsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000005 /* FriendsTests.swift */; };
 		E72026092900000000000011 /* DogDocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092900000000000001 /* DogDocumentsView.swift */; };
 		00000000000000000000E112 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E212 /* Assets.xcassets */; };
 		00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E213 /* BrandAppearanceTests.swift */; };
@@ -121,6 +126,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		F60000000000000000000001 /* FriendsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsModels.swift; sourceTree = "<group>"; };
+		F60000000000000000000002 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
+		F60000000000000000000003 /* FriendsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsStore.swift; sourceTree = "<group>"; };
+		F60000000000000000000004 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
+		F60000000000000000000005 /* FriendsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsTests.swift; sourceTree = "<group>"; };
 		E72026092900000000000001 /* DogDocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDocumentsView.swift; sourceTree = "<group>"; };
 		00000000000000000000E212 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		00000000000000000000E213 /* BrandAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAppearanceTests.swift; sourceTree = "<group>"; };
@@ -356,6 +366,7 @@
 		20A000000000000000000001 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				F62000000000000000000001 /* Friends */,
 				222CA46EF530402A1EFB0C1D /* Documents */,
 				58A8F78977627F369AF92B94 /* CheckIn */,
 				83A28EB6FFBE5CEDAA98F129 /* Quest */,
@@ -415,6 +426,7 @@
 		20E000000000000000000001 /* VitailTests */ = {
 			isa = PBXGroup;
 			children = (
+				F60000000000000000000005 /* FriendsTests.swift */,
 				88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */,
 				1ACB97598A23B803F298053B /* QuestTests.swift */,
 				F6ECF0F73A9474B166766F7F /* DocumentTests.swift */,
@@ -506,6 +518,17 @@
 				100000000000000000000033 /* CafeProductsView.swift */,
 			);
 			path = CafeProducts;
+			sourceTree = "<group>";
+		};
+		F62000000000000000000001 /* Friends */ = {
+			isa = PBXGroup;
+			children = (
+				F60000000000000000000001 /* FriendsModels.swift */,
+				F60000000000000000000002 /* FriendsService.swift */,
+				F60000000000000000000003 /* FriendsStore.swift */,
+				F60000000000000000000004 /* FriendsView.swift */,
+			);
+			path = Friends;
 			sourceTree = "<group>";
 		};
 		216000000000000000000001 /* Sharing */ = {
@@ -665,6 +688,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F61000000000000000000001 /* FriendsModels.swift in Sources */,
+				F61000000000000000000002 /* FriendsService.swift in Sources */,
+				F61000000000000000000003 /* FriendsStore.swift in Sources */,
+				F61000000000000000000004 /* FriendsView.swift in Sources */,
 				000000000000000000000080 /* ActivityShareModels.swift in Sources */,
 				000000000000000000000081 /* DogIllustration.swift in Sources */,
 				000000000000000000000082 /* ActivityShareCard.swift in Sources */,
@@ -747,6 +774,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F61000000000000000000005 /* FriendsTests.swift in Sources */,
 				000000000000000000000084 /* ActivityShareTests.swift in Sources */,
 				F51000000000000000000007 /* VenuesTests.swift in Sources */,
 				6FA8C776B9981946C4549659 /* WalletRefreshTests.swift in Sources */,

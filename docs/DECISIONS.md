@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 27 September 2026. The latest confirmed conversation and
+Current as of 7 October 2026 (friends integration branch). The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -40,11 +40,12 @@ below are retained where other project documents cite them.
 | R60 (corrected) | Council registration awards 300 points per dog per actual registration period. Renewal opens after the confirmed document expiry, not a fixed 10 April date. Expired/superseded pending rewards disappear and cannot be collected. Unknown legacy expiry requires an evidence update without re-awarding paid points. Historical files, receipts and ledger entries remain private |
 | R61 | Dog settings manages current Council/microchip records, including paid/expired documents. Corrections retain the same entitlement and award zero points. Actual expiry is editable; its maximum confirmed expiry remains the renewal boundary, so edits never advance a reward. Original evidence and receipts remain private and unchanged |
 | R62 | Owners may create a local image card for a completed walk and choose its date, dog names and confirmed points. Routes, coordinates and place details are excluded; the system share sheet is the only distribution path. |
+| R63 | Friendship is not location consent. Friend sharing and Net-Walking are independent opt-ins, off by default. Nearby discovery is approximate; an accepted two-person invitation grants exact partner visibility only during an active, fresh walk. Non-friends can pair. Pause, finish, block or matching withdrawal ends pairing. |
 
 The database foundation normalizes Venue, keeps one PointEntry ledger and adds
 specific daily-goal, check-in, live-location, net-walk and friendship records.
-It does not authorize inventing qualification rules or claim completed social,
-location or leaderboard APIs. The six optional identity/chat/charity/push tables
+It does not authorize inventing qualification rules. Social/location APIs are
+now connected on this branch; leaderboards remain teammate work. The six optional identity/chat/charity/push tables
 are deferred. See [database design](database-design-2026-09-25/README.md).
 
 ## Implementation boundaries
@@ -52,8 +53,10 @@ are deferred. See [database design](database-design-2026-09-25/README.md).
 Protected JSON Walk checkpoints/history and foreground retry replace the older
 memory-only/SwiftData proposals. This is a bounded recovery feature, not general
 offline login or a background upload worker. The server submission deadline
-still applies. Current walk uploads store validated summaries; the new raw
-sample/session schema is not populated by that endpoint.
+still applies. Current walk uploads store validated summaries; consented live
+presence uses a separate API and links to those summaries by their stable UUID.
+GPS buffers are deleted on pause/finish and purged after fifteen minutes; run
+the social purge command periodically. No social endpoint returns a route.
 
 The Quest API now projects only actionable tasks plus server date metadata.
 Unused daily-goal, streak, birthday and document dashboard projections and the
@@ -79,13 +82,13 @@ its clock or fabricate venue opportunities.
 | O6 | Numeric daily-goal formula: duration versus distance, breed/age/size/flat-face adjustments, heat guardrails and live participant attribution | Reward amount is already agreed; targets, percentages and awards remain absent until evaluation rules exist |
 | O7 | Final rounding/minimum-walk policy | Current walking implementation rounds cumulative daily distance down; it invents no minimum-duration reward requirement |
 | O8 | Weather source and heat-adjustment inputs | No weather-based goal calculation or provider claim |
-| O9 | Retention, access and erasure policy for GPS, routes, evidence and account history | No new public GPS ingestion; local routes/private originals retained by current behavior. Schema TTL fields alone do not implement a retention job |
+| O9 | Retention, access and erasure policy for GPS, routes, evidence and account history | Social GPS is authenticated, short-lived and explicitly consented; a purge command exists and must be scheduled. Local routes/private originals retain current behavior. Full account erasure is not implemented |
 | O10 | Evidence spot-audit procedure and consequences | Submission is self-reported; protected originals/history remain. No authenticity guarantee or automatic penalty |
 | O11 | Approved charity partners and how point donations are fulfilled | No donation feature or charity tables in this foundation |
 | O12 | Admin evidence/reason requirements, dispute actions and account-deletion/anonymization rules | Existing grants/refunds stay constrained; do not delete or rewrite ledger history to simulate deletion. Django admin logging alone is not a full audit workflow |
 | O13 | Release deadline and measurable product acceptance | Build/test results and physical-device checks are recorded separately; schema completion does not certify release readiness |
 | O17 | Birthday treatment for 29 February in non-leap years | Actual anniversary only; no invented observed date |
-| O19 | Net-walk proximity/time/consent, overlap calculation and cap membership; friend discovery/privacy/blocking behavior | Data foundations only. No matcher, exact live-position sharing or net-walk credit |
+| O19 | Approve Net-Walking thresholds, duration policy and cap membership | Consent, friends/blocking, live positions and overlap checks are implemented with conservative documented parameters. Wallet bonus remains disabled; no silent backfill if later enabled. See SOCIAL.md |
 | O20 | Minimum café purchase/offer duration and daily inventory policy | Preserve configured product prices and historical terms; no fiat checkout or automatic merchant settlement |
 
 Account reset/deletion, OAuth delivery, notifications/quiet hours and

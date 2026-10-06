@@ -1,4 +1,4 @@
-"""Locked relationship invariants. No social endpoints or matching are enabled."""
+"""Locked, explicit relationship consent; no reciprocal auto-acceptance."""
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -33,13 +33,18 @@ def are_friends(first_id, second_id):
 
 
 @transaction.atomic
-def request_friendship(*, sender, recipient):
+def request_friendship(*, sender, recipient, allow_declined=False):
     low, high = _lock_pair(sender, recipient)
     if is_blocked(low, high):
         raise ValidationError("This relationship is unavailable.")
     relationship, _ = Friendship.objects.get_or_create(user_low_id=low, user_high_id=high, defaults={"requested_by_id": sender.pk})
     # A reciprocal request is not implicit consent; the recipient must accept.
-    # Re-request policy for DECLINED is intentionally not enabled yet.
+    if allow_declined and relationship.status == Friendship.Status.DECLINED:
+        # This is a new explicit request, never implicit reciprocal acceptance.
+        relationship.requested_by_id = sender.pk
+        relationship.status = Friendship.Status.PENDING
+        relationship.responded_at = None
+        relationship.save(update_fields=("requested_by", "status", "responded_at"))
     return relationship
 
 
@@ -67,6 +72,8 @@ def block_user(*, actor, other):
     low, high = _lock_pair(actor, other)
     block, _ = UserBlock.objects.get_or_create(blocker_id=actor.pk, blocked_id=other.pk)
     Friendship.objects.filter(user_low_id=low, user_high_id=high).delete()
+    from .live import end_pair_invitations
+    end_pair_invitations(actor.pk, other.pk, reason="blocked")
     return block
 
 
@@ -75,3 +82,11 @@ def unblock_user(*, actor, other):
     _lock_pair(actor, other)
     # Removing a directional block never recreates a friendship or consent.
     UserBlock.objects.filter(blocker_id=actor.pk, blocked_id=other.pk).delete()
+
+
+@transaction.atomic
+def remove_friendship(*, actor, other):
+    low, high = _lock_pair(actor, other)
+    Friendship.objects.filter(user_low_id=low, user_high_id=high).delete()
+    from .live import end_pair_invitations
+    end_pair_invitations(actor.pk, other.pk, reason="friend_removed")

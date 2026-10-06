@@ -20,7 +20,7 @@ make ios
 ```
 
 Compose starts MySQL, applies migrations, serves the API at
-`http://127.0.0.1:8000`, and runs the point/order expiry worker. Open
+`http://127.0.0.1:8000`, and runs point/order expiry and social GPS cleanup workers. Open
 `http://127.0.0.1:8000/admin/` to manage test accounts and data. The iOS simulator
 uses that API address by default.
 
@@ -66,7 +66,7 @@ Staging and Release.
 
 | Account | Navigation | Available flow |
 |---|---|---|
-| Owner | Account / Walk / Quest / Redeem | Email registration, profiles/photos, dogs and birthdays, recorded walks, care rewards, wallet and café orders |
+| Owner | Account / Walk / Quest / Venues / Friends / Redeem | Profiles, recorded walks, care rewards, venue check-ins, friends/consented Net-Walking, wallet and café orders |
 | Café | Account / Products / Orders | Admin-created login, venue details/photo/Maps, menu prices and availability, read-only pending orders |
 | Admin | Django Admin | Onboarding, catalogue, positive test-point grants, pending-order cancellation/refunds and evidence access |
 
@@ -85,18 +85,26 @@ Quest shows actionable birthday and document tasks, plus one walking-streak
 progress bar, with explicit Collect. Collected birthday/document rows leave
 the list after Melbourne midnight; their history remains. Streak advances to
 its next milestone after collection.
-The map and Quest share a check-in presentation/store, but **no production
-location provider or iOS check-in service is enabled yet**.
+Venues discovers available check-in spots and starts location-verified dwell;
+the map and Quest share check-in progress and explicit collection.
+
+Friends supports public-ID/name discovery, requests, acceptance, blocking and
+location privacy controls. During an active walk, opted-in friends can see
+shared positions and consenting nearby walkers can invite each other to
+Net-Walk without becoming friends first. Both must agree. Live GPS is a bounded
+verification buffer, not a publicly shared route. Verified together-distance
+and estimated bonus are shown; **Net-Walking wallet awards are off by default**
+until the remaining policy questions are approved. See [social integration](docs/SOCIAL.md).
 
 Redeem lists cafés, menus and actual product prices. Purchase deducts points
 once and opens a receipt; the owner slides to collect. Uncollected orders
 expire at the next Melbourne midnight and refund automatically. Café staff see
 those same orders and cannot collect them for the owner.
 
-The database now has a normalized Venue and foundations for daily goals,
-check-ins, live sessions/location samples, net-walking and friendships. These
-schema changes **do not deliver social APIs, location ingestion, matching,
-leaderboards, daily-goal rewards, chat, notifications or charity donations**.
+The database has a normalized Venue and foundations for daily goals. Check-ins
+and social/live-session APIs are connected in this branch; leaderboards,
+daily-goal rewards, chat, notifications and charity donations are not delivered
+here. The separate daily-goal PR is not bundled into this change.
 See [feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check
@@ -125,6 +133,7 @@ See [feature status](docs/FEATURES.md) before treating a capability as available
 | [OpenAPI](docs/openapi.yaml) | Implemented HTTP request/response contract |
 | [Database design](docs/database-design-2026-09-25/README.md) | Domain tables, constraints and requirement coverage; migrations define physical schema |
 | [Walk integration](docs/WALK_INTEGRATION.md) / [device tests](docs/WALK_TESTING.md) | Recording, confirmation, recovery and acceptance limits |
+| [Social integration](docs/SOCIAL.md) | Friends, explicit location consent, Net-Walking, API and two-device acceptance |
 | [Media](backend/MEDIA.md) / [evidence](backend/evidence/README.md) | Public photos and authenticated private document storage |
 
 Each feature owner maintains its UI, API, migrations, tests and relevant docs.

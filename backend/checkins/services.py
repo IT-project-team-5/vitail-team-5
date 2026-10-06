@@ -7,6 +7,7 @@ collected.  It never accepts a duration, score, or client timestamp from the app
 import math
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
 from django.http import Http404
@@ -153,8 +154,13 @@ def cancel_checkin(*, owner, checkin_id):
 
 
 def daily_activity_points(owner, day):
+    categories = [PointEntry.EarnCategory.WALK, PointEntry.EarnCategory.CHECK_IN]
+    if settings.NET_WALK_REWARDS_ENABLED:
+        # Conservative opt-in policy for the unresolved combined cap: once
+        # Net-Walking is enabled, later walk/check-in awards share its budget.
+        categories += [PointEntry.EarnCategory.NET_WALK, PointEntry.EarnCategory.DAILY_GOAL]
     return PointEntry.objects.filter(user=owner, type=PointEntry.Type.EARN, earned_on=day,
-        earn_category__in=(PointEntry.EarnCategory.WALK, PointEntry.EarnCategory.CHECK_IN)
+        earn_category__in=categories
     ).aggregate(total=Sum("amount"))["total"] or 0
 
 

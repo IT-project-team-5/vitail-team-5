@@ -37,3 +37,36 @@ class UserBlock(models.Model):
             models.CheckConstraint(condition=~Q(blocker=F("blocked")), name="user_block_not_self"),
         ]
         indexes = [models.Index(fields=("blocked", "blocker"), name="user_block_reverse")]
+
+
+class NetWalkInvitation(models.Model):
+    """Explicit, revocable consent for one pair of existing live walk sessions."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACTIVE = "ACTIVE", "Walking together"
+        DECLINED = "DECLINED", "Declined"
+        ENDED = "ENDED", "Ended"
+        EXPIRED = "EXPIRED", "Expired"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_invitations_sent")
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_invitations_received")
+    sender_session = models.ForeignKey("walks.WalkSession", on_delete=models.CASCADE, related_name="net_invitations_sent")
+    recipient_session = models.ForeignKey("walks.WalkSession", on_delete=models.CASCADE, related_name="net_invitations_received")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    end_reason = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=~Q(sender=F("recipient")), name="net_invitation_not_self")]
+        indexes = [
+            # Mutable status must not be part of a foreign-key support index:
+            # MySQL then rechecks both parent owners during a status update,
+            # inverting the normal owner-before-invitation lock order.
+            models.Index(fields=("sender",), name="net_inv_sender_owner"),
+            models.Index(fields=("recipient",), name="net_inv_recipient_owner"),
+        ]

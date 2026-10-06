@@ -167,7 +167,7 @@ class WalkSession(models.Model):
 
 
 class LocationSample(models.Model):
-    """Dormant short-lived evidence; no endpoint collects GPS until retention is agreed."""
+    """Short-lived verifier evidence; social samples use a fifteen-minute buffer."""
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="location_samples")
     session = models.ForeignKey(WalkSession, null=True, blank=True, on_delete=models.CASCADE, related_name="samples")
     checkin = models.ForeignKey("checkins.CheckIn", null=True, blank=True, on_delete=models.CASCADE, related_name="samples")

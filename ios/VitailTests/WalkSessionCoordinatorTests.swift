@@ -10,6 +10,34 @@ import XCTest
 final class WalkSessionCoordinatorTests: XCTestCase {
     private let referenceDate = Date(timeIntervalSince1970: 1_789_000_000)
 
+    func testSocialHooksFollowActualWalkLifecycleAndReuseTheLocationBatch() async throws {
+        var now = referenceDate
+        let client = CoordinatorLocationClientStub()
+        let coordinator = makeCoordinator(client: client, now: { now })
+        var states: [WalkSessionTracker.Status] = []
+        var requestIDs: [UUID?] = []
+        var locations: [CLLocation] = []
+        coordinator.onSocialWalkChanged = { draft, status in
+            states.append(status)
+            requestIDs.append(draft?.id)
+        }
+        coordinator.onSocialLocations = { locations.append(contentsOf: $0) }
+
+        coordinator.tracker.start(from: location(), dogs: [])
+        let requestID = try XCTUnwrap(requestIDs.last ?? nil)
+        now = referenceDate.addingTimeInterval(10)
+        client.deliver([location(latitude: -37.8130, seconds: 10)])
+        coordinator.tracker.pause()
+        XCTAssertEqual(states.last, .paused)
+        XCTAssertEqual(requestIDs.last ?? nil, requestID)
+        XCTAssertEqual(locations.count, 1)
+
+        coordinator.tracker.finish()
+        XCTAssertEqual(states.last, .finished)
+        XCTAssertNil(requestIDs.last ?? nil)
+        XCTAssertEqual(coordinator.pendingFinish?.id, requestID)
+    }
+
     func testLocationDelegateRecordsWholeBatchAndCheckpointsWithoutAView() async {
         var now = referenceDate
         let client = CoordinatorLocationClientStub()

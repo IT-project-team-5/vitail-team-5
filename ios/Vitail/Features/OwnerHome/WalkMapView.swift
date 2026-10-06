@@ -385,6 +385,7 @@ struct WalkMapView: View {
     @ObservedObject private var dogSelection: WalkDogSelectionViewModel
     @ObservedObject private var walkHistory: WalkHistoryStore
     @ObservedObject private var checkIns: CheckInProgressStore
+    @ObservedObject private var friends: FriendsStore
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: -37.8136, longitude: 144.9631),
@@ -401,7 +402,8 @@ struct WalkMapView: View {
     init(
         coordinator: WalkSessionCoordinator, isActive: Bool,
         initialDrawerDetent: WalkDrawerDetent = .collapsed,
-        checkIns: CheckInProgressStore? = nil
+        checkIns: CheckInProgressStore? = nil,
+        friends: FriendsStore? = nil
     ) {
         _drawerDetent = State(initialValue: initialDrawerDetent)
         self.isActive = isActive
@@ -411,6 +413,7 @@ struct WalkMapView: View {
         dogSelection = coordinator.dogSelection
         walkHistory = coordinator.history
         self.checkIns = checkIns ?? CheckInProgressStore(ownerID: 0)
+        self.friends = friends ?? FriendsStore(ownerID: 0)
     }
 
     var body: some View {
@@ -590,6 +593,24 @@ struct WalkMapView: View {
 
     private var mapCard: some View {
         Map(position: $cameraPosition, interactionModes: .all) {
+            ForEach(socialPeers) { peer in
+                Annotation(peer.user.displayName, coordinate: peer.coordinate) {
+                    VStack(spacing: 2) {
+                        Image(systemName: peer.isNetPartner ? "figure.walk.motion" : "person.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(peer.isNetPartner ? Color.orange : AppColors.brand)
+                            .clipShape(Circle())
+                        Text(peer.isApproximate ? "\(peer.user.displayName) · nearby" : peer.user.displayName)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(.regularMaterial)
+                            .clipShape(Capsule())
+                    }
+                    .accessibilityLabel("\(peer.user.displayName), \(peer.isNetPartner ? "walking partner" : (peer.isApproximate ? "approximate nearby position" : "shared location"))")
+                }
+            }
             ForEach(Array(walkTracker.routeSegments.enumerated()), id: \.offset) { _, segment in
                 if segment.count > 1 {
                     MapPolyline(coordinates: segment.map(\.coordinate))
@@ -648,6 +669,15 @@ struct WalkMapView: View {
                 .frame(width: 16, height: 16)
         }
         .accessibilityLabel("Your current location")
+    }
+
+    private var socialPeers: [SocialMapPeer] {
+        let snapshot = friends.mapSnapshot.fresh(at: Date())
+        var byID: [String: SocialMapPeer] = [:]
+        for peer in snapshot.nearby { byID[peer.id] = peer }
+        for peer in snapshot.friends { byID[peer.id] = peer }
+        if let partner = snapshot.partner { byID[partner.id] = partner }
+        return byID.values.sorted { $0.id < $1.id }
     }
 
     @ViewBuilder

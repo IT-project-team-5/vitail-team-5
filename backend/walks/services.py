@@ -174,6 +174,8 @@ def create_walk(*, owner, request_id, started_at, ended_at, dog_ids, samples):
     if existing is not None:
         if existing.request_fingerprint != fingerprint:
             raise WalkConflictError("This request ID was already used for a different walk.")
+        from social.live import link_walk_and_settle
+        link_walk_and_settle(existing)
         return existing
 
     dogs = list(Dog.objects.select_for_update().filter(owner=owner, pk__in=dog_ids).order_by("pk"))
@@ -210,6 +212,8 @@ def create_walk(*, owner, request_id, started_at, ended_at, dog_ids, samples):
             earn_category="WALK", earned_on=point_date, rules_version=WALK_RULES_VERSION,
         )
         walk.save(update_fields=["base_point_entry"])
+    from social.live import link_walk_and_settle
+    link_walk_and_settle(walk)
     return walk
 
 

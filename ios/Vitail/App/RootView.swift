@@ -13,6 +13,7 @@ struct RootView: View {
     let cafeProductsService: any CafeProductsServing
     var questService: any QuestServing = QuestService()
     var documentService: (any DocumentServing)? = nil
+    var friendsService: any FriendsServing = FriendsService()
 
     var body: some View {
         Group {
@@ -53,7 +54,7 @@ struct RootView: View {
                 dogService: dogService, redemptionService: redemptionService,
                 walkService: walkService, questService: questService,
                 checkInService: checkInProgressService, venueCheckInService: venueCheckInService,
-                documentService: documentService
+                documentService: documentService, friendsService: friendsService
             )
             .id(user.id)
         case .cafe:

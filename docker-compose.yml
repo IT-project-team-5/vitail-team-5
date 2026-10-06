@@ -32,6 +32,7 @@ services:
       MYSQL_PORT: 3306
       JWT_ACCESS_MINUTES: ${JWT_ACCESS_MINUTES:-15}
       JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
+      NET_WALK_REWARDS_ENABLED: ${NET_WALK_REWARDS_ENABLED:-false}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -46,6 +47,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  social_presence:
+    build: ./backend
+    environment: *api-environment
+    volumes:
+      - ./backend:/app
+    depends_on:
+      api:
+        condition: service_healthy
+    command: python manage.py purge_social_presence --watch --interval 60
+    restart: on-failure
 
   expiry:
     build: ./backend
