@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -21,6 +23,18 @@ class BreedSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class GoalRequestSerializer(serializers.Serializer):
+    owner_adjustment = serializers.DecimalField(max_digits=3, decimal_places=2,
+        min_value=Decimal("0.50"), max_value=Decimal("2.00"), default=Decimal("1.00"))
+    effective_from = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({key: "Unexpected field." for key in sorted(unknown)})
+        return attrs
+
+
 class DogSerializer(serializers.ModelSerializer):
     breed = BreedSerializer(read_only=True)
     breed_id = serializers.PrimaryKeyRelatedField(
@@ -41,6 +55,7 @@ class DogSerializer(serializers.ModelSerializer):
             "age_months",
             "date_of_birth",
             "size",
+            "weight_kg",
             "is_brachycephalic",
             "created_at",
         )

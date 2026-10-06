@@ -86,3 +86,57 @@ final class DogViewModel: ObservableObject {
         }
     }
 }
+
+@MainActor
+final class DogGoalViewModel: ObservableObject {
+    @Published private(set) var preview: DogGoalPreview?
+    @Published private(set) var isLoading = false
+    @Published private(set) var isSaving = false
+    @Published private(set) var saved = false
+    @Published private(set) var errorMessage: String?
+    private let service: any DogServicing
+    private var generation = 0
+    private var previewPercentage: Int?
+
+    init(service: any DogServicing = DogService()) { self.service = service }
+
+    func canSave(percentage: Int) -> Bool {
+        preview?.eligible == true && previewPercentage == percentage && !isLoading && !isSaving && !saved
+    }
+
+    func load(dogID: Int, percentage: Int) async {
+        generation += 1
+        let request = generation
+        isLoading = true
+        preview = nil
+        previewPercentage = nil
+        saved = false
+        errorMessage = nil
+        defer { if request == generation { isLoading = false } }
+        do {
+            let result = try await service.previewGoal(dogID: dogID, percentage: percentage)
+            guard request == generation, !Task.isCancelled else { return }
+            preview = result
+            previewPercentage = percentage
+        } catch {
+            guard request == generation, !Task.isCancelled else { return }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func save(dogID: Int, percentage: Int) async -> Bool {
+        guard canSave(percentage: percentage), let preview else { return false }
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+        do {
+            self.preview = try await service.saveGoal(dogID: dogID,
+                request: DogGoalRequest(ownerAdjustment: preview.ownerAdjustment, effectiveFrom: preview.effectiveFrom))
+            saved = true
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+}

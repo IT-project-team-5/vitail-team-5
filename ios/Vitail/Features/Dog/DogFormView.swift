@@ -13,6 +13,7 @@ struct DogFormView: View {
     @State private var isChoosingBirthday = false
     @State private var size: DogSize
     @State private var isBrachycephalic: Bool
+    @State private var weightKg: String
     @State private var validationMessage: String?
     @State private var isConfirmingDelete = false
 
@@ -26,6 +27,7 @@ struct DogFormView: View {
         _birthdayDraft = State(initialValue: dog?.dateOfBirth.flatMap(DogBirthday.date(from:)) ?? Date())
         _size = State(initialValue: dog?.size ?? .medium)
         _isBrachycephalic = State(initialValue: dog?.isBrachycephalic ?? false)
+        _weightKg = State(initialValue: dog?.weightKg ?? "")
     }
 
     var body: some View {
@@ -52,6 +54,8 @@ struct DogFormView: View {
                         }
                     }
                     Toggle("Brachycephalic", isOn: $isBrachycephalic)
+                    TextField("Weight (kg, for walking goals)", text: $weightKg)
+                        .keyboardType(.decimalPad)
                 }
                 .listRowBackground(AppColors.surface)
 
@@ -176,6 +180,14 @@ struct DogFormView: View {
             ageMonths = dog?.ageMonths ?? 0
         }
 
+        let weight = weightKg.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: Locale.autoupdatingCurrent.decimalSeparator ?? ".", with: ".")
+        let parsedWeight = Decimal(string: weight)
+        if !weight.isEmpty && (weight.range(of: #"^[0-9]+(?:\.[0-9]{1,2})?$"#, options: .regularExpression) == nil
+                              || parsedWeight == nil || parsedWeight! <= 0) {
+            validationMessage = "Enter a positive weight in kilograms with up to two decimal places."
+            return
+        }
         validationMessage = nil
         let request = DogWriteRequest(
             name: trimmedName,
@@ -183,7 +195,8 @@ struct DogFormView: View {
             ageMonths: ageMonths,
             size: size,
             isBrachycephalic: isBrachycephalic,
-            dateOfBirth: birthday
+            dateOfBirth: birthday,
+            weightKg: parsedWeight.map { NSDecimalNumber(decimal: $0).stringValue }
         )
         if await viewModel.save(dog: dog, request: request, photoData: photoData) {
             onSave?()

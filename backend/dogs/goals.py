@@ -1,4 +1,4 @@
-"""Manual per-dog goals. All calendar boundaries use rewards.policy Melbourne.
+"""Effective-dated per-dog goals. Calendar boundaries use rewards.policy Melbourne.
 
 Walk duration belongs wholly to its end date (the existing walking convention).
 Snapshots are final after the 12-hour upload window; reads never create credits.
@@ -28,11 +28,13 @@ def lock_goal_dog(dog):
 
 
 @transaction.atomic
-def configure_target(*, dog, target_active_seconds, effective_from):
+def configure_target(*, dog, target_active_seconds, effective_from,
+                     calculation_policy=GOAL_RULES_VERSION, calculation_inputs=None):
     dog = lock_goal_dog(dog)
     target = DogGoalTarget(dog=dog, dog_id_snapshot=dog.pk, owner_id=dog.owner_id,
         owner_version=dog.goal_owner_version,
-        target_active_seconds=target_active_seconds, effective_from=effective_from)
+        target_active_seconds=target_active_seconds, effective_from=effective_from,
+        calculation_policy=calculation_policy, calculation_inputs=calculation_inputs or {})
     target.full_clean()
     target.save()
     return target
@@ -79,6 +81,8 @@ def goal_progress(*, owner, now=None):
                         defaults={"dog": dog, "owner": owner,
                             "target_active_seconds": target.target_active_seconds,
                             "inputs_snapshot": {"target_id": target.pk, "dog_name": dog.name,
+                                "calculation_policy": target.calculation_policy,
+                                "calculation_inputs": target.calculation_inputs,
                                 "eligible_since": target.created_at.isoformat()},
                             "rules_version": GOAL_RULES_VERSION})
                     if (goal.owner_id == owner.pk and goal.rules_version == GOAL_RULES_VERSION

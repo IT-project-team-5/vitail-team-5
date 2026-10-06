@@ -184,6 +184,53 @@ paths:
       responses:
         '204': {description: Deleted; no response body}
         default: {$ref: '#/components/responses/Error'}
+  /api/dogs/{id}/goal:
+    parameters:
+      - $ref: '#/components/parameters/ID'
+    get:
+      summary: Preview an owned dog's personalised daily walking goal
+      description: Read-only. Returns eligibility, exact decimal recommendation, rounded seconds and the shared Admin/owner schedule for the current ownership version. Missing profile inputs and age under four months return eligible=false, never a zero target.
+      parameters:
+        - name: owner_adjustment
+          in: query
+          schema: {type: number, minimum: 0.5, maximum: 2, multipleOf: 0.01, default: 1}
+        - name: effective_from
+          in: query
+          description: Defaults to today for the first target, otherwise the later of tomorrow or the day after this ownership version's last scheduled revision, skipping dates reserved by earlier owners.
+          schema: {type: string, format: date}
+      responses:
+        '200':
+          description: Recommendation and saved schedule
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DogGoalPreview'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Append an owner-configured daily target to the shared target history
+      description: Recalculates from the current profile under owner/dog locks. First target may start today; revisions start tomorrow or later. Duplicate dog/date, invalid adjustment or missing inputs return 400; foreign dog returns 404. Does not enable goal payouts. Unknown request fields are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [effective_from]
+              properties:
+                effective_from: {type: string, format: date}
+                owner_adjustment:
+                  description: The exercise-level adjustment applied once. Omitted means 100%. Whole percentage points; decimal text or JSON number accepted.
+                  default: '1.00'
+                  oneOf:
+                    - {type: number, minimum: 0.5, maximum: 2, multipleOf: 0.01}
+                    - {type: string, example: '0.50'}
+      responses:
+        '201':
+          description: Recomputed recommendation, saved target and refreshed schedule
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DogGoalPreview'}
+        default: {$ref: '#/components/responses/Error'}
   /api/walks:
     get:
       summary: List owned walk summaries, newest end time first (OWNER only)
@@ -953,7 +1000,7 @@ components:
       properties:
         id: {type: integer}
         name: {type: string}
-        energy_level: {type: string, enum: [LOW, MODERATE, HIGH]}
+        energy_level: {type: string, enum: [LOW, MODERATE, HIGH, VERY_HIGH, UNKNOWN]}
         default_size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean}
     DogInput:
@@ -966,9 +1013,10 @@ components:
         date_of_birth: {type: string, format: date, nullable: true, description: Optional real birthday no later than the current server-local date; null means unknown}
         size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean, description: Defaults from breed when omitted on creation}
+        weight_kg: {type: string, nullable: true, example: '15.00', description: Positive decimal kilograms with up to two decimal places (0.01–9999.99); JSON numbers also accepted. Omitted on PATCH leaves weight unchanged; null clears it. No inferred weight for legacy dogs}
     Dog:
       type: object
-      required: [id, name, photo, breed, age_months, date_of_birth, size, is_brachycephalic, created_at]
+      required: [id, name, photo, breed, age_months, date_of_birth, size, is_brachycephalic, weight_kg, created_at]
       properties:
         id: {type: integer}
         name: {type: string}
@@ -979,6 +1027,35 @@ components:
         size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean}
         created_at: {type: string, format: date-time}
+        weight_kg: {type: string, nullable: true, example: '15.00'}
+    DogGoalTarget:
+      type: object
+      required: [id, effective_from, target_seconds, policy_version, calculation_inputs]
+      properties:
+        id: {type: integer}
+        effective_from: {type: string, format: date}
+        target_seconds: {type: integer, minimum: 1, nullable: true, description: Null pauses goals}
+        policy_version: {type: string, example: personalised-duration-v1}
+        calculation_inputs: {type: object, additionalProperties: true, description: Immutable inputs and factors; empty for legacy/manual revisions}
+    DogGoalPreview:
+      type: object
+      required: [eligible, missing_inputs, reason, effective_from, policy_version, owner_adjustment, suggested_minutes, target_minutes, target_seconds, current_target, scheduled_targets]
+      properties:
+        eligible: {type: boolean}
+        missing_inputs: {type: array, items: {type: string}}
+        reason: {type: string, nullable: true}
+        effective_from: {type: string, format: date}
+        policy_version: {type: string, example: personalised-duration-v1}
+        owner_adjustment: {type: string, example: '1.00'}
+        suggested_minutes: {type: string, nullable: true, example: '62.500000'}
+        target_minutes: {type: string, nullable: true, example: '31.25000000'}
+        target_seconds: {type: integer, nullable: true, minimum: 1, description: Final exact target minutes times 60 rounded to nearest second, half up}
+        calculation_inputs: {type: object, additionalProperties: true}
+        current_target:
+          allOf: [{$ref: '#/components/schemas/DogGoalTarget'}]
+          nullable: true
+        scheduled_targets: {type: array, items: {$ref: '#/components/schemas/DogGoalTarget'}}
+        saved_target: {$ref: '#/components/schemas/DogGoalTarget'}
     QuestTask:
       type: object
       required: [id, kind, status, title, subtitle, subject_name, photo, icon, detail, reward_points, progress, dog_id, entitlement_id, collected_at]

@@ -9,11 +9,16 @@ struct OwnerProfileView: View {
     @State private var selectedDog: Dog?
     let documentService: any DocumentServing
     let onDocumentsChanged: () async -> Void
+    let onGoalsChanged: () async -> Void
+    let dogService: any DogServicing
 
     init(user: User, session: SessionStore, dogService: any DogServicing = DogService(),
-         documentService: any DocumentServing = DocumentService(), onDocumentsChanged: @escaping () async -> Void = {}) {
+         documentService: any DocumentServing = DocumentService(), onDocumentsChanged: @escaping () async -> Void = {},
+         onGoalsChanged: @escaping () async -> Void = {}) {
         self.documentService = documentService
         self.onDocumentsChanged = onDocumentsChanged
+        self.onGoalsChanged = onGoalsChanged
+        self.dogService = dogService
         self.user = user
         self.session = session
         _dogViewModel = StateObject(wrappedValue: DogViewModel(service: dogService))
@@ -41,7 +46,7 @@ struct OwnerProfileView: View {
         }
         .sheet(item: $selectedDog) { dog in
             DogDetailView(viewModel: dogViewModel, dog: dog, documentService: documentService, session: session,
-                          onDocumentsChanged: onDocumentsChanged)
+                          onDocumentsChanged: onDocumentsChanged, onGoalsChanged: onGoalsChanged, goalService: dogService)
         }
     }
 

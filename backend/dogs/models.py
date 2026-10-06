@@ -1,4 +1,5 @@
 import calendar
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -27,6 +28,8 @@ class Breed(models.Model):
         LOW = "LOW", "Low"
         MODERATE = "MODERATE", "Moderate"
         HIGH = "HIGH", "High"
+        VERY_HIGH = "VERY_HIGH", "Very high"
+        UNKNOWN = "UNKNOWN", "Unknown"
 
     class Size(models.TextChoices):
         SMALL = "SMALL", "Small"
@@ -66,6 +69,8 @@ class Dog(models.Model):
     microchip_recorded_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
     size = models.CharField(max_length=10, choices=Size.choices)
+    weight_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))])
     is_brachycephalic = models.BooleanField()
     created_at = models.DateTimeField(auto_now_add=True)
     goal_owner_version = models.PositiveIntegerField(default=0, editable=False)
@@ -104,7 +109,7 @@ class Dog(models.Model):
 
 
 class DogDailyGoal(models.Model):
-    """Frozen daily target and result; no inferred personalised formula."""
+    """Frozen daily target and result, independent of later profile edits."""
     dog = models.ForeignKey(Dog, null=True, blank=True, on_delete=models.SET_NULL, related_name="daily_goals")
     dog_id_snapshot = models.BigIntegerField()
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="dog_daily_goals")
@@ -141,13 +146,15 @@ class DogDailyGoal(models.Model):
 
 
 class DogGoalTarget(models.Model):
-    """Append-only, manually approved targets configured through existing Admin."""
+    """One append-only timeline for Admin and owner-configured targets."""
     dog = models.ForeignKey(Dog, null=True, on_delete=models.SET_NULL, related_name="goal_targets")
     dog_id_snapshot = models.BigIntegerField(editable=False)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     effective_from = models.DateField()
     target_active_seconds = models.PositiveIntegerField(null=True, blank=True,
-        help_text="Approved daily walking seconds. Leave empty to pause goals; no default formula.")
+        help_text="Daily walking seconds. Leave empty to pause goals.")
+    calculation_policy = models.CharField(max_length=40, default="manual-duration-v1", editable=False)
+    calculation_inputs = models.JSONField(default=dict, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     owner_version = models.PositiveIntegerField(default=0, editable=False)
 

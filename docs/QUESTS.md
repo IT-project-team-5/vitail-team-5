@@ -11,7 +11,7 @@ amount does not mean its qualification engine is implemented.
 | Source | Policy | Current delivery |
 |---|---|---|
 | Walking | 8 points/km; maximum 40 per Melbourne day; dog count does not multiply the award | Connected: server validates confirmed uploads and rounds cumulative daily distance down |
-| Daily goal | 20-point baseline; per-dog/account scope remains open | Per-dog manual targets, progress and goal streaks connected; payouts disabled pending multi-dog rules |
+| Daily goal | 20-point baseline; per-dog/account scope remains open | Per-dog personalised owner and manual Admin targets share one history; progress and goal streaks connected; payouts disabled pending multi-dog rules |
 | Venue check-in | 12 points; at most one daily opportunity per type, four types total | Persisted collection/cap service and shared UI foundation; no production GPS provider or enabled iOS service |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
@@ -85,7 +85,7 @@ receipt without giving a new owner another award.
 
 ## Daily goals
 
-[Daily goals](DAILY_GOALS.md) documents per-dog manual target configuration,
+[Daily goals](DAILY_GOALS.md) documents personalised owner and manual Admin target configuration,
 seven-day calendars, duration eligibility, history and the disabled payout path.
 The goal-completion streak is separate from the following existing reward.
 

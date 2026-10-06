@@ -112,6 +112,9 @@ class GoalOwnershipMigrationTests(TransactionTestCase):
             preserved = apps.get_model("dogs", "DogGoalTarget").objects.get(pk=target.pk)
             self.assertEqual((preserved.owner_version, preserved.target_active_seconds, preserved.created_at),
                              (0, 90, target.created_at))
+            self.assertEqual(preserved.calculation_policy, "manual-duration-v1")
+            self.assertEqual(preserved.calculation_inputs, {})
+            self.assertIsNone(apps.get_model("dogs", "Dog").objects.get(pk=dog.pk).weight_kg)
             for app, model in (("dogs", "DogDailyGoal"), ("rewards", "PointEntry")):
                 self.assertEqual(list(apps.get_model(app, model).objects.values()), before[model])
         finally:

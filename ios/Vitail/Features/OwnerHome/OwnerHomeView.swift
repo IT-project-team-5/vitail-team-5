@@ -94,6 +94,8 @@ struct OwnerHomeView: View {
                                          async let quests: Void = questStore.documentsDidChange()
                                          async let wallet: Void = redemptionViewModel.refresh()
                                          _ = await (quests, wallet)
+                                     }, onGoalsChanged: {
+                                         await questStore.walksDidChange()
                                      })
                         .id(accountRefreshID)
                         .tag(Page.account)

@@ -76,7 +76,7 @@ its clock or fabricate venue opportunities.
 | Reference | Decision still needed | Current safe behavior |
 |---|---|---|
 | O5 | Does the cap include net-walk rewards? What are the per-dog/account goal reward and cap scope, any/all participant rule and partial-award rules? | Goal membership confirmed: 40 walking + 20 goal + 12 check-in within 72. Goal payouts remain disabled pending multi-dog scope/eligibility; net and partial rewards remain disabled |
-| O6 | Numeric daily-goal formula: duration versus distance, breed/age/size/flat-face adjustments, heat guardrails and live participant attribution | Manually approved duration targets and per-dog progress are available via existing Admin; no personalised formula. Payouts remain disabled pending multi-dog decisions; see DAILY_GOALS.md |
+| O6 | Daily-goal duration formula confirmed 6 October 2026 | Weight baseline × breed energy × calendar age × brachycephalic factor; owner exercise adjustment 50–200% once, default 100%. Owner and Admin share one immutable target history. No additional heat factor is invented. Reward scope and any/all-dog qualification remain unresolved; payouts stay disabled. See DAILY_GOALS.md |
 | O7 | Final rounding/minimum-walk policy | Current walking implementation rounds cumulative daily distance down; it invents no minimum-duration reward requirement |
 | O8 | Weather source and heat-adjustment inputs | No weather-based goal calculation or provider claim |
 | O9 | Retention, access and erasure policy for GPS, routes, evidence and account history | No new public GPS ingestion; local routes/private originals retained by current behavior. Schema TTL fields alone do not implement a retention job |

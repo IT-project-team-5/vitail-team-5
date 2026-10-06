@@ -7,9 +7,13 @@ protocol DogServicing: Sendable {
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog
     func uploadPhoto(dogID: Int, data: Data) async throws -> Dog
     func deleteDog(id: Int) async throws
+    func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview
+    func saveGoal(dogID: Int, request: DogGoalRequest) async throws -> DogGoalPreview
 }
 
 extension DogServicing {
+    func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview { throw URLError(.unsupportedURL) }
+    func saveGoal(dogID: Int, request: DogGoalRequest) async throws -> DogGoalPreview { throw URLError(.unsupportedURL) }
     func uploadPhoto(dogID: Int, data: Data) async throws -> Dog { throw PhotoUploadError.unavailable }
 }
 
@@ -22,6 +26,16 @@ actor DogService: DogServicing {
 
     func getDogs() async throws -> [Dog] {
         try await apiClient.get("/api/dogs")
+    }
+
+    func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview {
+        let adjustment = NSDecimalNumber(value: percentage).dividing(by: 100).stringValue
+        return try await apiClient.get("/api/dogs/\(dogID)/goal",
+            queryItems: [URLQueryItem(name: "owner_adjustment", value: adjustment)])
+    }
+
+    func saveGoal(dogID: Int, request: DogGoalRequest) async throws -> DogGoalPreview {
+        try await apiClient.post("/api/dogs/\(dogID)/goal", body: request)
     }
 
     func getBreeds() async throws -> [Breed] {

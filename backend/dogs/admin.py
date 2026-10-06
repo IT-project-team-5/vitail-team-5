@@ -74,7 +74,8 @@ class GoalTargetForm(forms.ModelForm):
 @admin.register(DogGoalTarget)
 class GoalTargetAdmin(admin.ModelAdmin):
     form = GoalTargetForm
-    list_display = ("dog", "owner", "effective_from", "target_active_seconds")
+    list_display = ("dog", "owner", "effective_from", "target_active_seconds", "calculation_policy")
+    readonly_fields = ("calculation_policy", "calculation_inputs")
 
     def has_change_permission(self, request, obj=None):
         return False

@@ -1,14 +1,39 @@
 from django.db import transaction
+from django.core.exceptions import ValidationError as ModelValidationError
 from django.shortcuts import get_object_or_404
 
 from accounts.photos import ImageUploadSerializer, PhotoJSONParser, replace_photo
 from rest_framework import generics
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Breed, Dog
 from .permissions import IsOwner
-from .serializers import BreedSerializer, DogSerializer
+from .serializers import BreedSerializer, DogSerializer, GoalRequestSerializer
+from .personalised_goals import owner_goal
+
+
+class DogGoalView(APIView):
+    permission_classes = [IsOwner]
+
+    def get(self, request, pk):
+        return self.respond(request, pk, save=False)
+
+    def post(self, request, pk):
+        return self.respond(request, pk, save=True)
+
+    def respond(self, request, pk, *, save):
+        dog = get_object_or_404(Dog, pk=pk, owner=request.user)
+        serializer = GoalRequestSerializer(data=request.data if save else request.query_params)
+        serializer.is_valid(raise_exception=True)
+        if save and "effective_from" not in serializer.validated_data:
+            raise ValidationError({"effective_from": "Choose the previewed effective date."})
+        try:
+            data = owner_goal(dog=dog, owner=request.user, save=save, **serializer.validated_data)
+        except ModelValidationError as error:
+            raise ValidationError(error.message_dict if hasattr(error, "message_dict") else error.messages)
+        return Response(data, status=201 if save else 200)
 
 
 class BreedListView(generics.ListAPIView):

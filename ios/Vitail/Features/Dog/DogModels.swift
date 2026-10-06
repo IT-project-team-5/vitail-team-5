@@ -4,6 +4,12 @@ enum BreedEnergyLevel: String, Codable, Sendable {
     case low = "LOW"
     case moderate = "MODERATE"
     case high = "HIGH"
+    case veryHigh = "VERY_HIGH"
+    case unknown = "UNKNOWN"
+
+    init(from decoder: Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .unknown
+    }
 }
 
 enum DogSize: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -87,6 +93,7 @@ struct Dog: Codable, Equatable, Identifiable, Sendable {
     var isBrachycephalic: Bool
     let createdAt: String
     var dateOfBirth: String? = nil
+    var weightKg: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, photo, breed, size
@@ -94,6 +101,7 @@ struct Dog: Codable, Equatable, Identifiable, Sendable {
         case isBrachycephalic = "is_brachycephalic"
         case createdAt = "created_at"
         case dateOfBirth = "date_of_birth"
+        case weightKg = "weight_kg"
     }
 
     func currentAgeMonths(on date: Date = Date()) -> Int {
@@ -117,15 +125,28 @@ struct DogWriteRequest: Encodable, Sendable {
     let size: DogSize
     let isBrachycephalic: Bool
     let dateOfBirth: String?
+    let weightKg: String?
 
     init(name: String, breedID: Int, ageMonths: Int, size: DogSize,
-         isBrachycephalic: Bool, dateOfBirth: String? = nil) {
+         isBrachycephalic: Bool, dateOfBirth: String? = nil, weightKg: String? = nil) {
         self.name = name
         self.breedID = breedID
         self.ageMonths = ageMonths
         self.size = size
         self.isBrachycephalic = isBrachycephalic
         self.dateOfBirth = dateOfBirth
+        self.weightKg = weightKg
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(breedID, forKey: .breedID)
+        try container.encode(ageMonths, forKey: .ageMonths)
+        try container.encode(size, forKey: .size)
+        try container.encode(isBrachycephalic, forKey: .isBrachycephalic)
+        try container.encodeIfPresent(dateOfBirth, forKey: .dateOfBirth)
+        try container.encode(weightKg, forKey: .weightKg)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -134,5 +155,65 @@ struct DogWriteRequest: Encodable, Sendable {
         case ageMonths = "age_months"
         case dateOfBirth = "date_of_birth"
         case isBrachycephalic = "is_brachycephalic"
+        case weightKg = "weight_kg"
+    }
+}
+
+struct DogGoalRequest: Encodable, Sendable {
+    let ownerAdjustment: String
+    let effectiveFrom: String
+    enum CodingKeys: String, CodingKey {
+        case ownerAdjustment = "owner_adjustment", effectiveFrom = "effective_from"
+    }
+}
+
+struct DogGoalTarget: Decodable, Identifiable, Sendable {
+    let id: Int
+    let effectiveFrom: String
+    let targetSeconds: Int?
+    let policyVersion: String
+    let calculationInputs: DogGoalCalculationInputs?
+    enum CodingKeys: String, CodingKey {
+        case id, effectiveFrom = "effective_from", targetSeconds = "target_seconds", policyVersion = "policy_version"
+        case calculationInputs = "calculation_inputs"
+    }
+    var duration: String { targetSeconds.map(DogGoalPreview.duration) ?? "Paused" }
+}
+
+struct DogGoalCalculationInputs: Decodable, Sendable {
+    let ownerAdjustment: String?
+    let suggestedMinutes: String?
+    enum CodingKeys: String, CodingKey {
+        case ownerAdjustment = "owner_adjustment", suggestedMinutes = "suggested_minutes"
+    }
+    var description: String? {
+        guard let ownerAdjustment, let adjustment = Decimal(string: ownerAdjustment),
+              let suggestedMinutes, let recommendation = Decimal(string: suggestedMinutes) else { return nil }
+        return "\(NSDecimalNumber(decimal: adjustment * 100).stringValue)% of \(NSDecimalNumber(decimal: recommendation).stringValue) min recommended"
+    }
+}
+
+struct DogGoalPreview: Decodable, Sendable {
+    let eligible: Bool
+    let missingInputs: [String]
+    let reason: String?
+    let effectiveFrom: String
+    let ownerAdjustment: String
+    let suggestedMinutes: String?
+    let targetSeconds: Int?
+    let currentTarget: DogGoalTarget?
+    let scheduledTargets: [DogGoalTarget]
+    enum CodingKeys: String, CodingKey {
+        case eligible, reason, missingInputs = "missing_inputs", effectiveFrom = "effective_from"
+        case ownerAdjustment = "owner_adjustment", suggestedMinutes = "suggested_minutes"
+        case targetSeconds = "target_seconds", currentTarget = "current_target", scheduledTargets = "scheduled_targets"
+    }
+    var recommendation: String {
+        guard let suggestedMinutes, let value = Decimal(string: suggestedMinutes) else { return "Unavailable" }
+        return "\(NSDecimalNumber(decimal: value).stringValue) min"
+    }
+    static func duration(_ seconds: Int) -> String {
+        let minutes = seconds / 60, remainder = seconds % 60
+        return remainder == 0 ? "\(minutes) min" : "\(minutes) min \(remainder) sec"
     }
 }
