@@ -21,7 +21,7 @@ struct OwnerProfileView: View {
         self.dogService = dogService
         self.user = user
         self.session = session
-        _dogViewModel = StateObject(wrappedValue: DogViewModel(service: dogService))
+        _dogViewModel = StateObject(wrappedValue: DogViewModel(service: dogService, session: session))
     }
 
     var body: some View {

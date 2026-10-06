@@ -3,6 +3,66 @@ import XCTest
 @testable import Vitail
 
 final class CredentialAuthorityTests: XCTestCase {
+    @MainActor
+    func testLateLoginCannotSignInAfterLogout() async {
+        let auth = DeferredSessionAuth()
+        await auth.suspend("login")
+        let session = SessionStore(authService: auth)
+        let login = Task { try? await session.login(email: "old", password: "test", expectedRole: .owner) }
+        await auth.waitFor("login")
+        await session.logout()
+        await auth.release("login"); await login.value
+        XCTAssertEqual(session.state, .signedOut)
+        let tokens = await auth.savedTokens
+        XCTAssertNil(tokens)
+    }
+
+    @MainActor
+    func testNewLoginWinsOverOlderLoginResponse() async throws {
+        let auth = DeferredSessionAuth()
+        await auth.suspend("login")
+        let session = SessionStore(authService: auth)
+        let old = Task { try? await session.login(email: "old", password: "test", expectedRole: .owner) }
+        await auth.waitFor("login")
+        try await session.login(email: "new", password: "test", expectedRole: .owner)
+        await auth.release("login"); await old.value
+        guard case let .signedIn(user) = session.state else { return XCTFail("Expected new session") }
+        XCTAssertEqual(user.id, 2)
+        let tokens = await auth.savedTokens
+        XCTAssertEqual(tokens?.access, "new")
+    }
+
+    @MainActor
+    func testObsoleteRestoreFailureCannotSignOutNewLogin() async throws {
+        let auth = DeferredSessionAuth()
+        await auth.suspend("restore")
+        let session = SessionStore(authService: auth)
+        let restoring = Task { await session.restore() }
+        await auth.waitFor("restore")
+        try await session.login(email: "new", password: "test", expectedRole: .owner)
+        await auth.release("restore"); await restoring.value
+        guard case let .signedIn(user) = session.state else { return XCTFail("Old restore replaced new login") }
+        XCTAssertEqual(user.id, 2)
+    }
+
+    @MainActor
+    func testLogoutWaitsForPendingCredentialInstallThenClearsIt() async {
+        let auth = DeferredSessionAuth()
+        await auth.suspend("persist")
+        let session = SessionStore(authService: auth)
+        let login = Task { try? await session.login(email: "new", password: "test", expectedRole: .owner) }
+        await auth.waitFor("persist")
+        let revision = session.sessionRevision
+        let logout = Task { await session.logout() }
+        for _ in 0..<100 where session.sessionRevision == revision { await Task.yield() }
+        XCTAssertGreaterThan(session.sessionRevision, revision)
+        await auth.release("persist")
+        await logout.value; await login.value
+        XCTAssertEqual(session.state, .signedOut)
+        let tokens = await auth.savedTokens
+        XCTAssertNil(tokens)
+    }
+
     func testConcurrentUnauthorizedRequestsShareOneRefresh() async throws {
         let oldTokens = makeTokens("old")
         let newTokens = makeTokens("new")
@@ -320,4 +380,40 @@ private actor AuthServingStub: AuthServing {
     func expireSession() {
         eventContinuation.yield(.sessionExpired)
     }
+}
+
+private actor DeferredSessionAuth: AuthServing {
+    nonisolated let credentialEvents = AsyncStream<CredentialEvent> { _ in }
+    private(set) var savedTokens: AuthTokens?
+    private var holds: Set<String> = []
+    private var gates: [String: CheckedContinuation<Void, Never>] = [:]
+    private var entered: [String: CheckedContinuation<Void, Never>] = [:]
+    func suspend(_ operation: String) { holds.insert(operation) }
+    func waitFor(_ operation: String) async {
+        if gates[operation] != nil { return }
+        await withCheckedContinuation { entered[operation] = $0 }
+    }
+    func release(_ operation: String) {
+        holds.remove(operation)
+        gates.removeValue(forKey: operation)?.resume()
+    }
+    private func pause(_ operation: String) async {
+        guard holds.contains(operation) else { return }
+        await withCheckedContinuation { continuation in
+            gates[operation] = continuation
+            entered.removeValue(forKey: operation)?.resume()
+        }
+    }
+    func login(email: String, password: String) async throws -> AuthResponse {
+        if email == "old" { await pause("login") }
+        let user = User(id: email == "old" ? 1 : 2, email: email, displayName: email, role: .owner)
+        return AuthResponse(access: email, refresh: email, user: user)
+    }
+    func register(email: String, password: String, displayName: String) async throws -> AuthResponse {
+        try await login(email: email, password: password)
+    }
+    func persist(_ tokens: AuthTokens) async throws { await pause("persist"); savedTokens = tokens }
+    func restoreUser() async throws -> User? { await pause("restore"); throw APIError.missingSession }
+    func clearSession() async throws { savedTokens = nil }
+    func updateProfile(displayName: String) async throws -> User { throw APIError.invalidResponse }
 }

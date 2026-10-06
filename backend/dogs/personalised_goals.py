@@ -4,7 +4,7 @@ Age is evaluated on the revision's effective date. Saved revisions never
 recalculate when a profile, breed or policy changes.
 """
 import calendar
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
@@ -80,13 +80,17 @@ def next_effective_date(dog):
     targets = DogGoalTarget.objects.filter(dog=dog)
     day = local_date() + timedelta(days=1) if targets.exists() else local_date()
     latest = targets.filter(owner_id=dog.owner_id, owner_version=dog.goal_owner_version).last()
-    if latest:
+    if latest and latest.effective_from < date.max:
         day = max(day, latest.effective_from + timedelta(days=1))
+    # At the calendar limit there is no following date. Offer the first free
+    # permitted date instead; do not let one legal far-future revision break GET.
     # An earlier owner's future schedule must not postpone this owner's setup.
     # The existing dog/date uniqueness still reserves those exact dates.
     for occupied in targets.filter(effective_from__gte=day).values_list("effective_from", flat=True):
         if occupied != day:
             break
+        if day == date.max:
+            raise ValidationError({"effective_from": "No available effective date remains."})
         day += timedelta(days=1)
     return day
 

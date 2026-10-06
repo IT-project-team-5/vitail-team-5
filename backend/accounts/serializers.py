@@ -35,6 +35,16 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Display name cannot be blank.")
         return value
 
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        current = User.objects.select_for_update().get(pk=instance.pk)
+        if not current.is_active or current.deleted_at or current.auth_version != instance.auth_version:
+            raise AuthenticationFailed("This session has ended. Please sign in again.", code="session_revoked")
+        if "display_name" in validated_data:
+            current.display_name = validated_data["display_name"]
+            current.save(update_fields=("display_name",))
+        return current
+
 
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=254)

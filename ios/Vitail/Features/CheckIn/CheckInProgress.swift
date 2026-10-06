@@ -256,6 +256,7 @@ final class CheckInProgressStore: ObservableObject {
         guard isCurrentOwner, !isRefreshing, let service else { return }
         let startedGeneration = generation
         let startedRevision = revision
+        let requestedAt = now()
         isRefreshing = true
         defer { if generation == startedGeneration { isRefreshing = false } }
         do {
@@ -272,7 +273,8 @@ final class CheckInProgressStore: ObservableObject {
             }
             localDate = fresh.localDate
             serverTime = fresh.serverTime
-            receivedAt = now()
+            // Include time awaiting this response when expiring yesterday's rows.
+            receivedAt = requestedAt
             earnedPointsToday = max(earnedPointsToday, fresh.earnedPointsToday)
             for item in fresh.items where item.status == .collected { confirmedCollections[item.id] = item }
             var mergedItems = fresh.items.map { confirmedCollections[$0.id] ?? $0 }

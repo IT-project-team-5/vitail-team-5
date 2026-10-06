@@ -80,6 +80,9 @@ Authenticated OWNER API:
   of tomorrow or one day after this ownership version's last scheduled revision,
   skipping dates already reserved by older ownership revisions. This avoids
   silently displacing a future Admin change in the owner UI.
+  If the latest revision is the maximum representable date (9999-12-31), there
+  is no following day: preview falls back to the first free permitted date.
+  This leaves that far-future revision and every existing snapshot unchanged.
 - `POST /api/dogs/{id}/goal`: `{ "effective_from": "2026-10-07",
   "owner_adjustment": "1.00" }`. Date is required; omitted adjustment means
   100%. Returns 201 with the recomputed recommendation and saved revision.
@@ -201,9 +204,9 @@ Foregrounding, polling, retry and account teardown reuse the existing stores.
 
 ## Migration and verification
 
-The [personalisation implementation report](PERSONALISED_GOALS_IMPLEMENTATION.md)
-records the fresh 6 October 2026 result: **418 Linux MySQL tests passed with no
-skips**, the blocked iOS build/XCTest checks, and the iPhone test checklist.
+The earlier personalisation implementation passed 418 Linux MySQL tests. See
+the [6 October app review](APP_REVIEW_2026-10-06.md) for fresh baseline and
+post-fix results, blocked iOS checks and the iPhone test checklist.
 
 `dogs.0005_doggoaltarget` adds only the target revision table, foreign keys and
 positive-target/identity and dog/effective-date uniqueness constraints. Existing
@@ -228,7 +231,7 @@ DST, late uploads, missed days, target changes, unconfigured days, preserved
 history, shared/net intervals and ledger/cap/settlement consistency. Concurrency
 tests require disposable MySQL. iOS Quest tests cover calendar presentation,
 midnight invalidation, refresh after an in-flight read and appearance at large
-text sizes. See the implementation report for checks actually run; test source
+text sizes. See the app review report for checks actually run; test source
 alone is not evidence of a successful iOS build or MySQL locking test.
 
 ### Verification recorded on 4 October 2026
@@ -248,7 +251,7 @@ alone is not evidence of a successful iOS build or MySQL locking test.
 
 ### Review on 5 October 2026
 
-See [the local review report](DAILY_GOALS_REVIEW.md) for reproduced failures,
-changes, current verification results and the physical-iPhone retest checklist.
+The subsequent [6 October app review](APP_REVIEW_2026-10-06.md) records reproduced
+failures, changes, current verification and the physical-iPhone retest checklist.
 The earlier macOS/SQLite result above is historical and is not a substitute for
 the current platform-specific results.

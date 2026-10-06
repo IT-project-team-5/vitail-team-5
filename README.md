@@ -66,7 +66,7 @@ Staging and Release.
 
 | Account | Navigation | Available flow |
 |---|---|---|
-| Owner | Account / Walk / Quest / Redeem | Email registration, profiles/photos, dogs and birthdays, recorded walks, care rewards, wallet and café orders |
+| Owner | Account / Walk / Quest / Venues / Redeem | Email registration, profiles/photos, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
 | Café | Account / Products / Orders | Admin-created login, venue details/photo/Maps, menu prices and availability, read-only pending orders |
 | Admin | Django Admin | Onboarding, catalogue, positive test-point grants, pending-order cancellation/refunds and evidence access |
 
@@ -86,8 +86,10 @@ and document tasks, plus one walking-streak
 progress bar, with explicit Collect. Collected birthday/document rows leave
 the list after Melbourne midnight; their history remains. Streak advances to
 its next milestone after collection.
-The map and Quest share a check-in presentation/store, but **no production
-location provider or iOS check-in service is enabled yet**.
+The Walk map and Quest share check-in progress. Venues supplies explicit GPS
+start/resume/cancel and collection through authenticated APIs. Dwell is verified
+by server receipt times; gaps over 90 seconds reset progress. Physical-device
+location and background acceptance still need testing.
 
 Redeem lists cafés, menus and actual product prices. Purchase deducts points
 once and opens a receipt; the owner slides to collect. Uncollected orders
@@ -96,7 +98,7 @@ those same orders and cannot collect them for the owner.
 
 The database now has a normalized Venue and foundations for daily goals,
 check-ins, live sessions/location samples, net-walking and friendships. These
-schema changes **do not deliver social APIs, location ingestion, matching,
+schema changes **do not deliver social APIs, live peer-location ingestion, matching,
 leaderboards, daily-goal rewards, chat, notifications or charity donations**.
 See [feature status](docs/FEATURES.md) before treating a capability as available.
 

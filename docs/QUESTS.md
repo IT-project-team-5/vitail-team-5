@@ -12,7 +12,7 @@ amount does not mean its qualification engine is implemented.
 |---|---|---|
 | Walking | 8 points/km; maximum 40 per Melbourne day; dog count does not multiply the award | Connected: server validates confirmed uploads and rounds cumulative daily distance down |
 | Daily goal | 20-point baseline; per-dog/account scope remains open | Per-dog personalised owner and manual Admin targets share one history; progress and goal streaks connected; payouts disabled pending multi-dog rules |
-| Venue check-in | 12 points; at most one daily opportunity per type, four types total | Persisted collection/cap service and shared UI foundation; no production GPS provider or enabled iOS service |
+| Venue check-in | 12 points; at most one daily opportunity per type, four types total | Connected venue GPS start/resume/cancel, server-verified dwell and ledger collection; physical acceptance pending |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
@@ -205,12 +205,22 @@ QuestDefinition switches gate new supported work. They do not implement a
 missing formula/provider. Historical receipts and authorized file access remain
 available when new awards are disabled.
 
-## Venue integration handoff
+## Venue integration
 
-The normalized Venue, CheckIn and collection/cap services are backend
-foundations. A teammate must supply the real location lifecycle and authenticated
-HTTP adapter before wiring `CheckInProgressServing` through OwnerHomeView.
-Current production injection is nil: there are no fabricated venue rows.
+Production dependencies inject `CheckInProgressService` and
+`VenueCheckInService`. The Venues tab uses `CheckInLocationManager` for explicit
+start/resume, location reporting, cancellation and collection. Walk and Quest
+share `CheckInProgressStore`. Venue IDs are integers; check-in IDs are attempt
+UUIDs and must never be interchanged. APIs are listed in [OpenAPI](openapi.yaml).
+
+The server measures continuous dwell from receipt times, with a 90-second
+maximum gap. The client reports fresh precise fixes at most once per 25 seconds
+and displays only server-verified seconds. A long gap or leaving the radius
+resets progress. Background delivery is best effort; a locked phone is not a
+guarantee of qualification. Pending permission/start/report work is cancelled
+on teardown, and late responses cannot replace a newer attempt. An existing
+IN_PROGRESS venue offers Resume after relaunch. GPS check-ins do not create
+walk records or walking points; each earning path uses the same ledger/cap.
 
 ```swift
 func fetchProgress() async throws -> CheckInProgressSnapshot
@@ -229,8 +239,10 @@ opportunity. Collection returns the actual item/credit, wallet balance, daily
 activity total and date. The server enforces ownership, qualification, daily
 uniqueness and the full-reward allowance; it never trusts client progress.
 
-Map and Quest share one store, serialized collection and stable ambiguous-retry
-UUIDs. Confirmed state/cap cannot be undone by old responses. Previous-day rows
+Walk map and Quest share one store, serialized collection and stable ambiguous-retry
+request UUIDs. Venues collection also uses the same backend check-in/credit;
+idempotency is enforced by the attempt and its one credit, including concurrent
+collection through different surfaces. Confirmed state/cap cannot be undone by old responses. Previous-day rows
 hide until a fresh snapshot arrives. Foreground Walk/Quest polling is five
 seconds and stops when inactive. Neither verified progress nor points advance
 using the device clock.
@@ -243,7 +255,7 @@ cases; SQLite intentionally skips those checks. iOS tests cover task visibility,
 collection, account changes, stale responses, midnight, cap presentation and
 wallet refresh races, with light/dark/large-text snapshots.
 
-These tests do not certify a real check-in provider, physical GPS behavior,
-social/location APIs or disabled goal/net rewards. Record actual
+These tests do not certify physical GPS/background behavior,
+unimplemented peer-location/social APIs or disabled goal/net rewards. Record actual
 run results with the build under test; use [feature status](FEATURES.md) and
 [Walk device tests](WALK_TESTING.md) for remaining acceptance work.

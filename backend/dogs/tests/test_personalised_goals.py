@@ -123,6 +123,13 @@ class RecommendationTests(PersonalisedFixture, TestCase):
 
 
 class PersonalisedAPITests(PersonalisedFixture, TestCase):
+    def test_maximum_effective_date_does_not_break_later_previews(self):
+        self.assertEqual(self.post(effective_from="9999-12-31").status_code, 201)
+        # The only occupied date must not make the entire configuration UI crash.
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["effective_from"], self.day + timedelta(days=1))
+
     def test_preview_is_read_only_and_defaults_to_100_percent(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)

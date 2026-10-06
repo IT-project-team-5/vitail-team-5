@@ -9,8 +9,10 @@ final class OwnerProfileViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private var originalDisplayName: String
+    private let ownerID: Int
 
     init(user: User) {
+        ownerID = user.id
         displayName = user.displayName
         originalDisplayName = user.displayName
     }
@@ -22,6 +24,8 @@ final class OwnerProfileViewModel: ObservableObject {
 
     func save(using session: SessionStore) async -> Bool {
         guard canSave, !isSaving else { return false }
+        guard case let .signedIn(user) = session.state, user.id == ownerID else { return false }
+        let revision = session.sessionRevision
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
@@ -30,9 +34,11 @@ final class OwnerProfileViewModel: ObservableObject {
             let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
             if name != originalDisplayName {
                 try await session.updateDisplayName(name)
+                guard session.sessionRevision == revision else { throw APIError.missingSession }
                 originalDisplayName = name
             }
             if let photoData {
+                guard session.sessionRevision == revision else { throw APIError.missingSession }
                 try await session.updatePhoto(photoData)
                 self.photoData = nil
             }

@@ -117,7 +117,7 @@ private struct ActiveCheckInCard: View {
             Text("Checking in at \(checkIn.venueName)").font(.headline)
             ProgressView(value: Double(viewModel.elapsedSeconds), total: Double(max(1, checkIn.requiredSeconds)))
                 .tint(AppColors.brand)
-            Text("\(DwellFormat.clock(seconds: viewModel.remainingSeconds(for: checkIn))) to go — stay at the venue. Locking your phone is fine.")
+            Text("\(DwellFormat.clock(seconds: viewModel.remainingSeconds(for: checkIn))) left to verify — stay at the venue. Progress updates when the server receives your location.")
                 .font(.subheadline)
                 .foregroundStyle(AppColors.secondaryText)
             if let notice = viewModel.connectionNotice {
@@ -201,7 +201,8 @@ private struct VenueDetailSheet: View {
                         .foregroundStyle(AppColors.brand)
                 } else {
                     PrimaryButton(
-                        title: viewModel.isBusy && !isStartingHere ? "Finish your current check-in first" : "Start check-in",
+                        title: viewModel.isBusy && !isStartingHere ? "Finish your current check-in first"
+                            : venue.checkInStatus == "IN_PROGRESS" ? "Resume check-in" : "Start check-in",
                         isLoading: isStartingHere,
                         isDisabled: viewModel.isBusy && !isStartingHere
                     ) {

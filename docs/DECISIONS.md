@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 4 October 2026. The latest confirmed conversation and
+Current as of 6 October 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -21,7 +21,7 @@ below are retained where other project documents cite them.
 | R31 | Per-dog goal progress. The 20-point baseline includes goals in the 72-point combined cap. Per-dog/account reward and cap scope, and any/all participant qualification remain open (clarified 4 October); earlier once-per-account wording is not definitive |
 | R32 | Current app limit: 10 dogs per owner; the relational model supports multiple dogs |
 | R35 / R41 | Native SwiftUI app for iOS 17+; feature-first structure, shared services and a small design system |
-| R37 / R38 | Explicit venue check-in start is intended. OWNER and CAFE use one iOS app; ADMIN uses Django Admin. A table alone does not implement check-in |
+| R37 / R38 | Explicit venue check-in start/resume is connected through live GPS and authenticated APIs; physical acceptance remains pending. OWNER and CAFE use one iOS app; ADMIN uses Django Admin |
 | R39 | Order collection has no location gate in this delivery |
 | R36 / R40 | Current auth is email/password, owner self-registration and admin-created café accounts. Apple sign-in follows project-owned developer-account setup; password reset and in-app deletion remain later requirements |
 | R42 / R43 | Admin onboards cafés; cafés edit their own venue and menu. Product unlisting preserves existing order snapshots |
@@ -30,7 +30,7 @@ below are retained where other project documents cite them.
 | R47 | Café-first menus; purchase confirmation opens the receipt; collection uses an owner slide gesture |
 | R48 | Latest policy replaces the temporary coffee estimate. It is display guidance only and does not reprice products or old orders |
 | R49 / R50 | Same-page login accordions; persisted appearance selection; the whole Walk drawer scrolls; large receipt photo opens café details; café cards show customer dogs |
-| R51 / R54 | Account / Walk / Quest / Redeem. Leaderboard belongs to another teammate. Quest is a compact actionable list, not a dashboard of unavailable features |
+| R51 / R54 | Account / Walk / Quest / Venues / Redeem in the merged app. Leaderboard belongs to another teammate. Quest is a compact actionable list, not a dashboard of unavailable features |
 | R52 | Use actual nullable dog birthdays; preserve legacy age-only records; birthday qualification is per dog/year |
 | R53 / R55 | Care rewards are per dog and self-reported. Submission reserves eligibility; explicit Collect credits once. Later spot checks replace up-front approval; audit tooling is separate work |
 | R56 | Up to four daily venue opportunities. Below the walking/check-in cap active rows remain; at the cap uncollected rows hide. Today's collected rows remain below until Melbourne midnight |

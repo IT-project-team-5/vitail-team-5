@@ -3,6 +3,19 @@ import XCTest
 
 @MainActor
 final class CheckInProgressTests: XCTestCase {
+    func testSlowPreMidnightResponseDoesNotReviveYesterday() async {
+        let serverTime = ISO8601DateFormatter().date(from: "2026-09-25T13:59:50Z")!
+        var clock = serverTime
+        let service = CheckInProgressFixture(serverTime: serverTime)
+        await service.suspendFetch()
+        let store = CheckInProgressStore(ownerID: 1, service: service, now: { clock })
+        let refresh = Task { await store.refresh() }
+        await service.waitForFetch()
+        clock = clock.addingTimeInterval(20)
+        await service.finishFetch(); await refresh.value
+        XCTAssertTrue(store.visibleItems.isEmpty)
+    }
+
     func testBothSurfacesShareOneCollectionAndVerifiedProgress() async {
         let service = CheckInProgressFixture()
         let store = CheckInProgressStore(ownerID: 1, service: service)
@@ -251,8 +264,12 @@ private actor CheckInProgressFixture: CheckInProgressServing {
     private var fetchContinuation: CheckedContinuation<Void, Never>?
     private var collectionStarted: CheckedContinuation<Void, Never>?
     private var fetchStarted: CheckedContinuation<Void, Never>?
+    private let serverTimeOverride: Date?
 
-    init(initial: VenueCheckInProgress = CheckInProgressFixture.item()) { self.initial = initial }
+    init(initial: VenueCheckInProgress = CheckInProgressFixture.item(), serverTime: Date? = nil) {
+        self.initial = initial
+        serverTimeOverride = serverTime
+    }
 
     nonisolated static func item(seconds: Int = 600, status: VenueCheckInProgress.Status = .ready) -> VenueCheckInProgress {
         VenueCheckInProgress(id: "visit-1", venueID: 1, venueName: "Garden Tails", photo: nil,
@@ -268,7 +285,7 @@ private actor CheckInProgressFixture: CheckInProgressServing {
                 fetchStarted?.resume(); fetchStarted = nil
             }
         }
-        let now = Date()
+        let now = serverTimeOverride ?? Date()
         return CheckInProgressSnapshot(items: isHidden ? [] : [initial], localDate: CheckInProgressSnapshot.day(now),
                                        earnedPointsToday: 0, serverTime: now)
     }

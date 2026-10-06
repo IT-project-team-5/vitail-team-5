@@ -46,7 +46,7 @@ class MeView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(UserSerializer(request.user, context={"request": request}).data)
+        return Response(UserSerializer(serializer.instance, context={"request": request}).data)
 
 
 class MePhotoView(APIView):

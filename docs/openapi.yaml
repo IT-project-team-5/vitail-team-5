@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Vitail connected MVP API
-  version: '2026-09-25'
+  version: '2026-10-06'
   description: >-
     Implemented routes only. JWT authentication is required except register,
     login and refresh. Owner/café roles come from the authenticated account.
@@ -9,8 +9,8 @@ info:
     paths also accept a trailing slash, as do quest and document
     paths. Arrays are currently unpaginated.
     Venue IDs are separate from legacy café account IDs; existing cafe_id fields
-    retain their account-ID meaning. New location/social foundation tables do
-    not expose HTTP routes here. Django Admin is a separate session/CSRF-protected
+    retain their account-ID meaning. Venue check-in location routes are enabled;
+    peer-location/social foundations expose no routes. Django Admin is a separate session/CSRF-protected
     interface, not this API.
 servers:
   - url: http://127.0.0.1:8000
@@ -631,8 +631,8 @@ paths:
         STREAK uses validated walking days and exposes the oldest earned uncollected
         milestone, otherwise the current run's next target. Earned claims survive
         a broken run. There are no separate collected streak rows.
-        No base walking row, unimplemented goal award or check-in provider
-        is fabricated. Empty tasks is valid. Legacy dashboard section projections
+        No base walking row or unimplemented goal award is fabricated.
+        Check-in progress uses /api/check-ins. Empty tasks is valid. Legacy dashboard section projections
         are removed; evidence/history use the documents endpoint. Read requests
         never create a credit.
       responses:
@@ -946,11 +946,124 @@ paths:
               schema: {type: string, format: binary}
         '404': {description: 'Submission not visible to this account, no attachment or missing stored file'}
         default: {$ref: '#/components/responses/Error'}
+  /api/venues:
+    get:
+      summary: Owner venue map; at most one enabled geocoded venue per category
+      responses:
+        '200':
+          description: Configured venues, retaining an eligible venue already visited today
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/CheckInVenue'}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/venues/{venue_id}/check-ins:
+    parameters:
+      - {name: venue_id, in: path, required: true, schema: {type: integer, minimum: 1}}
+    post:
+      summary: Start or resume today's owned venue attempt
+      description: Requires an accurate non-simulated fix within 20 metres. One opportunity per category per Melbourne day. Existing same-venue attempts replay; no client duration is trusted.
+      requestBody: {$ref: '#/components/requestBodies/CheckInLocation'}
+      responses:
+        '201':
+          description: Started or existing attempt; id is a UUID, not the venue ID
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VenueCheckIn'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins:
+    get:
+      summary: Owner's visible attempts and collected receipts for today
+      responses:
+        '200':
+          description: Server time and ledger daily activity total; collected rows survive disabled offers until midnight
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [local_date, server_time, earned_points_today, items]
+                properties:
+                  local_date: {type: string, format: date}
+                  server_time: {type: string, format: date-time}
+                  earned_points_today: {type: integer, minimum: 0}
+                  items: {type: array, items: {$ref: '#/components/schemas/VenueCheckIn'}}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/{attempt_id}/locations:
+    parameters:
+      - {$ref: '#/components/parameters/AttemptID'}
+    post:
+      summary: Report an accurate fix for an owned attempt
+      description: Server receipt times determine dwell. Outside-radius fixes and gaps over 90 seconds reset unqualified progress. No walk record or walking credit is created.
+      requestBody: {$ref: '#/components/requestBodies/CheckInLocation'}
+      responses:
+        '200':
+          description: Authoritative verified seconds and attempt status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VenueCheckIn'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/{attempt_id}/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/AttemptID'}
+    post:
+      summary: Cancel an unqualified owned attempt
+      responses:
+        '200':
+          description: Unqualified attempt deleted; ready or collected attempts remain unchanged
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {type: object, required: [cancelled], properties: {cancelled: {type: boolean, enum: [true]}}}
+                  - {$ref: '#/components/schemas/VenueCheckIn'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/{attempt_id}/collect:
+    parameters:
+      - {$ref: '#/components/parameters/AttemptID'}
+    post:
+      summary: Collect or replay the single ledger credit for an owned qualified attempt
+      description: Requires enough full-reward daily allowance. One credit per attempt across all callers; request_id is accepted but does not replace attempt identity. No partial credits.
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, properties: {request_id: {type: string, format: uuid}}}
+      responses:
+        '200':
+          description: Confirmed credit and current ledger balance
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [check_in, awarded_points, wallet_balance, daily_earned_points, local_date]
+                properties:
+                  check_in: {$ref: '#/components/schemas/VenueCheckIn'}
+                  awarded_points: {type: integer, minimum: 1}
+                  wallet_balance: {type: integer, minimum: 0}
+                  daily_earned_points: {type: integer, minimum: 0}
+                  local_date: {type: string, format: date}
+        default: {$ref: '#/components/responses/Error'}
 components:
+  requestBodies:
+    CheckInLocation:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [latitude, longitude, accuracy_m]
+            properties:
+              latitude: {type: number, minimum: -90, maximum: 90}
+              longitude: {type: number, minimum: -180, maximum: 180}
+              accuracy_m: {type: number, minimum: 0, maximum: 30}
+              is_simulated: {type: boolean, default: false}
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
     sessionCookie: {type: apiKey, in: cookie, name: sessionid, description: Django session accepted only for protected document downloads}
   parameters:
+    AttemptID:
+      name: attempt_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     ID:
       name: id
       in: path
@@ -966,6 +1079,36 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    CheckInVenue:
+      type: object
+      required: [id, name, kind, description, address, opening_hours, latitude, longitude, checkin_radius_m, required_seconds, checkin_status]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        kind: {type: string, enum: [CAFE, RESTAURANT, PARK, VET]}
+        description: {type: string}
+        address: {type: string}
+        opening_hours: {type: string}
+        photo: {type: string, format: uri, nullable: true}
+        latitude: {type: number}
+        longitude: {type: number}
+        checkin_radius_m: {type: integer, enum: [20]}
+        required_seconds: {type: integer, minimum: 1}
+        checkin_status: {type: string, enum: [AVAILABLE, IN_PROGRESS, READY, COLLECTED]}
+    VenueCheckIn:
+      type: object
+      required: [id, venue_id, venue_name, required_seconds, verified_seconds, status, updated_at, reward_points, collected_at]
+      properties:
+        id: {type: string, format: uuid}
+        venue_id: {type: integer, nullable: true}
+        venue_name: {type: string}
+        photo: {type: string, format: uri, nullable: true}
+        required_seconds: {type: integer, minimum: 1}
+        verified_seconds: {type: integer, minimum: 0}
+        status: {type: string, enum: [IN_PROGRESS, READY, COLLECTED]}
+        updated_at: {type: string, format: date-time}
+        reward_points: {type: integer, minimum: 1}
+        collected_at: {type: string, format: date-time, nullable: true}
     PhotoUpload:
       type: object
       required: [image_base64]

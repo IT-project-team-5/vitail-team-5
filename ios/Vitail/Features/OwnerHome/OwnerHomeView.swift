@@ -75,8 +75,8 @@ struct OwnerHomeView: View {
         self.documentService = documentService
         _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
         _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
-        _venueCheckIns = StateObject(wrappedValue: VenuesViewModel(service: venueCheckInService))
-        _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService))
+        _venueCheckIns = StateObject(wrappedValue: VenuesViewModel(service: venueCheckInService, session: session, ownerID: user.id))
+        _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService, session: session))
         _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
             ownerID: user.id, session: session, dogService: dogService, walkService: walkService
         ))

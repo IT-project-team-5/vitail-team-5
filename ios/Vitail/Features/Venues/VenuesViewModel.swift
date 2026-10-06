@@ -10,7 +10,7 @@ final class VenuesViewModel: ObservableObject {
         case finished(VenueCheckInSession)
     }
 
-    /// Two missed reports make the server abandon the check-in, so report well inside 90 s.
+    /// Gaps over 90 seconds reset server dwell; the attempt remains resumable.
     static let reportInterval: TimeInterval = 25
 
     @Published private(set) var venues: [CheckInVenue] = []
@@ -19,6 +19,7 @@ final class VenuesViewModel: ObservableObject {
     @Published private(set) var hasLoaded = false
     @Published private(set) var elapsedSeconds = 0
     @Published private(set) var isCollecting = false
+    @Published private(set) var isCancelling = false
     @Published var errorMessage: String?
     @Published private(set) var connectionNotice: String?
 
@@ -29,14 +30,17 @@ final class VenuesViewModel: ObservableObject {
     private let service: any VenueCheckInServing
     private let location: any CheckInLocationProviding
     private let now: () -> Date
-    private var startedAt: Date?
     private var lastReportAt: Date?
-    private var isReporting = false
-    private var ticker: Task<Void, Never>?
+    private var reportTask: Task<Void, Never>?
+    private var startTask: Task<VenueCheckInSession, Error>?
+    private var generation = 0
+    private var isEnabled = true
+    private var sessionSubscription: AnyCancellable?
 
     init(
         service: any VenueCheckInServing = VenueCheckInService(),
         location: (any CheckInLocationProviding)? = nil,
+        session: SessionStore? = nil, ownerID: Int? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         let location = location ?? CheckInLocationManager()
@@ -44,6 +48,10 @@ final class VenuesViewModel: ObservableObject {
         self.location = location
         self.now = now
         location.onLocation = { [weak self] sample in self?.handle(sample) }
+        sessionSubscription = session?.$state.sink { [weak self] state in
+            if case let .signedIn(user) = state, user.id == ownerID, user.role == .owner { return }
+            self?.stop()
+        }
     }
 
     var activeCheckIn: VenueCheckInSession? {
@@ -52,6 +60,7 @@ final class VenuesViewModel: ObservableObject {
     }
 
     var isBusy: Bool {
+        if isCancelling || isCollecting { return true }
         switch phase {
         case .starting, .active: return true
         case .idle, .finished: return false
@@ -63,27 +72,41 @@ final class VenuesViewModel: ObservableObject {
     }
 
     func load() async {
-        guard !isLoading else { return }
+        guard isEnabled, !isLoading, !Task.isCancelled else { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            venues = try await service.fetchVenues()
+            let result = try await service.fetchVenues()
+            guard isEnabled, !Task.isCancelled else { return }
+            venues = result
             hasLoaded = true
             if !isBusy { errorMessage = nil }
         } catch is CancellationError {
         } catch {
-            guard !Task.isCancelled else { return }
+            guard isEnabled, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     func start(_ venue: CheckInVenue) async {
-        guard !isBusy, venue.checkInStatus == "AVAILABLE" else { return }
+        guard isEnabled, !isBusy, !Task.isCancelled,
+              ["AVAILABLE", "IN_PROGRESS"].contains(venue.checkInStatus) else { return }
+        generation += 1
+        let request = generation
         errorMessage = nil
         phase = .starting(venueID: venue.id)
-        do {
+        let task = Task { [location, service] in
             let sample = try await location.currentSample()
-            let checkIn = try await service.startCheckIn(venueID: venue.id, sample: sample)
+            try Task.checkCancellation()
+            return try await service.startCheckIn(venueID: venue.id, sample: sample)
+        }
+        startTask = task
+        defer { if generation == request { startTask = nil } }
+        do {
+            let checkIn = try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
+            guard isEnabled, generation == request else { return }
+            try Task.checkCancellation()
+            guard checkIn.venueID == venue.id else { throw APIError.invalidResponse }
             if checkIn.status == .inProgress {
                 begin(checkIn)
             } else {
@@ -91,6 +114,7 @@ final class VenuesViewModel: ObservableObject {
                 await onProgressChanged?()
             }
         } catch {
+            guard isEnabled, generation == request else { return }
             phase = .idle
             guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
@@ -98,16 +122,47 @@ final class VenuesViewModel: ObservableObject {
     }
 
     func cancel() async {
-        guard let checkIn = activeCheckIn else { return }
+        guard isEnabled, !isCancelling else { return }
+        let checkIn = activeCheckIn
+        generation += 1
+        startTask?.cancel()
+        startTask = nil
         endSession()
         phase = .idle
-        try? await service.cancelCheckIn(checkInID: checkIn.id)
-        await onProgressChanged?()
+        guard let checkIn else { return }
+        isCancelling = true
+        defer { isCancelling = false }
+        do {
+            try await service.cancelCheckIn(checkInID: checkIn.id)
+            guard isEnabled else { return }
+            await load()
+            await onProgressChanged?()
+        } catch {
+            if isEnabled { errorMessage = "Cancellation was not confirmed. Reload to resume or cancel this visit." }
+        }
     }
 
     /// Logout and sign-out stop location updates and abandon the open check-in.
     func prepareForLogout() async {
         await cancel()
+        stop()
+    }
+
+    /// Involuntary expiry/account replacement stops GPS without a network dependency.
+    func stop() {
+        isEnabled = false
+        generation += 1
+        startTask?.cancel()
+        startTask = nil
+        endSession()
+        phase = .idle
+        venues = []
+        isCollecting = false
+        errorMessage = nil
+        onProgressChanged = nil
+        onPointsAwarded = nil
+        sessionSubscription?.cancel()
+        sessionSubscription = nil
     }
 
     func dismissResult() {
@@ -115,19 +170,25 @@ final class VenuesViewModel: ObservableObject {
     }
 
     func collect() async {
-        guard case let .finished(checkIn) = phase, checkIn.status == .ready, !isCollecting else { return }
+        guard isEnabled, case let .finished(checkIn) = phase, checkIn.status == .ready, !isCollecting else { return }
+        let request = generation
         isCollecting = true
         errorMessage = nil
         defer { isCollecting = false }
         do {
             let receipt = try await service.collectCheckIn(attemptID: checkIn.id)
+            guard isEnabled, generation == request, !Task.isCancelled else { return }
+            guard receipt.checkIn.id == checkIn.id, receipt.checkIn.venueID == checkIn.venueID,
+                  receipt.checkIn.status == .collected, receipt.awardedPoints == checkIn.rewardPoints else {
+                throw APIError.invalidResponse
+            }
             phase = .finished(receipt.checkIn)
             await load()
             await onProgressChanged?()
             await onPointsAwarded?()
         } catch is CancellationError {
         } catch {
-            guard !Task.isCancelled else { return }
+            guard isEnabled, generation == request, !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -135,64 +196,60 @@ final class VenuesViewModel: ObservableObject {
     // MARK: - Active session
 
     private func begin(_ checkIn: VenueCheckInSession) {
-        startedAt = now()
-        lastReportAt = startedAt
+        lastReportAt = now()
         elapsedSeconds = checkIn.verifiedSeconds
         connectionNotice = nil
         phase = .active(checkIn)
         location.startMonitoring()
-        ticker?.cancel()
-        ticker = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                self?.tick()
-            }
-        }
     }
 
-    private func tick() {
-        guard let startedAt, case let .active(checkIn) = phase else { return }
-        elapsedSeconds = min(checkIn.requiredSeconds, checkIn.verifiedSeconds + Int(now().timeIntervalSince(startedAt)))
-    }
-
-    private func endSession() {
+    private func endSession(cancelReport: Bool = true) {
         location.stopMonitoring()
-        ticker?.cancel()
-        ticker = nil
-        startedAt = nil
+        if cancelReport { reportTask?.cancel() }
+        reportTask = nil
+        elapsedSeconds = 0
         lastReportAt = nil
         connectionNotice = nil
     }
 
     private func handle(_ sample: LocationSample) {
-        guard case .active = phase, !isReporting else { return }
+        guard isEnabled, case let .active(checkIn) = phase, reportTask == nil else { return }
         let current = now()
         if let lastReportAt, current.timeIntervalSince(lastReportAt) < Self.reportInterval { return }
         lastReportAt = current
-        Task { await report(sample) }
+        let request = generation
+        reportTask = Task { await report(sample, checkIn: checkIn, generation: request) }
     }
 
-    private func report(_ sample: LocationSample) async {
-        guard case let .active(checkIn) = phase else { return }
-        isReporting = true
-        defer { isReporting = false }
+    private func report(_ sample: LocationSample, checkIn: VenueCheckInSession, generation request: Int) async {
+        guard isEnabled, generation == request, !Task.isCancelled else { return }
+        defer { if generation == request { reportTask = nil } }
         do {
             let updated = try await service.reportLocation(checkInID: checkIn.id, sample: sample)
-            guard case .active = phase else { return }
+            guard isEnabled, generation == request, activeCheckIn?.id == checkIn.id, !Task.isCancelled else { return }
+            guard updated.id == checkIn.id, updated.venueID == checkIn.venueID else { throw APIError.invalidResponse }
             connectionNotice = nil
             switch updated.status {
             case .inProgress:
+                // Never add client elapsed time to the server's verified duration.
+                elapsedSeconds = updated.verifiedSeconds
                 phase = .active(updated)
             case .ready, .collected:
-                endSession()
+                endSession(cancelReport: false)
                 phase = .finished(updated)
                 await load()
                 await onProgressChanged?()
             }
         } catch is CancellationError {
         } catch {
-            // Transient: keep tracking. The server ends the check-in if reports stay missing.
-            connectionNotice = "Can't reach Vitail. Keep the app open — your check-in continues."
+            guard isEnabled, generation == request, !Task.isCancelled else { return }
+            if case let APIError.http(status, _) = error, [400, 403, 404].contains(status) {
+                endSession(cancelReport: false)
+                phase = .idle
+                errorMessage = error.localizedDescription
+            } else {
+                connectionNotice = "Progress is not confirmed. Keep the app open; a long connection gap resets the visit timer."
+            }
         }
     }
 }

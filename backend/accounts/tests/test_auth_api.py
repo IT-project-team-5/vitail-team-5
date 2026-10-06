@@ -7,15 +7,42 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, OperationalError, close_old_connections, connection
 from django.test import TransactionTestCase
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
+from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
-from accounts.serializers import RegisterSerializer
+from accounts.serializers import RegisterSerializer, UserProfileUpdateSerializer
 
 
 User = get_user_model()
 
 
 class AuthApiTests(APITestCase):
+    def test_profile_save_cannot_revive_a_revoked_account(self):
+        for changed in ({"is_active": False}, {"deleted_at": timezone.now()}, {"auth_version": 2}):
+            with self.subTest(changed=changed):
+                owner = User.objects.create_user(email=f"revoked-{User.objects.count()}@example.com", display_name="Before")
+                serializer = UserProfileUpdateSerializer(owner, data={"display_name": "After"}, partial=True)
+                serializer.is_valid(raise_exception=True)
+                User.objects.filter(pk=owner.pk).update(**changed)
+                with self.assertRaises(AuthenticationFailed):
+                    serializer.save()
+                owner.refresh_from_db()
+                self.assertEqual(owner.display_name, "Before")
+                for field, value in changed.items():
+                    self.assertEqual(getattr(owner, field), value)
+
+    def test_profile_save_preserves_concurrent_account_fields(self):
+        owner = User.objects.create_user(email="stale-profile@example.com", display_name="Before")
+        serializer = UserProfileUpdateSerializer(owner, data={"display_name": "After"}, partial=True)
+        serializer.is_valid(raise_exception=True)
+        User.objects.filter(pk=owner.pk).update(role="CAFE", notification_preferences={"enabled": False})
+        serializer.save()
+        owner.refresh_from_db()
+        self.assertEqual(owner.role, "CAFE")
+        self.assertEqual(owner.notification_preferences, {"enabled": False})
+        self.assertEqual(owner.display_name, "After")
+
     register_url = "/api/auth/register"
     login_url = "/api/auth/login"
     refresh_url = "/api/auth/refresh"

@@ -16,6 +16,20 @@ from rewards.policy import CHECKIN_SECONDS, local_date
 class LocationCheckInTests(CheckInFixture, TestCase):
     sample = {"latitude": -37.8, "longitude": 144.9, "accuracy_m": 5, "is_simulated": False}
 
+    def test_map_does_not_restore_disabled_venue_with_missing_coordinates(self):
+        venue = self.venues["CAFE"]
+        start_checkin(owner=self.owner, venue_id=venue.pk, sample=self.sample, now=self.now)
+        venue.checkin_enabled = False
+        venue.latitude = venue.longitude = None
+        venue.save()
+        client = APIClient()
+        client.force_authenticate(self.owner)
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            response = client.get("/api/venues")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(venue.pk, [row["id"] for row in response.data])
+
+
     def test_server_times_continuous_dwell_then_requires_collection(self):
         row = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
         self.assertEqual((row.verified_seconds, row.status), (0, "IN_PROGRESS"))

@@ -2,6 +2,47 @@ import XCTest
 @testable import Vitail
 
 final class DogModelsTests: XCTestCase {
+    @MainActor
+    func testLateListCannotRestoreDeletedDog() async throws {
+        let service = DeferredDogService()
+        let model = DogViewModel(service: service)
+        await model.load()
+        let dog = try XCTUnwrap(model.dogs.first)
+        await service.holdList()
+        let refresh = Task { await model.load() }
+        await service.waitUntilHeld()
+        let deleted = await model.delete(dog)
+        XCTAssertTrue(deleted)
+        await service.release()
+        await refresh.value
+        XCTAssertTrue(model.dogs.isEmpty)
+        XCTAssertFalse(model.isLoading)
+    }
+
+    @MainActor
+    func testAccountChangeDuringDogSavePreventsPhotoAndStaleResult() async {
+        let auth = DogSessionAuth()
+        let session = SessionStore(authService: auth)
+        await session.restore()
+        let service = DeferredDogService()
+        let model = DogViewModel(service: service, session: session)
+        await service.holdCreate()
+        let save = Task {
+            await model.save(dog: nil, request: DogWriteRequest(name: "Milo", breedID: 1,
+                ageMonths: 24, size: .medium, isBrachycephalic: false), photoData: Data([1]))
+        }
+        await service.waitUntilHeld()
+        await session.logout()
+        try? await session.login(email: "new", password: "password", expectedRole: .owner)
+        await service.release()
+        let saved = await save.value
+        let photos = await service.photoUploads
+        XCTAssertFalse(saved)
+        XCTAssertEqual(photos, 0)
+        XCTAssertNil(model.lastSavedDog)
+        XCTAssertTrue(model.dogs.isEmpty)
+    }
+
     func testNewAndUnknownBreedEnergyDecodeWithoutBreakingDogList() throws {
         for (raw, expected) in [("VERY_HIGH", BreedEnergyLevel.veryHigh), ("UNKNOWN", .unknown), ("UNRECOGNISED", .unknown)] {
             XCTAssertEqual(try JSONDecoder().decode(BreedEnergyLevel.self, from: Data("\"\(raw)\"".utf8)), expected)
@@ -233,4 +274,50 @@ private actor DogGoalTestService: DogServicing {
     func createDog(_ request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
     func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
     func deleteDog(id: Int) async throws {}
+}
+
+private actor DeferredDogService: DogServicing {
+    private var listHeld = false
+    private var createHeld = false
+    private var gate: CheckedContinuation<Void, Never>?
+    private var entered: CheckedContinuation<Void, Never>?
+    private(set) var photoUploads = 0
+    private let breed = Breed(id: 1, name: "Mixed", energyLevel: .moderate,
+        defaultSize: .medium, isBrachycephalic: false)
+    private var dog: Dog {
+        Dog(id: 1, name: "Milo", breed: breed, ageMonths: 24, size: .medium,
+            isBrachycephalic: false, createdAt: "2026-10-06T00:00:00Z")
+    }
+    func holdList() { listHeld = true }
+    func holdCreate() { createHeld = true }
+    func waitUntilHeld() async {
+        if gate != nil { return }
+        await withCheckedContinuation { entered = $0 }
+    }
+    private func pause() async {
+        await withCheckedContinuation { continuation in
+            gate = continuation
+            entered?.resume()
+            entered = nil
+        }
+    }
+    func release() { gate?.resume(); gate = nil }
+    func getDogs() async throws -> [Dog] { if listHeld { await pause() }; return [dog] }
+    func getBreeds() async throws -> [Breed] { [breed] }
+    func createDog(_ request: DogWriteRequest) async throws -> Dog { if createHeld { await pause() }; return dog }
+    func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { dog }
+    func deleteDog(id: Int) async throws {}
+    func uploadPhoto(dogID: Int, data: Data) async throws -> Dog { photoUploads += 1; return dog }
+}
+
+private actor DogSessionAuth: AuthServing {
+    nonisolated let credentialEvents = AsyncStream<CredentialEvent> { _ in }
+    func restoreUser() async throws -> User? { User(id: 1, email: "old", displayName: "Old", role: .owner) }
+    func login(email: String, password: String) async throws -> AuthResponse {
+        AuthResponse(access: "new", refresh: "new", user: User(id: 2, email: email, displayName: "New", role: .owner))
+    }
+    func register(email: String, password: String, displayName: String) async throws -> AuthResponse { throw APIError.invalidResponse }
+    func persist(_ tokens: AuthTokens) async throws {}
+    func clearSession() async throws {}
+    func updateProfile(displayName: String) async throws -> User { throw APIError.invalidResponse }
 }

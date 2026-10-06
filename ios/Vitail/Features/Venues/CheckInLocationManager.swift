@@ -39,8 +39,8 @@ final class CheckInLocationManager: NSObject, CheckInLocationProviding, CLLocati
     var onLocation: ((LocationSample) -> Void)?
 
     private let manager = CLLocationManager()
-    private var authorizationWaiters: [CheckedContinuation<Void, Never>] = []
-    private var fixWaiters: [CheckedContinuation<LocationSample, Error>] = []
+    private var authorizationWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
+    private var fixWaiters: [UUID: CheckedContinuation<LocationSample, Error>] = [:]
     private var isMonitoring = false
 
     override init() {
@@ -53,13 +53,25 @@ final class CheckInLocationManager: NSObject, CheckInLocationProviding, CLLocati
     }
 
     func currentSample() async throws -> LocationSample {
+        let requestID = UUID()
+        return try await withTaskCancellationHandler(operation: {
+            try await requestSample(id: requestID)
+        }, onCancel: {
+            Task { @MainActor [weak self] in self?.cancelPendingFix(id: requestID) }
+        })
+    }
+
+    private func requestSample(id: UUID) async throws -> LocationSample {
+        try Task.checkCancellation()
         guard CLLocationManager.locationServicesEnabled() else { throw CheckInLocationError.denied }
         if manager.authorizationStatus == .notDetermined {
-            await withCheckedContinuation { continuation in
-                authorizationWaiters.append(continuation)
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+                authorizationWaiters[id] = continuation
                 manager.requestWhenInUseAuthorization()
             }
         }
+        try Task.checkCancellation()
         switch manager.authorizationStatus {
         case .denied: throw CheckInLocationError.denied
         case .restricted: throw CheckInLocationError.restricted
@@ -72,7 +84,8 @@ final class CheckInLocationManager: NSObject, CheckInLocationProviding, CLLocati
             }
         }
         return try await withCheckedThrowingContinuation { continuation in
-            fixWaiters.append(continuation)
+            guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+            fixWaiters[id] = continuation
             manager.requestLocation()
         }
     }
@@ -86,38 +99,66 @@ final class CheckInLocationManager: NSObject, CheckInLocationProviding, CLLocati
     }
 
     func stopMonitoring() {
+        cancelPendingFix()
         isMonitoring = false
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
     }
 
+    private func cancelPendingFix(id: UUID? = nil) {
+        if let id {
+            authorizationWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+            fixWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+        } else {
+            let permission = authorizationWaiters
+            let fixes = fixWaiters
+            authorizationWaiters = [:]
+            fixWaiters = [:]
+            permission.values.forEach { $0.resume(throwing: CancellationError()) }
+            fixes.values.forEach { $0.resume(throwing: CancellationError()) }
+        }
+    }
+
+    // Match the walk preview's freshness window. Never turn cached GPS into
+    // a fresh check-in merely because the server receives it now.
+    static func freshSample(_ location: CLLocation, now: Date) -> LocationSample? {
+        let age = now.timeIntervalSince(location.timestamp)
+        guard CLLocationCoordinate2DIsValid(location.coordinate),
+              location.horizontalAccuracy.isFinite, (0...30).contains(location.horizontalAccuracy),
+              age.isFinite, (-5...15).contains(age) else { return nil }
+        return LocationSample(location)
+    }
+
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
             guard manager.authorizationStatus != .notDetermined else { return }
             let waiters = authorizationWaiters
-            authorizationWaiters = []
-            waiters.forEach { $0.resume() }
+            authorizationWaiters = [:]
+            waiters.values.forEach { $0.resume() }
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let samples = locations.filter { $0.horizontalAccuracy >= 0 }.map(LocationSample.init)
         Task { @MainActor in
-            if let latest = samples.last {
-                let waiters = fixWaiters
-                fixWaiters = []
-                waiters.forEach { $0.resume(returning: latest) }
+            let latest = locations.sorted { $0.timestamp < $1.timestamp }
+                .compactMap { Self.freshSample($0, now: Date()) }.last
+            let waiters = fixWaiters
+            fixWaiters = [:]
+            if let latest {
+                waiters.values.forEach { $0.resume(returning: latest) }
+                if isMonitoring { onLocation?(latest) }
+            } else {
+                waiters.values.forEach { $0.resume(throwing: CheckInLocationError.unavailable) }
             }
-            if isMonitoring { samples.forEach { onLocation?($0) } }
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
             let waiters = fixWaiters
-            fixWaiters = []
-            waiters.forEach { $0.resume(throwing: CheckInLocationError.unavailable) }
+            fixWaiters = [:]
+            waiters.values.forEach { $0.resume(throwing: CheckInLocationError.unavailable) }
         }
     }
 }

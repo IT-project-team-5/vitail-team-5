@@ -31,7 +31,8 @@ class VenueMapView(APIView):
         # If a user already started a category today, keep that exact venue on
         # the map rather than replacing it with another venue of the same kind.
         for kind, row in by_category.items():
-            if row.venue_id:
+            if (row.venue_id and row.venue.is_active and row.venue.checkin_enabled
+                    and row.venue.latitude is not None and row.venue.longitude is not None):
                 unique[kind] = row.venue
         return Response(VenueMapSerializer(list(unique.values()), many=True,
                                            context={"request": request, "by_category": by_category}).data)
