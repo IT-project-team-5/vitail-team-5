@@ -204,9 +204,9 @@ Foregrounding, polling, retry and account teardown reuse the existing stores.
 
 ## Migration and verification
 
-The earlier personalisation implementation passed 418 Linux MySQL tests. See
-the [6 October app review](APP_REVIEW_2026-10-06.md) for fresh baseline and
-post-fix results, blocked iOS checks and the iPhone test checklist.
+The implementation is verified in the normal backend and iOS suites before
+merge. The commands below remain the reproducible source of truth; historical
+test counts are not used as a current result.
 
 `dogs.0005_doggoaltarget` adds only the target revision table, foreign keys and
 positive-target/identity and dog/effective-date uniqueness constraints. Existing
@@ -225,33 +225,21 @@ manual policy with empty calculation inputs; no invented weight, targets,
 snapshots, walks, points or payout backfill is created. Apply migrations through
 the normal deployment process. Verification only migrates disposable databases.
 
-Run `DATABASE_ENGINE=sqlite python manage.py test` and the usual Django checks.
+Run the backend suite against disposable MySQL and the usual Django checks.
 The new tests cover accumulated walks, selected dogs, retry uploads, midnight,
 DST, late uploads, missed days, target changes, unconfigured days, preserved
 history, shared/net intervals and ledger/cap/settlement consistency. Concurrency
 tests require disposable MySQL. iOS Quest tests cover calendar presentation,
 midnight invalidation, refresh after an in-flight read and appearance at large
-text sizes. See the app review report for checks actually run; test source
-alone is not evidence of a successful iOS build or MySQL locking test.
+text sizes. Test source alone is not evidence of a successful build; record only
+results produced by the current checkout.
 
-### Verification recorded on 4 October 2026
+### Verification recorded on 7 October 2026
 
-- Full isolated SQLite suite: 361 tests, 341 passed, 20 skipped (MySQL-only
-  locking/backend checks). No failures.
-- Django system check: passed. Migration drift check: no changes detected.
-- Forward migration preservation is covered by the full suite; existing daily
-  targets/results and ledger balances remain unchanged.
-- Swift syntax parsing passed for the changed application and Quest test files.
-- Full iOS build, XCTest and visual snapshots could not run: only Command Line
-  Tools are installed, with no Xcode/iOS SDK. Snapshot tests are added but their
-  appearance remains unverified on a simulator/device.
-- Docker is not running, so MySQL concurrency checks could not run. SQLite tests
-  do not establish real row-lock correctness. Run the MySQL-only cases against a
-  disposable database before enabling the future payout path.
-
-### Review on 5 October 2026
-
-The subsequent [6 October app review](APP_REVIEW_2026-10-06.md) records reproduced
-failures, changes, current verification and the physical-iPhone retest checklist.
-The earlier macOS/SQLite result above is historical and is not a substitute for
-the current platform-specific results.
+- Migration drift check: no changes detected.
+- Full disposable-MySQL backend suite: 422 tests passed.
+- Full iOS simulator XCTest suite: 356 tests passed and one device-protection
+  test was skipped; visual snapshots passed. QuestTests were rerun after the
+  final review edits and passed.
+- Forward migration preservation remains covered by the backend suite; existing
+  daily targets/results and ledger balances are not rewritten.

@@ -90,6 +90,12 @@ erDiagram
         datetime started_at "required"
         datetime ended_at "required"
     }
+    DogGoalTarget {
+        bigint id PK "required"
+        bigint dog_id FK "nullable"
+        bigint owner_id FK "required"
+        int target_active_seconds "nullable"
+    }
     DogDailyGoal {
         bigint id PK "required"
         bigint dog_id FK "nullable"
@@ -185,6 +191,8 @@ erDiagram
     CheckIn |o--o{ LocationSample : "checkin_id"
     WalkSession ||--o{ NetWalkInterval : "session_low_id"
     WalkSession ||--o{ NetWalkInterval : "session_high_id"
+    Dog |o--o{ DogGoalTarget : "dog_id"
+    User ||--o{ DogGoalTarget : "owner_id"
     Dog |o--o{ DogDailyGoal : "dog_id"
     User ||--o{ DogDailyGoal : "owner_id"
     User ||--o{ QuestAward : "owner_id"

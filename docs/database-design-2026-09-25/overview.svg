@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1110" viewBox="0 0 1360 1110" role="img" aria-labelledby="title desc">
-<title id="title">Vitail current database foundation</title><desc id="desc">22 current domain model tables in six groups. Six deferred tables are not created. Operational features and dormant foundations are distinguished; exact foreign keys are in schema.mmd.</desc>
+<title id="title">Vitail current database foundation</title><desc id="desc">23 current domain model tables in six groups. Six deferred tables are not created. Operational features and dormant foundations are distinguished; exact foreign keys are in schema.mmd.</desc>
 <rect width="100%" height="100%" fill="#f6f5f1"/>
 <g font-family="Arial,Helvetica,sans-serif">
 <text x="56" y="53" font-size="14" fill="#64726b" letter-spacing="2">VITAIL / CURRENT MODEL SCHEMA</text>
-<text x="56" y="105" font-size="36" fill="#263833" font-weight="700">22 tables. Clear feature boundaries.</text>
+<text x="56" y="105" font-size="36" fill="#263833" font-weight="700">23 tables. Clear feature boundaries.</text>
 <text x="56" y="141" font-size="18" fill="#64726b" >37 Jira items traced  /  6 deferred tables NOT created  /  25 September 2026</text>
 <rect x="56" y="186" width="390" height="295" rx="16" fill="white" stroke="#d9ddd5"/>
 <rect x="56" y="186" width="390" height="8" rx="4" fill="#256b68"/>
@@ -32,16 +32,17 @@
 <text x="938" y="348" font-size="17" fill="#263833" >WalkSession</text>
 <text x="938" y="375" font-size="17" fill="#263833" >LocationSample</text>
 <text x="938" y="402" font-size="17" fill="#263833" >NetWalkInterval</text>
-<text x="938" y="459" font-size="12" fill="#6f786f" >Walk upload live; server sessions / GPS dormant.</text>
+<text x="938" y="459" font-size="12" fill="#6f786f" >Walk upload and check-in samples live; peer matching dormant.</text>
 <rect x="56" y="521" width="390" height="295" rx="16" fill="white" stroke="#d9ddd5"/>
 <rect x="56" y="521" width="390" height="8" rx="4" fill="#795f92"/>
 <text x="78" y="557" font-size="12" fill="#795f92" letter-spacing="1.7" font-weight="700">QUESTS</text>
 <text x="78" y="589" font-size="24" fill="#263833" font-weight="700">Goals &amp; collection</text>
-<text x="78" y="629" font-size="17" fill="#263833" >DogDailyGoal</text>
-<text x="78" y="656" font-size="17" fill="#263833" >QuestDefinition</text>
-<text x="78" y="683" font-size="17" fill="#263833" >QuestAward</text>
-<text x="78" y="710" font-size="17" fill="#263833" >CheckIn</text>
-<text x="78" y="794" font-size="12" fill="#6f786f" >Birthday live; goals / GPS provider pending.</text>
+<text x="78" y="629" font-size="17" fill="#263833" >DogGoalTarget</text>
+<text x="78" y="656" font-size="17" fill="#263833" >DogDailyGoal</text>
+<text x="78" y="683" font-size="17" fill="#263833" >QuestDefinition</text>
+<text x="78" y="710" font-size="17" fill="#263833" >QuestAward</text>
+<text x="78" y="737" font-size="17" fill="#263833" >CheckIn</text>
+<text x="78" y="794" font-size="12" fill="#6f786f" >Personalised goal progress live; payout policy pending.</text>
 <rect x="486" y="521" width="390" height="295" rx="16" fill="white" stroke="#d9ddd5"/>
 <rect x="486" y="521" width="390" height="8" rx="4" fill="#477c53"/>
 <text x="508" y="557" font-size="12" fill="#477c53" letter-spacing="1.7" font-weight="700">DOCUMENTS</text>
@@ -59,7 +60,7 @@
 <text x="938" y="794" font-size="12" fill="#6f786f" >Locked services; no social API or matching.</text>
 <text x="56" y="876" font-size="12" fill="#64726b" letter-spacing="1.7" font-weight="700">NOT CREATED</text>
 <text x="56" y="910" font-size="19" fill="#263833" >ExternalIdentity  ·  ChatMessage  ·  Charity  ·  Donation  ·  PushDevice  ·  NotificationDelivery</text>
-<text x="56" y="963" font-size="18" fill="#263833" >No social / GPS ingestion APIs, live matching, or goal / streak / net-walk awards are enabled.</text>
-<text x="56" y="998" font-size="18" fill="#263833" >Check-in has internal services and shared UI state; its location provider is not connected.</text>
+<text x="56" y="963" font-size="18" fill="#263833" >No peer-location/social APIs, live matching, daily-goal payout, or net-walk awards are enabled.</text>
+<text x="56" y="998" font-size="18" fill="#263833" >Check-in location flow is connected; physical-device and background acceptance remain pending.</text>
 <text x="56" y="1059" font-size="14" fill="#69786f" >Model metadata, not deployment status · Django infrastructure excluded · Exact fields / keys: schema.dbml / schema.mmd</text>
 </g></svg>

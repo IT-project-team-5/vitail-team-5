@@ -339,7 +339,7 @@ struct DailyWalkingGoalCard: View {
             Text("Goal streak: \(goal.currentStreak) \(goal.currentStreak == 1 ? "day" : "days")")
                 .font(.subheadline.weight(.semibold))
             // Horizontal scrolling preserves readable dates at accessibility sizes.
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: AppSpacing.small) {
                     ForEach(goal.days) { day in
                         VStack(spacing: 6) {
@@ -354,6 +354,7 @@ struct DailyWalkingGoalCard: View {
                     }
                 }
             }
+            .scrollIndicators(.hidden)
             Text("✓ Completed · × Missed · ◌ Today incomplete · − Not eligible")
                 .font(.caption).foregroundStyle(AppColors.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

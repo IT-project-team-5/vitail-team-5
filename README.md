@@ -96,8 +96,9 @@ once and opens a receipt; the owner slides to collect. Uncollected orders
 expire at the next Melbourne midnight and refund automatically. Café staff see
 those same orders and cannot collect them for the owner.
 
-The database now has a normalized Venue and foundations for daily goals,
-check-ins, live sessions/location samples, net-walking and friendships. These
+The database now has a normalized Venue, personalised daily-goal configuration
+and progress, and authenticated venue check-ins, plus foundations for live walk
+sessions, net-walking and friendships. These
 schema changes **do not deliver social APIs, live peer-location ingestion, matching,
 leaderboards, daily-goal rewards, chat, notifications or charity donations**.
 See [feature status](docs/FEATURES.md) before treating a capability as available.
@@ -121,7 +122,7 @@ See [feature status](docs/FEATURES.md) before treating a capability as available
 
 | Document | Authority |
 |---|---|
-| [Daily walking goals](docs/DAILY_GOALS.md) | Manual configuration, calendar rules, preserved history and pending multi-dog payout decisions |
+| [Daily walking goals](docs/DAILY_GOALS.md) | Personalised owner/manual Admin configuration, calendar rules, preserved history and pending multi-dog payout decisions |
 | [Quest and point policy](docs/QUESTS.md) | Canonical reward amounts, limits, current delivery and check-in handoff |
 | [Decisions](docs/DECISIONS.md) | Current choices and unresolved questions |
 | [Feature status](docs/FEATURES.md) | What can be tested now versus foundations/future work |

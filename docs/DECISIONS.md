@@ -55,10 +55,11 @@ offline login or a background upload worker. The server submission deadline
 still applies. Current walk uploads store validated summaries; the new raw
 sample/session schema is not populated by that endpoint.
 
-The Quest API now projects only actionable tasks plus server date metadata.
-Unused daily-goal, streak, birthday and document dashboard projections and the
-placeholder dog-goal endpoint are removed. Enabling a QuestDefinition does not
-activate a missing calculator/provider.
+The Quest API projects actionable tasks, server date metadata and typed daily
+goal calendars. Unused legacy daily-goal, streak, birthday and document
+dashboard projections are removed; `/api/dogs/{id}/goal` now previews and saves
+personalised targets. Enabling a QuestDefinition does not activate a missing
+payout policy or provider.
 
 Council, microchip and vet entitlements preserve evidence versions and one
 credit per qualification. Council awards once per dog per actual registration period;
@@ -79,7 +80,7 @@ its clock or fabricate venue opportunities.
 | O6 | Daily-goal duration formula confirmed 6 October 2026 | Weight baseline × breed energy × calendar age × brachycephalic factor; owner exercise adjustment 50–200% once, default 100%. Owner and Admin share one immutable target history. No additional heat factor is invented. Reward scope and any/all-dog qualification remain unresolved; payouts stay disabled. See DAILY_GOALS.md |
 | O7 | Final rounding/minimum-walk policy | Current walking implementation rounds cumulative daily distance down; it invents no minimum-duration reward requirement |
 | O8 | Weather source and heat-adjustment inputs | No weather-based goal calculation or provider claim |
-| O9 | Retention, access and erasure policy for GPS, routes, evidence and account history | No new public GPS ingestion; local routes/private originals retained by current behavior. Schema TTL fields alone do not implement a retention job |
+| O9 | Retention, access and erasure policy for GPS, routes, evidence and account history | Authenticated check-in samples, local routes and private originals follow current behavior; no peer/social live-location ingestion exists. Schema TTL fields alone do not implement a retention job |
 | O10 | Evidence spot-audit procedure and consequences | Submission is self-reported; protected originals/history remain. No authenticity guarantee or automatic penalty |
 | O11 | Approved charity partners and how point donations are fulfilled | No donation feature or charity tables in this foundation |
 | O12 | Admin evidence/reason requirements, dispute actions and account-deletion/anonymization rules | Existing grants/refunds stay constrained; do not delete or rewrite ledger history to simulate deletion. Django admin logging alone is not a full audit workflow |

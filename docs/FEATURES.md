@@ -30,7 +30,7 @@ complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 | Chat, push, charity | Later delivery | Optional identity/chat/charity/push tables are not created; no working UI/API is claimed |
 | Social sharing | Connected | Completed walks can render a local image card with optional date, dog names and confirmed points; route and location are excluded, and sharing uses the system sheet with no public-post database |
 
-The 22-table core foundation includes a Walk–Dog relation and excludes Django
+The 23-table core foundation includes a Walk–Dog relation and excludes Django
 system tables. A migrated table is not proof that its feature is enabled.
 See [database coverage](database-design-2026-09-25/README.md),
 [Walk device acceptance](WALK_TESTING.md) and [open decisions](DECISIONS.md).

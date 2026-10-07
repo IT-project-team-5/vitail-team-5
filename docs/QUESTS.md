@@ -50,10 +50,10 @@ actual product prices; policy changes do not reprice existing menus or orders.
 | Restaurant | 20 minutes |
 
 The current policy specifies a 20-metre radius and explicit user initiation.
-The location integration must verify proximity/dwell and define interruption
-handling before enabling it. A device countdown or existing CheckIn row alone
-is not proof of completion. No public GPS ingestion, discovery/start flow or
-live-location matcher is delivered by the schema foundation.
+Authenticated start and location reports verify proximity and dwell on the
+server; gaps over 90 seconds reset progress. A device countdown or existing
+CheckIn row alone is not proof of completion. Physical-device acceptance is
+still pending, and no peer live-location matcher is delivered.
 
 ## Task presentation
 
@@ -184,7 +184,9 @@ also permit ADMIN.
 
 | Method | Route | Result |
 |---|---|---|
-| GET | `/api/quests` | `server_time`, `timezone`, `local_date`, `next_reset_at`, `tasks` |
+| GET | `/api/quests` | `server_time`, `timezone`, `local_date`, `next_reset_at`, `tasks`, `daily_goals`, `goal_rewards_status` |
+| GET | `/api/dogs/{id}/goal` | Preview the next effective personalised target and current/scheduled target history |
+| POST | `/api/dogs/{id}/goal` | Save one immutable target revision using the confirmed preview inputs |
 | POST | `/api/quests/birthdays/{dog_id}/collect` | Existing or newly created birthday credit receipt and balance |
 | POST | `/api/quests/streaks/collect` | Collect one server-qualified run/milestone; replay returns its existing credit |
 | GET | `/api/quests/documents` | Dogs, evidence versions, management records, current entitlements and eligibility |
@@ -198,11 +200,11 @@ optional measured progress, dog/entitlement IDs and collection timestamp. iOS
 also uses Council's actual expiry and entitlement identity to scope tasks and receipts. It
 ignores unused presentation fields and unsupported kinds/states. The old
 `daily_goal`, `streak`, `birthdays`, `check_ins` and `documents` dashboard
-projections are removed; the document dashboard has its own route. The unused
-`/api/dogs/{id}/goal` placeholder is removed as well.
+projections are removed; the document dashboard has its own route. Daily-goal
+progress is now supplied by the typed `daily_goals` envelope and dog goal route.
 
 QuestDefinition switches gate new supported work. They do not implement a
-missing formula/provider. Historical receipts and authorized file access remain
+missing payout policy or future capability. Historical receipts and authorized file access remain
 available when new awards are disabled.
 
 ## Venue integration

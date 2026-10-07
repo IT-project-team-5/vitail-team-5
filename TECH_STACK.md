@@ -46,7 +46,8 @@ role must match before entering its interface.
 `OwnerHomeView` owns the active `WalkSessionCoordinator`, Quest store, shared
 check-in store and wallet view model. Switching tabs preserves a walk; changing
 accounts stops work and rejects late responses. Both map and Quest observe the
-same check-in collection state. A real check-in service remains uninjected.
+same check-in collection state. Production injects the authenticated check-in
+service; physical-device location and background acceptance remain release work.
 
 The design system contains semantic colors, spacing, buttons, avatars and
 collection controls. Persisted System/Light/Dark selection applies to pages,
@@ -57,17 +58,17 @@ sheets and login. Use system text styles and verify large-text layouts.
 | Domain | Responsibility |
 |---|---|
 | `accounts` | Login, roles, owner profile and authenticated café profile endpoints |
-| `dogs` | Owner-scoped dog profiles, nullable birthdays, breed reference data, manual daily-goal targets and frozen results |
+| `dogs` | Owner-scoped dog profiles, nullable birthdays, breed reference data, personalised owner/manual Admin goal targets and frozen results |
 | `venues` | Canonical venue identity/details/photo and optional managing café account |
 | `walks` | Validated walk uploads, participation/history snapshots; live-session, sample and net-walk schema foundations |
 | `rewards` | Canonical PointEntry ledger, Reward products, Redemption orders, café feed and expiry/refunds |
-| `quests` | Typed task projection, reward catalogue and birthday qualification/collection |
+| `quests` | Typed task projection, daily-goal calendars, reward catalogue and birthday/streak qualification/collection |
 | `evidence` | Per-dog document entitlements, immutable submissions and private files |
-| `checkins` | Persisted verified-progress/collection foundation and shared daily-cap service |
+| `checkins` | Authenticated venue discovery, GPS dwell verification, collection and shared daily-cap service |
 | `social` | Friendship and directional-block schema foundations |
 
-The core foundation contains 22 business tables, including the explicit
-Walk–Dog relation. It does not include Django's built-in auth/admin/session
+The core foundation contains 23 business tables, including the explicit
+Walk–Dog relation and effective-dated `DogGoalTarget`. It does not include Django's built-in auth/admin/session
 tables. [Database design](docs/database-design-2026-09-25/README.md) describes
 fields and constraints; model migrations are the physical schema authority.
 The six later tables for external identity, chat, charity/donation and push
@@ -77,7 +78,8 @@ Venue replaces duplicated café-profile storage. `Reward.venue` is the canonical
 product location; legacy café-user identity remains on existing wire contracts
 and historical order snapshots. Venue photos are distinct from login-account
 avatars. Non-café places can exist without a login account. This normalization
-does not itself provide public place discovery or GPS check-in ingestion.
+does not itself implement map behavior; the `checkins` domain supplies the
+authenticated venue map, explicit start/location/cancel and collection routes.
 
 Keep one PointEntry model for both credit lots and ledger changes. Wallet
 balance is the sum of unexpired remaining credits, not a second mutable total.
@@ -86,11 +88,11 @@ An order remains one reward, quantity one; no cart or order-item subsystem is
 needed. Redemption snapshots preserve names, prices, venue/café identity and
 applicable terms after catalogue edits.
 
-Daily-goal rows preserve per-dog inputs/results, with append-only manual target
-revisions configured in Admin and progress/calendars in Quest; session/sample/net-interval and
-friendship rows preserve data needed by later features. Their existence does
-not enable a target formula, location matcher, social API, leaderboard or
-reward. Do not start storing raw GPS through the current walk-upload endpoint
+Daily-goal rows preserve per-dog inputs/results. Owner recommendations and Admin
+targets share one append-only effective-dated history, and Quest displays the
+seven-day calendar. Session/sample/net-interval and friendship rows preserve
+data needed by later features. Their existence does not enable daily-goal
+payouts, a location matcher, social API or leaderboard. Do not start storing raw GPS through the current walk-upload endpoint
 just because a LocationSample table exists.
 
 ## Transactions and retry safety
@@ -102,8 +104,9 @@ just because a LocationSample table exists.
 - Birthday collection and document entitlement collection each link one
   canonical credit. Concurrent or repeated requests cannot credit twice.
 - Check-in collection accepts persisted server-verified qualification, not
-  client-reported elapsed time. Walking and check-in services share the daily
-  activity cap; partial check-in rewards remain disabled pending policy.
+  client-reported elapsed time. Walking, daily-goal settlement and check-in
+  services share the daily activity cap; daily-goal payouts and partial check-in
+  rewards remain disabled pending policy.
 - Order creation deducts; collection changes status only. Expiry and admin
   cancellation refund pending orders once. Terminal orders are not reopened.
 - `expire_rewards --watch --interval 60` runs in Compose. It expires due credit
@@ -137,8 +140,9 @@ offline login or autonomous background upload service.
 ## API, permissions and files
 
 [OpenAPI](docs/openapi.yaml) is the route/schema reference. Do not copy a future
-endpoint list into the client. `/api/quests` returns the compact task envelope;
-old dashboard projections and the placeholder dog-goal endpoint are removed.
+endpoint list into the client. `/api/quests` returns the compact task envelope
+and daily-goal calendars; `/api/dogs/{id}/goal` previews and saves the dog's
+effective-dated personalised target. Old dashboard projections are removed.
 
 Backend queries derive ownership from the authenticated account. OWNER, CAFE
 and ADMIN capabilities are distinct; hiding a control is not authorization.
@@ -171,7 +175,7 @@ match. Physical-device checks remain necessary for GPS, background execution,
 photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
-Future work includes real venue/GPS integration, personalized goal evaluation and approved multi-dog goal earning,
+Future work includes physical-device venue/GPS acceptance, approved multi-dog goal earning,
 net-walk earning, friends/leaderboards, OAuth, password reset/account
 deletion, notifications, sharing, chat and charity. Schema preparation must not
 be presented as completed functionality. See [open decisions](docs/DECISIONS.md).
