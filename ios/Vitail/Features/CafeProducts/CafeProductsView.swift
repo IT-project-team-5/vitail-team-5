@@ -95,17 +95,16 @@ struct CafeProductsView: View {
                         .foregroundStyle(AppColors.secondaryText)
                         .lineLimit(3)
                 }
-                HStack {
-                    Text("\(product.pointCost) points")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppColors.brand)
-                    Spacer()
-                    Label(
-                        product.isAvailable ? "Available" : "Unavailable",
-                        systemImage: product.isAvailable ? "checkmark.circle.fill" : "pause.circle"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(product.isAvailable ? AppColors.success : AppColors.secondaryText)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        priceLabel(product)
+                        Spacer()
+                        availabilityLabel(product)
+                    }
+                    VStack(alignment: .leading, spacing: AppSpacing.small) {
+                        priceLabel(product)
+                        availabilityLabel(product)
+                    }
                 }
             }
             .padding(AppSpacing.medium)
@@ -119,6 +118,22 @@ struct CafeProductsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Edit product details, point price and availability")
+    }
+
+    private func priceLabel(_ product: CafeProduct) -> some View {
+        Text("\(product.pointCost) points")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(AppColors.brand)
+    }
+
+    private func availabilityLabel(_ product: CafeProduct) -> some View {
+        Label(
+            product.isAvailable ? "Available" : "Unavailable",
+            systemImage: product.isAvailable ? "checkmark.circle.fill" : "pause.circle"
+        )
+        .font(.caption)
+        .foregroundStyle(product.isAvailable ? AppColors.success : AppColors.secondaryText)
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

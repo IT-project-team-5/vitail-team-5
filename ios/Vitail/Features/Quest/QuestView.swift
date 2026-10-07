@@ -151,6 +151,7 @@ struct QuestView: View {
 }
 
 struct DogQuestGroupCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let group: DogQuestGroup
     @Binding var isExpanded: Bool
     let onOpenTask: (QuestTask) -> Void
@@ -160,20 +161,20 @@ struct DogQuestGroupCard: View {
             Button {
                 isExpanded.toggle()
             } label: {
-                HStack(spacing: AppSpacing.medium) {
-                    AvatarView(url: group.photo, name: group.name, systemImage: "dog.fill", size: 44)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(group.name).font(.headline)
-                        Text(group.summary).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
+                            labels
+                            chevron
+                        }
+                    } else {
+                        HStack(spacing: AppSpacing.medium) {
+                            AvatarView(url: group.photo, name: group.name, systemImage: "dog.fill", size: 44)
+                                .accessibilityHidden(true)
+                            labels
+                            chevron
+                        }
                     }
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.secondaryText)
-                        .accessibilityHidden(true)
                 }
                 .padding(AppSpacing.medium)
                 .contentShape(Rectangle())
@@ -198,6 +199,28 @@ struct DogQuestGroupCard: View {
         }
         .foregroundStyle(AppColors.primaryText)
         .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+    }
+
+    private var labels: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(group.name)
+                .font(.headline)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : nil)
+                .truncationMode(.tail)
+            Text(group.summary)
+                .font(.subheadline)
+                .foregroundStyle(AppColors.secondaryText)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+    }
+
+    private var chevron: some View {
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppColors.secondaryText)
+            .accessibilityHidden(true)
     }
 }
 
@@ -316,12 +339,16 @@ struct QuestDetailView: View {
 }
 
 struct DailyWalkingGoalCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let goal: DogDailyGoalProgress
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
-            Text("\(goal.dogName)'s daily walk").font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
+            Text("\(goal.dogName)'s daily walk")
+                .font(.headline)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : nil)
+                .truncationMode(.tail)
+                .accessibilityLabel("\(goal.dogName)'s daily walk")
             if let target = goal.targetSeconds, target > 0 {
                 Text(goal.timeLabel).font(.subheadline.monospacedDigit())
                     .fixedSize(horizontal: false, vertical: true)
