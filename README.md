@@ -20,7 +20,8 @@ make ios
 ```
 
 Compose starts MySQL, applies migrations, serves the API at
-`http://127.0.0.1:8000`, and runs the point/order expiry worker. Open
+`http://127.0.0.1:8000`, and runs the point/order expiry and social-presence
+workers. Open
 `http://127.0.0.1:8000/admin/` to manage test accounts and data. The iOS simulator
 uses that API address by default.
 
@@ -66,7 +67,7 @@ Staging and Release.
 
 | Account | Navigation | Available flow |
 |---|---|---|
-| Owner | Account / Walk / Quest / Venues / Redeem | Email registration, profiles/photos, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
+| Owner | Account / Walk / Quest / Venues / Redeem | Email registration, profiles/photos, Friends and privacy settings, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
 | Café | Account / Products / Orders | Admin-created login, venue details/photo/Maps, menu prices and availability, read-only pending orders |
 | Admin | Django Admin | Onboarding, catalogue, positive test-point grants, pending-order cancellation/refunds and evidence access |
 
@@ -74,6 +75,14 @@ Dog Owner and Cafe login rows expand their form on the same page. The server's
 account role controls access. Tokens use Keychain and a shared refresh path.
 Owner logout lives inside the avatar/profile editor; both account types have
 persisted System/Light/Dark appearance settings.
+
+Friends and Net-Walking are reached from Account instead of taking a sixth tab.
+Owners can search by name or public ID, handle requests and blocks, choose a
+map avatar, and separately opt into friend location sharing or nearby partner
+discovery. Both controls default off. Walk is the single live map: it shows
+fresh friend/partner positions and hosts Net-Walking invitations while a walk
+is recording. Verified together-distance is displayed, but wallet rewards stay
+disabled until the point policy is approved. See [social behavior](docs/SOCIAL.md).
 
 Walk uses a map and draggable menu. Start/Pause/Resume/Finish leads to a saved
 summary where the owner chooses participating dogs and confirms upload.
@@ -96,12 +105,13 @@ once and opens a receipt; the owner slides to collect. Uncollected orders
 expire at the next Melbourne midnight and refund automatically. Café staff see
 those same orders and cannot collect them for the owner.
 
-The database now has a normalized Venue, personalised daily-goal configuration
-and progress, and authenticated venue check-ins, plus foundations for live walk
-sessions, net-walking and friendships. These
-schema changes **do not deliver social APIs, live peer-location ingestion, matching,
-leaderboards, daily-goal rewards, chat, notifications or charity donations**.
-See [feature status](docs/FEATURES.md) before treating a capability as available.
+The database has a normalized Venue, personalised daily-goal configuration and
+progress, authenticated venue check-ins, and connected Friends/Net-Walking live
+sessions. Raw social GPS is a rolling 15-minute verification buffer cleaned by
+the worker; the API returns only fresh positions and summary distance. The
+social flow does **not** deliver a leaderboard, wallet rewards for Net-Walking,
+chat, notifications, charity donations or daily-goal rewards. See
+[feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check
 
@@ -130,6 +140,7 @@ See [feature status](docs/FEATURES.md) before treating a capability as available
 | [OpenAPI](docs/openapi.yaml) | Implemented HTTP request/response contract |
 | [Database design](docs/database-design-2026-09-25/README.md) | Domain tables, constraints and requirement coverage; migrations define physical schema |
 | [Walk integration](docs/WALK_INTEGRATION.md) / [device tests](docs/WALK_TESTING.md) | Recording, confirmation, recovery and acceptance limits |
+| [Friends and Net-Walking](docs/SOCIAL.md) | Consent, live-map behavior, API, retention and disabled wallet reward boundary |
 | [Media](backend/MEDIA.md) / [evidence](backend/evidence/README.md) | Public photos and authenticated private document storage |
 
 Each feature owner maintains its UI, API, migrations, tests and relevant docs.

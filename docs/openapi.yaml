@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Vitail connected MVP API
-  version: '2026-10-06'
+  version: '2026-10-08'
   description: >-
     Implemented routes only. JWT authentication is required except register,
     login and refresh. Owner/café roles come from the authenticated account.
@@ -9,8 +9,9 @@ info:
     paths also accept a trailing slash, as do quest and document
     paths. Arrays are currently unpaginated.
     Venue IDs are separate from legacy café account IDs; existing cafe_id fields
-    retain their account-ID meaning. Venue check-in location routes are enabled;
-    peer-location/social foundations expose no routes. Django Admin is a separate session/CSRF-protected
+    retain their account-ID meaning. Venue check-in and owner-only social routes
+    are enabled. Social map access is consent-scoped and Net-Walking wallet
+    rewards remain off by default. Django Admin is a separate session/CSRF-protected
     interface, not this API.
 servers:
   - url: http://127.0.0.1:8000
@@ -961,7 +962,7 @@ paths:
       - {name: venue_id, in: path, required: true, schema: {type: integer, minimum: 1}}
     post:
       summary: Start or resume today's owned venue attempt
-      description: Requires an accurate non-simulated fix within 20 metres. One opportunity per category per Melbourne day. Existing same-venue attempts replay; no client duration is trusted.
+      description: Requires an accurate non-simulated fix within 20 metres. One opportunity per category per Melbourne day. Existing same-venue attempts replay; no client duration is trusted. Start has its own per-user rate-limit bucket.
       requestBody: {$ref: '#/components/requestBodies/CheckInLocation'}
       responses:
         '201':
@@ -969,6 +970,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/VenueCheckIn'}
+        '429': {description: Per-user check-in start rate limit reached}
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins:
     get:
@@ -992,7 +994,7 @@ paths:
       - {$ref: '#/components/parameters/AttemptID'}
     post:
       summary: Report an accurate fix for an owned attempt
-      description: Server receipt times determine dwell. Outside-radius fixes and gaps over 90 seconds reset unqualified progress. No walk record or walking credit is created.
+      description: Server receipt times determine dwell. Each report replaces the latest fix and current progress; check-in does not retain raw per-fix rows. Outside-radius fixes and gaps over 90 seconds reset unqualified progress. No walk record or walking credit is created. Location reports have an independent per-user bucket sized above the app's 25-second cadence.
       requestBody: {$ref: '#/components/requestBodies/CheckInLocation'}
       responses:
         '200':
@@ -1000,6 +1002,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/VenueCheckIn'}
+        '429': {description: Per-user check-in location-report rate limit reached}
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins/{attempt_id}/cancel:
     parameters:
@@ -1015,6 +1018,7 @@ paths:
                 oneOf:
                   - {type: object, required: [cancelled], properties: {cancelled: {type: boolean, enum: [true]}}}
                   - {$ref: '#/components/schemas/VenueCheckIn'}
+        '429': {description: Per-user check-in cancellation rate limit reached}
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins/{attempt_id}/collect:
     parameters:
@@ -1040,6 +1044,284 @@ paths:
                   wallet_balance: {type: integer, minimum: 0}
                   daily_earned_points: {type: integer, minimum: 0}
                   local_date: {type: string, format: date}
+        '429': {description: Per-user check-in collection rate limit reached}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/overview:
+    get:
+      summary: Social overview and current live session
+      tags: [Social]
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialOverview'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/users:
+    get:
+      summary: Search owner display names or exact public ID (never login email)
+      tags: [Social]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: {type: string, minLength: 2, maxLength: 100}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 20
+                items: {$ref: '#/components/schemas/SocialProfile'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/friend-requests:
+    post:
+      summary: Explicit friend request (does not grant location consent)
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublicIDRequest'}
+      responses:
+        '201':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialRelationship'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/friend-requests/{id}/respond:
+    post:
+      summary: Recipient accepts or declines a request
+      tags: [Social]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AcceptRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialRelationship'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/friends/{public_id}/remove:
+    post:
+      summary: Remove friendship or cancel a pending request
+      tags: [Social]
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[0-9a-f]{32}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmptySocialRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialAcknowledgement'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/blocks:
+    post:
+      summary: Block owner, remove friendship and end pairing
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublicIDRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialAcknowledgement'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/blocks/{public_id}/remove:
+    post:
+      summary: Remove block without restoring friendship
+      tags: [Social]
+      parameters:
+        - name: public_id
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[0-9a-f]{32}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmptySocialRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialAcknowledgement'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/preferences:
+    patch:
+      summary: Independent opt-in location privacy preferences
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SocialPreferenceUpdate'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialPreferences'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/map:
+    get:
+      summary: Fresh exact friend/partner positions and approximate nearby discovery
+      tags: [Social]
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialMap'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/walk-sessions:
+    post:
+      summary: Create or recover a live session using the current local walk UUID
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SocialStartRequest'}
+      responses:
+        '201':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialWalkSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/walk-sessions/current:
+    get:
+      summary: Current live session, or null
+      tags: [Social]
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema:
+                type: object
+                nullable: true
+                allOf: [{$ref: '#/components/schemas/SocialWalkSession'}]
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/walk-sessions/{id}/location:
+    post:
+      summary: Validate an opted-in live GPS fix and update shared progress
+      tags: [Social]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SocialLocationRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialWalkSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/walk-sessions/{id}/state:
+    post:
+      summary: Pause, resume or end; pause/finish clears GPS and pairing
+      tags: [Social]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SocialStateRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialWalkSession'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/net-walk-invitations:
+    get:
+      summary: Incoming, outgoing and active two-person invitations
+      tags: [Social]
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialInvitations'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      summary: Invite a nearby opted-in walker (friendship not required)
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublicIDRequest'}
+      responses:
+        '201':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialInvitation'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/net-walk-invitations/{id}/respond:
+    post:
+      summary: Invited walker explicitly accepts or declines
+      tags: [Social]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AcceptRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialInvitation'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/net-walk-invitations/{id}/end:
+    post:
+      summary: Either participant cancels or ends pairing
+      tags: [Social]
+      parameters:
+        - {$ref: '#/components/parameters/ID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmptySocialRequest'}
+      responses:
+        '200':
+          description: Successful owner-scoped result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SocialInvitation'}
         default: {$ref: '#/components/responses/Error'}
 components:
   requestBodies:
@@ -1109,6 +1391,137 @@ components:
         updated_at: {type: string, format: date-time}
         reward_points: {type: integer, minimum: 1}
         collected_at: {type: string, format: date-time, nullable: true}
+    EmptySocialRequest:
+      type: object
+      additionalProperties: false
+    PublicIDRequest:
+      type: object
+      required: [public_id]
+      properties:
+        public_id: {type: string, pattern: '^[0-9a-f]{32}$'}
+    AcceptRequest:
+      type: object
+      required: [accept]
+      properties:
+        accept: {type: boolean}
+    SocialAcknowledgement:
+      type: object
+      properties:
+        removed: {type: boolean}
+        blocked: {type: boolean}
+        unblocked: {type: boolean}
+    SocialProfile:
+      type: object
+      required: [public_id, display_name, photo_url, avatar_key]
+      properties:
+        public_id: {type: string, pattern: '^[0-9a-f]{32}$'}
+        display_name: {type: string}
+        photo_url: {type: string, nullable: true}
+        avatar_key: {type: string, enum: ['', walker, paw, dog, coffee]}
+    SocialPreferenceUpdate:
+      type: object
+      properties:
+        location_visibility: {type: string, enum: ['OFF', FRIENDS]}
+        net_matching_enabled: {type: boolean}
+        virtual_avatar_key: {type: string, enum: ['', walker, paw, dog, coffee]}
+    SocialPreferences:
+      allOf:
+        - {$ref: '#/components/schemas/SocialProfile'}
+        - type: object
+          required: [location_visibility, net_matching_enabled]
+          properties:
+            location_visibility: {type: string, enum: ['OFF', FRIENDS]}
+            net_matching_enabled: {type: boolean}
+    SocialRelationship:
+      type: object
+      required: [id, user, status, is_incoming]
+      properties:
+        id: {type: integer}
+        user: {$ref: '#/components/schemas/SocialProfile'}
+        status: {type: string, enum: [PENDING, ACCEPTED, DECLINED]}
+        is_incoming: {type: boolean}
+    SocialOverview:
+      type: object
+      required: [me, friends, incoming_requests, outgoing_requests, blocked_users, current_session]
+      properties:
+        me: {$ref: '#/components/schemas/SocialPreferences'}
+        friends: {type: array, items: {$ref: '#/components/schemas/SocialRelationship'}}
+        incoming_requests: {type: array, items: {$ref: '#/components/schemas/SocialRelationship'}}
+        outgoing_requests: {type: array, items: {$ref: '#/components/schemas/SocialRelationship'}}
+        blocked_users: {type: array, items: {$ref: '#/components/schemas/SocialProfile'}}
+        current_session:
+          type: object
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/SocialWalkSession'}]
+    SocialMapPeer:
+      type: object
+      required: [user, latitude, longitude, recorded_at, expires_at, is_net_partner, is_approximate]
+      properties:
+        user: {$ref: '#/components/schemas/SocialProfile'}
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        recorded_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        is_net_partner: {type: boolean}
+        is_approximate: {type: boolean, description: Nearby discovery is coarsened; accepted friends or partners may see exact consented positions}
+        distance_m: {type: number, minimum: 0}
+    SocialMap:
+      type: object
+      required: [friends, nearby, partner]
+      properties:
+        friends: {type: array, items: {$ref: '#/components/schemas/SocialMapPeer'}}
+        nearby: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SocialMapPeer'}}
+        partner:
+          type: object
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/SocialMapPeer'}]
+    SocialStartRequest:
+      type: object
+      required: [request_id, started_at]
+      properties:
+        request_id: {type: string, format: uuid, description: Same UUID as the local walk draft and normal completed-walk upload}
+        started_at: {type: string, format: date-time}
+    SocialLocationRequest:
+      type: object
+      required: [latitude, longitude, accuracy_m, recorded_at]
+      properties:
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        accuracy_m: {type: number, minimum: 0, maximum: 10000}
+        recorded_at: {type: string, format: date-time}
+        is_simulated: {type: boolean, default: false}
+    SocialStateRequest:
+      type: object
+      required: [state]
+      properties:
+        state: {type: string, enum: [RECORDING, PAUSED, FINISHED, CANCELLED]}
+    SocialWalkSession:
+      type: object
+      required: [id, request_id, state, net_consent, shared_distance_m]
+      properties:
+        id: {type: integer}
+        request_id: {type: string, format: uuid}
+        state: {type: string, enum: [RECORDING, PAUSED, FINISHED, CANCELLED, TIMED_OUT]}
+        net_consent: {type: boolean}
+        shared_distance_m: {type: number, minimum: 0}
+    SocialInvitation:
+      type: object
+      required: [id, user, status, is_incoming]
+      properties:
+        id: {type: integer}
+        user: {$ref: '#/components/schemas/SocialProfile'}
+        status: {type: string, enum: [PENDING, ACTIVE, DECLINED, CANCELLED, ENDED, EXPIRED]}
+        is_incoming: {type: boolean}
+    SocialInvitations:
+      type: object
+      required: [incoming, outgoing, active]
+      properties:
+        incoming: {type: array, items: {$ref: '#/components/schemas/SocialInvitation'}}
+        outgoing: {type: array, items: {$ref: '#/components/schemas/SocialInvitation'}}
+        active:
+          type: object
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/SocialInvitation'}]
     PhotoUpload:
       type: object
       required: [image_base64]
@@ -1192,9 +1605,10 @@ components:
         owner_adjustment: {type: string, example: '1.00'}
         suggested_minutes: {type: string, nullable: true, example: '62.500000'}
         target_minutes: {type: string, nullable: true, example: '31.25000000'}
-        target_seconds: {type: integer, nullable: true, minimum: 1, description: Final exact target minutes times 60 rounded to nearest second, half up}
+        target_seconds: {type: integer, nullable: true, minimum: 1, description: 'Final exact target minutes times 60 rounded to nearest second, half up'}
         calculation_inputs: {type: object, additionalProperties: true}
         current_target:
+          type: object
           allOf: [{$ref: '#/components/schemas/DogGoalTarget'}]
           nullable: true
         scheduled_targets: {type: array, items: {$ref: '#/components/schemas/DogGoalTarget'}}
@@ -1363,7 +1777,7 @@ components:
         kind: {$ref: '#/components/schemas/DocumentKind'}
         status: {type: string, enum: [SELF_REPORTED], description: Self-reported evidence; later audit possible and no prior approval implied}
         registration_number: {type: string, maxLength: 100}
-        council_name: {type: string, maxLength: 100, description: Confirmed issuing council; required for new Council submissions, including uploads}
+        council_name: {type: string, maxLength: 100, description: 'Confirmed issuing council; required for new Council submissions, including uploads'}
         registration_year: {type: integer, nullable: true, description: 'Historical submitted year; no longer accepted for new submissions'}
         reward_registration_year: {type: integer, nullable: true, description: 'Historical reward year; no longer controls eligibility; legacy receipts may omit it'}
         registry_name: {type: string, maxLength: 100, description: Optional confirmed microchip registry}
@@ -1412,6 +1826,7 @@ components:
         dog_id: {type: integer, minimum: 1}
         kind: {type: string, enum: [COUNCIL_REGISTRATION, MICROCHIP_REGISTRATION]}
         submission:
+          type: object
           nullable: true
           allOf:
             - $ref: '#/components/schemas/DocumentSubmission'

@@ -3,6 +3,10 @@ from django.db import models
 from django.db.models import F, Q
 
 
+# Stable API values. The empty key means “use my uploaded profile photo”.
+VIRTUAL_AVATAR_KEYS = ("", "walker", "paw", "dog", "coffee")
+
+
 class Friendship(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -37,3 +41,69 @@ class UserBlock(models.Model):
             models.CheckConstraint(condition=~Q(blocker=F("blocked")), name="user_block_not_self"),
         ]
         indexes = [models.Index(fields=("blocked", "blocker"), name="user_block_reverse")]
+
+
+class NetWalkInvitation(models.Model):
+    """Explicit, revocable consent for one pair of existing live walk sessions."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACTIVE = "ACTIVE", "Walking together"
+        DECLINED = "DECLINED", "Declined"
+        ENDED = "ENDED", "Ended"
+        EXPIRED = "EXPIRED", "Expired"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_invitations_sent")
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="net_invitations_received")
+    sender_session = models.ForeignKey("walks.WalkSession", on_delete=models.CASCADE, related_name="net_invitations_sent")
+    recipient_session = models.ForeignKey("walks.WalkSession", on_delete=models.CASCADE, related_name="net_invitations_received")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    end_reason = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=~Q(sender=F("recipient")), name="net_invitation_not_self"),
+            models.CheckConstraint(
+                condition=(
+                    Q(status="PENDING", accepted_at__isnull=True, ended_at__isnull=True)
+                    | Q(status="ACTIVE", accepted_at__isnull=False, ended_at__isnull=True)
+                    | Q(status="ENDED", accepted_at__isnull=False, ended_at__isnull=False)
+                    | Q(
+                        status__in=("DECLINED", "EXPIRED", "CANCELLED"),
+                        accepted_at__isnull=True,
+                        ended_at__isnull=False,
+                    )
+                ),
+                name="net_invitation_status_time_shape",
+            ),
+            models.CheckConstraint(
+                condition=Q(expires_at__gt=F("created_at")),
+                name="net_invitation_expiry_after_create",
+            ),
+            models.CheckConstraint(
+                condition=Q(accepted_at__isnull=True) | Q(accepted_at__gte=F("created_at")),
+                name="net_invitation_accept_after_create",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(ended_at__isnull=True)
+                    | Q(accepted_at__isnull=False, ended_at__gte=F("accepted_at"))
+                    | Q(accepted_at__isnull=True, ended_at__gte=F("created_at"))
+                ),
+                name="net_invitation_end_chronological",
+            ),
+        ]
+        indexes = [
+            # Mutable status must not be part of a foreign-key support index:
+            # MySQL then rechecks both parent owners during a status update,
+            # inverting the normal owner-before-invitation lock order.
+            models.Index(fields=("sender",), name="net_inv_sender_owner"),
+            models.Index(fields=("recipient",), name="net_inv_recipient_owner"),
+            models.Index(fields=("status", "sender"), name="net_inv_status_sender"),
+            models.Index(fields=("status", "recipient"), name="net_inv_status_recipient"),
+        ]

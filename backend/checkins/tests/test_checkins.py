@@ -4,7 +4,7 @@ from uuid import uuid4
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.http import Http404
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
@@ -48,18 +48,26 @@ class CheckInFixture:
 
 
 class CheckInServiceTests(CheckInFixture, TestCase):
-    def test_cap_counts_walk_goal_and_checkin_earned_on_the_business_day(self):
+    def test_cap_counts_all_capped_awards_even_when_net_walk_flag_is_off(self):
         self.credit(20)
         self.credit(12, category="CHECK_IN")
         self.credit(20, category="DAILY_GOAL")
-        for category in ("NET_WALK", "STREAK", "BIRTHDAY", "DOCUMENT"):
+        self.credit(10, category="NET_WALK")
+        for category in ("STREAK", "BIRTHDAY", "DOCUMENT"):
             self.credit(60, category=category)
         self.credit(100, type="ADMIN")
         self.credit(100, type="REFUND")
         self.credit(40, day=local_date(self.now) - timedelta(days=1))
         self.credit(40, owner=self.other)
         spend_points(user=self.owner, amount=30, source_reference="test-spend")
-        self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 52)
+        self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 62)
+
+    @override_settings(NET_WALK_REWARDS_ENABLED=True)
+    def test_enabling_net_walk_keeps_daily_goal_inside_the_shared_cap(self):
+        self.credit(20, category="DAILY_GOAL")
+        self.credit(10, category="NET_WALK")
+
+        self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 30)
 
     def test_collect_is_idempotent_and_remains_replayable_after_disable_and_midnight(self):
         row = self.opportunity()

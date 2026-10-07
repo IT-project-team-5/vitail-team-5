@@ -516,8 +516,8 @@ class DailyGoalTests(GoalFixture, TestCase):
         self.credit(60, "BIRTHDAY")
         self.credit(200, "DOCUMENT")
         self.credit(20, "STREAK")
-        self.credit(2, "NET_WALK")  # ledger support only, not an enabled matcher
-        self.assertEqual(daily_activity_points(self.owner, self.day), 32)
+        self.credit(2, "NET_WALK")  # historical awards always consume the shared cap
+        self.assertEqual(daily_activity_points(self.owner, self.day), 34)
         self.assertEqual(get_balance(self.owner), 314)
         client = APIClient()
         client.force_authenticate(self.owner)

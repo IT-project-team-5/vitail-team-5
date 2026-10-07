@@ -169,11 +169,9 @@ class WalkSession(models.Model):
 
 
 class LocationSample(models.Model):
-    """Dormant short-lived evidence; no endpoint collects GPS until retention is agreed."""
+    """Short-lived GPS evidence for one authenticated live walk session."""
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="location_samples")
-    session = models.ForeignKey(WalkSession, null=True, blank=True, on_delete=models.CASCADE, related_name="samples")
-    checkin = models.ForeignKey("checkins.CheckIn", null=True, blank=True, on_delete=models.CASCADE, related_name="samples")
-    checkin_attempt_id = models.UUIDField(null=True, blank=True)
+    session = models.ForeignKey(WalkSession, on_delete=models.CASCADE, related_name="samples")
     stream_id = models.UUIDField()
     sequence = models.PositiveBigIntegerField()
     segment_id = models.PositiveIntegerField()
@@ -190,8 +188,6 @@ class LocationSample(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("owner", "stream_id", "sequence"), name="sample_stream_sequence_unique"),
-            models.CheckConstraint(condition=Q(session__isnull=False) | Q(checkin__isnull=False), name="sample_purpose_required"),
-            models.CheckConstraint(condition=Q(checkin__isnull=True, checkin_attempt_id__isnull=True) | Q(checkin__isnull=False, checkin_attempt_id__isnull=False), name="sample_checkin_attempt_shape"),
             models.CheckConstraint(condition=Q(latitude__gte=-90, latitude__lte=90, longitude__gte=-180, longitude__lte=180), name="sample_coordinates_valid"),
             models.CheckConstraint(condition=Q(accuracy_m__gte=0), name="sample_accuracy_nonnegative"),
             models.CheckConstraint(condition=Q(speed_mps__isnull=True) | Q(speed_mps__gte=0), name="sample_speed_nonnegative"),
@@ -200,20 +196,20 @@ class LocationSample(models.Model):
         indexes = [
             models.Index(fields=("owner", "recorded_at"), name="sample_owner_time"),
             models.Index(fields=("session", "recorded_at"), name="sample_session_time"),
-            models.Index(fields=("checkin", "recorded_at"), name="sample_checkin_time"),
             models.Index(fields=("received_at",), name="sample_received_at"),
         ]
 
     def clean(self):
         super().clean()
-        for field in ("session", "checkin"):
-            if getattr(self, field + "_id") and getattr(self, field).owner_id != self.owner_id:
-                raise ValidationError({field: "GPS evidence must belong to the same owner."})
-        if self.checkin_id and self.checkin_attempt_id != self.checkin.attempt_id:
-            raise ValidationError({"checkin_attempt_id": "The check-in attempt has changed."})
+        if self.session_id and self.session.owner_id != self.owner_id:
+            raise ValidationError({"session": "GPS evidence must belong to the same owner."})
 
 
 class NetWalkInterval(models.Model):
+    invitation = models.ForeignKey(
+        "social.NetWalkInvitation", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="verified_intervals",
+    )
     session_low = models.ForeignKey(WalkSession, on_delete=models.PROTECT, related_name="net_intervals_low")
     session_high = models.ForeignKey(WalkSession, on_delete=models.PROTECT, related_name="net_intervals_high")
     started_at = models.DateTimeField()
@@ -243,7 +239,19 @@ class NetWalkInterval(models.Model):
         for session in sessions:
             if self.started_at < session.started_at or (session.ended_at and self.ended_at > session.ended_at):
                 raise ValidationError("The interval must be inside both sessions.")
-            if session.net_consent_at is None or session.net_consent_at > self.started_at or (session.net_consent_withdrawn_at and session.net_consent_withdrawn_at < self.ended_at):
-                raise ValidationError("Both owners must consent throughout the interval.")
+        if self.invitation_id:
+            invitation_sessions = {
+                self.invitation.sender_session_id, self.invitation.recipient_session_id,
+            }
+            if invitation_sessions != {self.session_low_id, self.session_high_id}:
+                raise ValidationError("The consent invitation must identify the same sessions.")
+            if self.invitation.accepted_at is None or self.started_at < self.invitation.accepted_at:
+                raise ValidationError("The interval cannot start before both owners accept.")
+            if self.invitation.ended_at and self.ended_at > self.invitation.ended_at:
+                raise ValidationError("The interval cannot continue after consent ends.")
+        else:
+            for session in sessions:
+                if session.net_consent_at is None or session.net_consent_at > self.started_at or (session.net_consent_withdrawn_at and session.net_consent_withdrawn_at < self.ended_at):
+                    raise ValidationError("Both owners must consent throughout the interval.")
         if type(self).objects.filter(session_low_id=self.session_low_id, session_high_id=self.session_high_id, started_at__lt=self.ended_at, ended_at__gt=self.started_at).exclude(pk=self.pk).exists():
             raise ValidationError("Intervals for the same session pair cannot overlap.")

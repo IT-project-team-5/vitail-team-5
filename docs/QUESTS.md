@@ -1,6 +1,7 @@
 # Quest and Point Policy
 
-Canonical reward reference, updated 4 October 2026. Latest source:
+Canonical reward reference. Reward policy is confirmed through 4 October 2026;
+delivery status is updated 8 October 2026. Latest source:
 [New Point Retrieval / Calculation](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation),
 24 September, plus subsequent confirmed collection/UI decisions.
 [Open questions](DECISIONS.md#open-decisions) remain explicit; a published reward
@@ -18,7 +19,7 @@ amount does not mean its qualification engine is implemented.
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
 | Vet check-up | 200 points per visit, at most two per visit calendar year and at least 60 days apart | Connected: evidence with actual visit date, then Collect |
 | Streak | Each consecutive run: 7 days earns 20 points; 30/60/90… days earn 100 points each | Connected: validated walking days, one progress bar and explicit Collect |
-| Net-walk | 2 points/km, maximum 10/day | Data foundation only; no proximity matcher or award implementation |
+| Net-walk | Proposed 2 points/km, maximum 10/day | Friend discovery, explicit consent and verified together-distance are connected; wallet award and any estimate remain disabled pending policy approval |
 
 The implemented shared activity cap is **72 points per Melbourne day for walking, daily goals
 and check-ins**. Wallet balance is not this counter: spending/refunds, admin
@@ -53,12 +54,14 @@ The current policy specifies a 20-metre radius and explicit user initiation.
 Authenticated start and location reports verify proximity and dwell on the
 server; gaps over 90 seconds reset progress. A device countdown or existing
 CheckIn row alone is not proof of completion. Physical-device acceptance is
-still pending, and no peer live-location matcher is delivered.
+still pending. The separate social live-location flow does not qualify venue
+dwell or create check-in points.
 
 ## Task presentation
 
-Owner navigation is Account / Walk / Quest / Redeem. There is no leaderboard
-tab/endpoint in this delivery; its feature belongs to another teammate.
+Owner navigation is Account / Walk / Quest / Venues / Redeem. Friends and
+Net-Walking settings open from Account, while Walk remains the single live map.
+There is no leaderboard tab, endpoint or table in this delivery.
 
 Quest uses compact horizontal avatar/venue rows with detail sheets. READY rows
 are highlighted first, IN_PROGRESS rows follow, and COLLECTED rows are muted at
@@ -221,8 +224,10 @@ and displays only server-verified seconds. A long gap or leaving the radius
 resets progress. Background delivery is best effort; a locked phone is not a
 guarantee of qualification. Pending permission/start/report work is cancelled
 on teardown, and late responses cannot replace a newer attempt. An existing
-IN_PROGRESS venue offers Resume after relaunch. GPS check-ins do not create
-walk records or walking points; each earning path uses the same ledger/cap.
+IN_PROGRESS venue offers Resume after relaunch. The `CheckIn` row stores current
+server-timed progress and the latest fix; it does not build raw location-sample
+history. GPS check-ins do not create walk records or walking points; each
+earning path uses the same ledger/cap.
 
 ```swift
 func fetchProgress() async throws -> CheckInProgressSnapshot
@@ -257,7 +262,7 @@ cases; SQLite intentionally skips those checks. iOS tests cover task visibility,
 collection, account changes, stale responses, midnight, cap presentation and
 wallet refresh races, with light/dark/large-text snapshots.
 
-These tests do not certify physical GPS/background behavior,
-unimplemented peer-location/social APIs or disabled goal/net rewards. Record actual
+These tests do not certify physical GPS/background behavior, field accuracy of
+the connected social location flow, or disabled goal/Net-Walk rewards. Record actual
 run results with the build under test; use [feature status](FEATURES.md) and
 [Walk device tests](WALK_TESTING.md) for remaining acceptance work.

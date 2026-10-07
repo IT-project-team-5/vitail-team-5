@@ -385,6 +385,7 @@ struct WalkMapView: View {
     @ObservedObject private var dogSelection: WalkDogSelectionViewModel
     @ObservedObject private var walkHistory: WalkHistoryStore
     @ObservedObject private var checkIns: CheckInProgressStore
+    @ObservedObject private var friends: FriendsStore
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: -37.8136, longitude: 144.9631),
@@ -394,6 +395,7 @@ struct WalkMapView: View {
     @State private var hasCentredOnUser = false
     @State private var drawerDetent: WalkDrawerDetent
     @State private var controlsHeight: CGFloat = 240
+    @State private var selectedPeer: SocialMapPeer?
     @GestureState(resetTransaction: Transaction(animation: .snappy)) private var panelDrag: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
@@ -401,7 +403,8 @@ struct WalkMapView: View {
     init(
         coordinator: WalkSessionCoordinator, isActive: Bool,
         initialDrawerDetent: WalkDrawerDetent = .collapsed,
-        checkIns: CheckInProgressStore? = nil
+        checkIns: CheckInProgressStore? = nil,
+        friends: FriendsStore
     ) {
         _drawerDetent = State(initialValue: initialDrawerDetent)
         self.isActive = isActive
@@ -411,6 +414,7 @@ struct WalkMapView: View {
         dogSelection = coordinator.dogSelection
         walkHistory = coordinator.history
         self.checkIns = checkIns ?? CheckInProgressStore(ownerID: 0)
+        self.friends = friends
     }
 
     var body: some View {
@@ -432,6 +436,11 @@ struct WalkMapView: View {
         )) {
             WalkFinishSummaryView(coordinator: coordinator)
         }
+        .sheet(item: $selectedPeer) { peer in
+            SocialPeerSheet(peer: peer, store: friends)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
         .onAppear {
             coordinator.setWalkPageVisible(isActive)
             if isActive { reloadDogs() }
@@ -450,6 +459,11 @@ struct WalkMapView: View {
             guard !hasCentredOnUser, locationManager.location != nil else { return }
             centreOnCurrentLocation()
             hasCentredOnUser = true
+        }
+        .onChange(of: socialPeers.map(\.id)) { _, visiblePeerIDs in
+            if let selectedPeer, !visiblePeerIDs.contains(selectedPeer.id) {
+                self.selectedPeer = nil
+            }
         }
     }
 
@@ -574,6 +588,7 @@ struct WalkMapView: View {
             if let notice = walkTracker.trackingNotice {
                 Text(notice).font(.footnote).foregroundStyle(AppColors.secondaryText)
             }
+            netWalkPanel
             WalkHistorySection(store: walkHistory)
             WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
             Text("Walking continues with the screen locked. Pauses are excluded. After 5 minutes without activity, review your walk to finish.")
@@ -590,6 +605,30 @@ struct WalkMapView: View {
 
     private var mapCard: some View {
         Map(position: $cameraPosition, interactionModes: .all) {
+            ForEach(socialPeers) { peer in
+                Annotation(peerName(peer.user), coordinate: peer.coordinate) {
+                    VStack(spacing: 2) {
+                        Button { selectedPeer = peer } label: {
+                            SocialAvatarView(user: peer.user, size: 36)
+                                .overlay {
+                                    Circle().stroke(peer.isNetPartner ? Color.orange : AppColors.brand, lineWidth: 3)
+                                }
+                                .shadow(radius: 2, y: 1)
+                        }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Circle())
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(peerName(peer.user)), \(peer.isNetPartner ? "walking partner" : (peer.isApproximate ? "approximate nearby position" : "shared location"))")
+                        Text(peer.isApproximate ? "\(peerName(peer.user)) · nearby" : peerName(peer.user))
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(.regularMaterial)
+                            .clipShape(Capsule())
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
             ForEach(Array(walkTracker.routeSegments.enumerated()), id: \.offset) { _, segment in
                 if segment.count > 1 {
                     MapPolyline(coordinates: segment.map(\.coordinate))
@@ -648,6 +687,64 @@ struct WalkMapView: View {
                 .frame(width: 16, height: 16)
         }
         .accessibilityLabel("Your current location")
+    }
+
+    private var socialPeers: [SocialMapPeer] {
+        friends.peers
+    }
+
+    @ViewBuilder
+    private var netWalkPanel: some View {
+        if let active = friends.invitations.active {
+            VStack(alignment: .leading, spacing: AppSpacing.small) {
+                Label("Walking with \(peerName(active.user))", systemImage: "figure.walk.motion")
+                    .font(.headline)
+                if let distance = friends.currentSession?.sharedDistanceM {
+                    Text("Together for \(distanceText(distance))")
+                        .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                }
+                Button("End Net-Walking", role: .destructive) {
+                    Task { await friends.endInvitation(active) }
+                }
+                .disabled(friends.isWorking)
+            }
+        } else if let incoming = friends.invitations.incoming.first {
+            VStack(alignment: .leading, spacing: AppSpacing.small) {
+                Text("\(peerName(incoming.user)) wants to walk together").font(.headline)
+                HStack {
+                    Button("Accept") { Task { await friends.respondToInvitation(incoming, accept: true) } }
+                        .buttonStyle(.borderedProminent).tint(AppColors.brand)
+                        .disabled(friends.isWorking || !friends.canAcceptInvitation)
+                    Button("Decline", role: .destructive) {
+                        Task { await friends.respondToInvitation(incoming, accept: false) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(friends.isWorking)
+                }
+            }
+        } else if let outgoing = friends.invitations.outgoing.first {
+            HStack {
+                Label("Waiting for \(peerName(outgoing.user))", systemImage: "clock")
+                Spacer()
+                Button("Cancel") { Task { await friends.endInvitation(outgoing) } }
+                    .disabled(friends.isWorking)
+            }
+        } else if friends.netMatchingEnabled && friends.isCurrentlyWalking && !friends.mapSnapshot.nearby.isEmpty {
+            Text("Tap a nearby person on the map to invite them to Net-Walk.")
+                .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+        }
+    }
+
+    private func peerName(_ user: SocialProfile) -> String {
+        user.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Vitail walker" : user.displayName
+    }
+
+    private func distanceText(_ metres: Double) -> String {
+        if metres < 1_000 {
+            return metres.formatted(.number.precision(.fractionLength(0))) + " m"
+        }
+        return (metres / 1_000).formatted(.number.precision(.fractionLength(2))) + " km"
     }
 
     @ViewBuilder
@@ -757,6 +854,122 @@ private struct LocationStatusCard: View {
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
         .shadow(radius: 4, y: 2)
+    }
+}
+
+private struct SocialPeerSheet: View {
+    let peer: SocialMapPeer
+    @ObservedObject var store: FriendsStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack(spacing: AppSpacing.medium) {
+                        SocialAvatarView(user: peer.user, size: 64)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(displayName).font(.title3.bold())
+                            if peer.isNetPartner {
+                                Label("Net-Walking with you", systemImage: "figure.walk.motion")
+                                    .font(.subheadline).foregroundStyle(AppColors.brand)
+                            } else if peer.isApproximate {
+                                Text("Approximate nearby position")
+                                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                            } else {
+                                Text("Sharing their walk with friends")
+                                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                            }
+                        }
+                    }
+                    if let distance = peer.distanceM {
+                        LabeledContent("Distance", value: distanceText(distance))
+                    }
+                }
+                actionSection
+                if let error = store.errorMessage {
+                    Section { Text(error).foregroundStyle(AppColors.error) }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppColors.background)
+            .navigationTitle("Walker")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionSection: some View {
+        Section("Net-Walking") {
+            if let active = store.invitations.active, active.user.id == peer.user.id {
+                if let distance = store.currentSession?.sharedDistanceM {
+                    LabeledContent("Together", value: distanceText(distance))
+                }
+                Button("End Net-Walking", role: .destructive) {
+                    Task {
+                        await store.endInvitation(active)
+                        if store.errorMessage == nil { dismiss() }
+                    }
+                }
+                .disabled(store.isWorking)
+            } else if let incoming = store.invitations.incoming.first(where: { $0.user.id == peer.user.id }) {
+                Button("Accept invitation") {
+                    Task {
+                        await store.respondToInvitation(incoming, accept: true)
+                        if store.errorMessage == nil { dismiss() }
+                    }
+                }
+                .disabled(store.isWorking || !store.canAcceptInvitation)
+                Button("Decline", role: .destructive) {
+                    Task {
+                        await store.respondToInvitation(incoming, accept: false)
+                        if store.errorMessage == nil { dismiss() }
+                    }
+                }
+                .disabled(store.isWorking)
+            } else if let outgoing = store.invitations.outgoing.first(where: { $0.user.id == peer.user.id }) {
+                Text("Invitation sent").foregroundStyle(AppColors.secondaryText)
+                Button("Cancel invitation", role: .destructive) {
+                    Task {
+                        await store.endInvitation(outgoing)
+                        if store.errorMessage == nil { dismiss() }
+                    }
+                }
+                .disabled(store.isWorking)
+            } else if isNearby {
+                Button("Invite to Net-Walk") {
+                    Task {
+                        await store.invite(peer.user)
+                        if store.errorMessage == nil { dismiss() }
+                    }
+                }
+                .disabled(store.isWorking || !store.canSendInvitation)
+                Text("Both walkers must opt in. Either person can end the pairing at any time.")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+            } else {
+                Text("This friend is sharing their walk, but is not currently available for Net-Walking.")
+                    .foregroundStyle(AppColors.secondaryText)
+            }
+        }
+    }
+
+    private var isNearby: Bool {
+        store.mapSnapshot.nearby.contains { $0.user.id == peer.user.id }
+    }
+    private var displayName: String {
+        peer.user.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Vitail walker" : peer.user.displayName
+    }
+    private func distanceText(_ metres: Double) -> String {
+        if metres < 1_000 {
+            return metres.formatted(.number.precision(.fractionLength(0))) + " m"
+        }
+        return (metres / 1_000).formatted(.number.precision(.fractionLength(2))) + " km"
     }
 }
 

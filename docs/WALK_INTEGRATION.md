@@ -1,7 +1,9 @@
 # Walk + connected MVP integration
 
 The active map flow shares authentication, dogs, the canonical wallet, redemption
-and café services. OwnerHome owns one WalkSessionCoordinator. The unreachable
+and café services. It is also the only live social map: friend, nearby-partner
+and active-partner pins use each owner's selected profile/map avatar. OwnerHome
+owns one WalkSessionCoordinator. The unreachable
 legacy WalkView/WalkViewModel/WalkRecorder stack has been removed; recording and
 recovery use the coordinator, tracker, location, draft, history and sync stores.
 
@@ -92,10 +94,25 @@ points. Earlier confirmed finished archives keep their retry behavior.
   multiply points. [Quest policy](QUESTS.md) is the canonical rate/cap reference;
   the coffee comparison never changes walking earnings or menu prices.
 
-The current walk-upload API stores validated summaries, not raw routes. The new
-WalkSession/LocationSample/NetWalkInterval database foundation is separate: no
-public GPS ingestion or matching pipeline is enabled, and ordinary uploads do
-not populate it. Production route/evidence retention remains an open decision.
+The completed-walk API stores validated summaries, not raw routes. Its stable
+request UUID also links the authenticated social `WalkSession`. During recording,
+the coordinator may send the same fresh Core Location fixes to that separate
+social endpoint; Friends never starts a second location manager. Ordinary walk
+uploads do not populate social samples.
+
+Friend sharing and nearby Net-Walking discovery are independent and off by
+default. Friends may receive an exact fresh position only when sharing is on;
+other opted-in walkers receive an approximate position until both people accept
+an invitation. Pause, finish, logout, blocking or withdrawing matching clears
+presence and ends the pairing. The server derives together-distance from
+overlapping plausible samples and returns the verified distance only. Net-Walk
+wallet points and estimates remain hidden while the feature flag is off.
+
+Presence expires after 30 seconds. Raw social GPS is retained in a rolling
+15-minute verification buffer and deleted on pause/finish, with the
+`social_presence` worker sweeping at least once a minute. Summary intervals keep
+distance/time without exposing a route. Broader completed-route and account
+erasure policy remains an open decision. See [Friends and Net-Walking](SOCIAL.md).
 
 ## Verification
 
@@ -113,6 +130,9 @@ decoding. The confirmation flow adds checks for starting without dogs, a durable
 unconfirmed summary after Finish/relaunch/logout/automatic stop, zero-dog local
 completion, exactly-once submission after choosing dogs, and daily-cap estimates.
 Map and summary snapshots cover the new controls and light/dark appearances.
+Social tests cover default-off privacy, friendship/block permissions, stale
+presence, invitations, exact versus approximate map positions and repeat-safe
+together-distance. They do not certify field GPS accuracy.
 
 Real iPhone acceptance still needs lock-screen capture, paused movement,
 permission changes, active recovery, pending-summary recovery, offline confirmed
@@ -121,6 +141,11 @@ happy path is Start → Pause → Finish → choose dogs → Complete walk → i
 receipt and Redeem balance → purchase → collect. Follow `WALK_TESTING.md` and
 record the current build/device results without treating simulator tests as
 physical GPS acceptance.
+
+Social field acceptance additionally requires two real owner accounts and two
+iPhones: verify default-off invisibility, friend-only sharing, nearby discovery,
+invitation consent, partner position, together-distance, background behavior and
+prompt disappearance after pause/finish/disable/block/network loss.
 
 Personal signing/server settings and real route exports remain outside the
 repository.

@@ -4,17 +4,37 @@ from uuid import uuid4
 
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
 from checkins.models import CheckIn
 from checkins.services import cancel_checkin, collect_checkin, report_checkin_location, start_checkin
 from checkins.tests.test_checkins import CheckInFixture
+from checkins.views import (
+    CheckInCancelThrottle,
+    CheckInCollectThrottle,
+    CheckInLocationThrottle,
+    CheckInStartThrottle,
+)
 from rewards.models import PointEntry
 from rewards.policy import CHECKIN_SECONDS, local_date
 
 
 class LocationCheckInTests(CheckInFixture, TestCase):
     sample = {"latitude": -37.8, "longitude": 144.9, "accuracy_m": 5, "is_simulated": False}
+
+    def test_action_throttles_are_per_user_and_use_independent_buckets(self):
+        request = APIRequestFactory().post("/api/check-ins/example/locations")
+        request.user = self.owner
+        throttles = (
+            CheckInStartThrottle, CheckInLocationThrottle,
+            CheckInCollectThrottle, CheckInCancelThrottle,
+        )
+        owner_keys = {throttle().get_cache_key(request, None) for throttle in throttles}
+        self.assertEqual(len(owner_keys), 4)
+        request.user = self.other
+        other_keys = {throttle().get_cache_key(request, None) for throttle in throttles}
+        self.assertTrue(owner_keys.isdisjoint(other_keys))
+        self.assertEqual(CheckInLocationThrottle.rate, "12/min")
 
     def test_map_does_not_restore_disabled_venue_with_missing_coordinates(self):
         venue = self.venues["CAFE"]

@@ -17,7 +17,7 @@ foundations. [Quest policy](docs/QUESTS.md) owns reward rules;
 | Backend | Python, Django, Django REST Framework, JWT |
 | Database/admin | MySQL 8.4 in Compose, Django ORM/migrations and Django Admin |
 | Tests | XCTest, Django tests; separate physical-device acceptance |
-| Local services | Docker Compose: `api`, `db`, `expiry` |
+| Local services | Docker Compose: `api`, `db`, `expiry`, `social_presence` |
 
 SwiftData, a separate wallet database, a background upload worker and a generic
 rules engine are not part of the current implementation. Australian hosting is
@@ -38,16 +38,19 @@ credentials are bound to the selected backend; a Debug URL change requires a
 new login. Refresh authentication failures clear the stale session; transient
 server/network failures retain credentials for retry.
 
-Owner navigation is Account / Walk / Quest / Redeem. Café navigation is
-Account / Products / Orders. The login choice is context, not permission:
+Owner navigation is Account / Walk / Quest / Venues / Redeem. Friends and
+Net-Walking settings open from Account; Walk remains the only live map. Café
+navigation is Account / Products / Orders. The login choice is context, not permission:
 registration creates OWNER, café accounts are admin-created, and the returned
 role must match before entering its interface.
 
-`OwnerHomeView` owns the active `WalkSessionCoordinator`, Quest store, shared
-check-in store and wallet view model. Switching tabs preserves a walk; changing
-accounts stops work and rejects late responses. Both map and Quest observe the
-same check-in collection state. Production injects the authenticated check-in
-service; physical-device location and background acceptance remain release work.
+`OwnerHomeView` owns the active `WalkSessionCoordinator`, Friends store, Quest
+store, shared check-in store and wallet view model. Switching tabs or opening
+Friends preserves a walk; changing accounts stops work and rejects late
+responses. Walk and Quest observe the same check-in collection state. The
+coordinator also feeds the authenticated social session from the same Core
+Location stream, so Friends never starts a second location manager. Physical
+device location and background acceptance remain release work.
 
 The design system contains semantic colors, spacing, buttons, avatars and
 collection controls. Persisted System/Light/Dark selection applies to pages,
@@ -60,16 +63,17 @@ sheets and login. Use system text styles and verify large-text layouts.
 | `accounts` | Login, roles, owner profile and authenticated café profile endpoints |
 | `dogs` | Owner-scoped dog profiles, nullable birthdays, breed reference data, personalised owner/manual Admin goal targets and frozen results |
 | `venues` | Canonical venue identity/details/photo and optional managing café account |
-| `walks` | Validated walk uploads, participation/history snapshots; live-session, sample and net-walk schema foundations |
+| `walks` | Validated walk uploads and participation/history snapshots; connected live sessions, bounded GPS samples and verified Net-Walk intervals |
 | `rewards` | Canonical PointEntry ledger, Reward products, Redemption orders, café feed and expiry/refunds |
 | `quests` | Typed task projection, daily-goal calendars, reward catalogue and birthday/streak qualification/collection |
 | `evidence` | Per-dog document entitlements, immutable submissions and private files |
 | `checkins` | Authenticated venue discovery, GPS dwell verification, collection and shared daily-cap service |
-| `social` | Friendship and directional-block schema foundations |
+| `social` | Friend discovery/requests/blocks, privacy preferences, live-map access and explicit Net-Walk invitations |
 
-The core foundation contains 23 business tables, including the explicit
-Walk–Dog relation and effective-dated `DogGoalTarget`. It does not include Django's built-in auth/admin/session
-tables. [Database design](docs/database-design-2026-09-25/README.md) describes
+The core foundation contains 24 business tables, including the explicit
+Walk–Dog relation, effective-dated `DogGoalTarget` and `NetWalkInvitation`. It
+does not include Django's built-in auth/admin/session tables.
+[Database design](docs/database-design-2026-09-25/README.md) describes
 fields and constraints; model migrations are the physical schema authority.
 The six later tables for external identity, chat, charity/donation and push
 registration/delivery are not created by this foundation.
@@ -90,10 +94,11 @@ applicable terms after catalogue edits.
 
 Daily-goal rows preserve per-dog inputs/results. Owner recommendations and Admin
 targets share one append-only effective-dated history, and Quest displays the
-seven-day calendar. Session/sample/net-interval and friendship rows preserve
-data needed by later features. Their existence does not enable daily-goal
-payouts, a location matcher, social API or leaderboard. Do not start storing raw GPS through the current walk-upload endpoint
-just because a LocationSample table exists.
+seven-day calendar. Social sessions, bounded samples, invitations, verified
+intervals, friendships and blocks support the connected Friends/Net-Walking
+flow. They do not enable daily-goal payouts, Net-Walk wallet points or a
+leaderboard. Ordinary completed-walk uploads still carry validated route
+summaries; live social GPS uses its separate short-lived session endpoint.
 
 ## Transactions and retry safety
 
@@ -107,6 +112,9 @@ just because a LocationSample table exists.
   client-reported elapsed time. Walking, daily-goal settlement and check-in
   services share the daily activity cap; daily-goal payouts and partial check-in
   rewards remain disabled pending policy.
+- Net-Walking invitations, session state and together-distance are repeat-safe
+  under owner/session locks. `NET_WALK_REWARDS_ENABLED` defaults off; disabled
+  sessions never expose an estimate or create a ledger entry.
 - Order creation deducts; collection changes status only. Expiry and admin
   cancellation refund pending orders once. Terminal orders are not reopened.
 - `expire_rewards --watch --interval 60` runs in Compose. It expires due credit
@@ -130,19 +138,32 @@ local. Stable IDs, protected files and receipt reconciliation preserve work
 through failure. Relaunch restores an active checkpoint as Paused, never as
 uninterrupted tracking. A force-quit cannot record missing movement.
 
-The current HTTP walk endpoint validates measured coordinates, accuracy,
+The completed-walk endpoint validates measured coordinates, accuracy,
 timestamps, segment boundaries and location-source flags, then stores the
-accepted summary. It does not populate the new live-location foundation.
+accepted summary. During an active walk, the separate social endpoint stores a
+bounded GPS verification buffer and fresh presence metadata.
 Server receipts are authoritative; local distance/points remain estimates.
 Foreground retry retains the server submission deadline. There is no general
 offline login or autonomous background upload service.
 
+Friend and nearby-partner visibility are independent opt-ins and both default
+off. Accepted friends may receive exact fresh positions only when sharing is
+enabled; opted-in nearby users receive an approximate position until an
+invitation is accepted. Pause, finish, logout, blocking or withdrawing consent
+removes presence and ends pairing. The API rejects stale positions immediately;
+`social_presence` purges raw GPS older than 15 minutes at least once a minute.
+Persisted `NetWalkInterval` rows retain summary distance/time, not a returned
+route. See [Friends and Net-Walking](docs/SOCIAL.md).
+
 ## API, permissions and files
 
-[OpenAPI](docs/openapi.yaml) is the route/schema reference. Do not copy a future
-endpoint list into the client. `/api/quests` returns the compact task envelope
-and daily-goal calendars; `/api/dogs/{id}/goal` previews and saves the dog's
-effective-dated personalised target. Old dashboard projections are removed.
+[OpenAPI](docs/openapi.yaml) is the route/schema reference. `/api/quests` returns
+the compact task envelope and daily-goal calendars; `/api/dogs/{id}/goal`
+previews and saves the dog's effective-dated personalised target. Old dashboard
+projections are removed.
+`/api/social` exposes the connected discovery, friendship/block, preferences,
+map, session and Net-Walk invitation contracts. It returns public IDs and
+display fields, never login email or raw GPS history.
 
 Backend queries derive ownership from the authenticated account. OWNER, CAFE
 and ADMIN capabilities are distinct; hiding a control is not authorization.
@@ -154,8 +175,9 @@ Public avatar/venue media and private evidence use separate storage paths.
 Document originals require owner/admin authorization and preserve submission
 versions. See [media](backend/MEDIA.md) and [evidence](backend/evidence/README.md)
 for limits and backup requirements. Data retention, account erasure,
-consent/visibility and later audit workflows remain product/release work;
-private storage alone does not complete them.
+account-wide anonymisation and later audit workflows remain product/release
+work. Social visibility and raw-GPS cleanup are implemented, but do not replace
+that broader retention policy.
 
 ## Development and review
 
@@ -175,7 +197,7 @@ match. Physical-device checks remain necessary for GPS, background execution,
 photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
-Future work includes physical-device venue/GPS acceptance, approved multi-dog goal earning,
-net-walk earning, friends/leaderboards, OAuth, password reset/account
+Future work includes physical-device venue/social GPS acceptance, approved
+multi-dog goal earning, Net-Walk earning, OAuth, password reset/account
 deletion, notifications, sharing, chat and charity. Schema preparation must not
 be presented as completed functionality. See [open decisions](docs/DECISIONS.md).

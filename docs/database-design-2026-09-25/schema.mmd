@@ -80,11 +80,11 @@ erDiagram
     LocationSample {
         bigint id PK "required"
         bigint owner_id FK "required"
-        bigint session_id FK "nullable"
-        bigint checkin_id FK "nullable"
+        bigint session_id FK "required"
     }
     NetWalkInterval {
         bigint id PK "required"
+        bigint invitation_id FK "nullable"
         bigint session_low_id FK "required"
         bigint session_high_id FK "required"
         datetime started_at "required"
@@ -166,6 +166,15 @@ erDiagram
         bigint blocker_id FK "required"
         bigint blocked_id FK "required"
     }
+    NetWalkInvitation {
+        bigint id PK "required"
+        bigint sender_id FK "required"
+        bigint recipient_id FK "required"
+        bigint sender_session_id FK "required"
+        bigint recipient_session_id FK "required"
+        varchar status "required"
+        datetime ended_at "nullable"
+    }
     WalkSession |o--o| User : "active_walk_session_id"
     User ||--o{ Dog : "owner_id"
     Breed ||--o{ Dog : "breed_id"
@@ -187,8 +196,8 @@ erDiagram
     User ||--o{ WalkSession : "owner_id"
     Walk |o--o| WalkSession : "walk_id"
     User ||--o{ LocationSample : "owner_id"
-    WalkSession |o--o{ LocationSample : "session_id"
-    CheckIn |o--o{ LocationSample : "checkin_id"
+    WalkSession ||--o{ LocationSample : "session_id"
+    NetWalkInvitation |o--o{ NetWalkInterval : "invitation_id"
     WalkSession ||--o{ NetWalkInterval : "session_low_id"
     WalkSession ||--o{ NetWalkInterval : "session_high_id"
     Dog |o--o{ DogGoalTarget : "dog_id"
@@ -215,3 +224,7 @@ erDiagram
     User ||--o{ Friendship : "requested_by_id"
     User ||--o{ UserBlock : "blocker_id"
     User ||--o{ UserBlock : "blocked_id"
+    User ||--o{ NetWalkInvitation : "sender_id"
+    User ||--o{ NetWalkInvitation : "recipient_id"
+    WalkSession ||--o{ NetWalkInvitation : "sender_session_id"
+    WalkSession ||--o{ NetWalkInvitation : "recipient_session_id"

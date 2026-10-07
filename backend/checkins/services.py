@@ -155,9 +155,17 @@ def cancel_checkin(*, owner, checkin_id):
 
 
 def daily_activity_points(owner, day):
+    # The feature flag controls new Net-Walk awards, not accounting. Once an
+    # award exists it must keep consuming that day's shared allowance even if
+    # the flag is later disabled.
+    categories = (
+        PointEntry.EarnCategory.WALK,
+        PointEntry.EarnCategory.CHECK_IN,
+        PointEntry.EarnCategory.DAILY_GOAL,
+        PointEntry.EarnCategory.NET_WALK,
+    )
     return PointEntry.objects.filter(user=owner, type=PointEntry.Type.EARN, earned_on=day,
-        earn_category__in=(PointEntry.EarnCategory.WALK, PointEntry.EarnCategory.CHECK_IN,
-                           PointEntry.EarnCategory.DAILY_GOAL)
+        earn_category__in=categories
     ).aggregate(total=Sum("amount"))["total"] or 0
 
 

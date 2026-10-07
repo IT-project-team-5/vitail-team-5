@@ -1,4 +1,5 @@
 import Combine
+import CoreLocation
 import Foundation
 import UIKit
 
@@ -11,6 +12,9 @@ final class WalkSessionCoordinator: ObservableObject {
     let dogSelection: WalkDogSelectionViewModel
     let history: WalkHistoryStore
     let sync: WalkSyncStore
+    var onSocialWalkChanged: ((WalkDraft?, WalkSessionTracker.Status) -> Void)?
+    var onSocialLocations: (([CLLocation]) -> Void)?
+    var onSocialLocationInterrupted: (() -> Void)?
 
     @Published private(set) var storageErrorMessage: String?
     @Published private(set) var canStartNewWalk = false
@@ -55,10 +59,16 @@ final class WalkSessionCoordinator: ObservableObject {
         loadDraft()
 
         self.locationManager.onLocations = { [weak self] locations in
-            self?.tracker.recordBatch(locations)
+            guard let self else { return }
+            self.tracker.recordBatch(locations)
+            self.onSocialLocations?(locations)
         }
         self.locationManager.onInterruption = { [weak self] message, pauseRequired in
             guard let self else { return }
+            // Social presence must drop its current fix before any asynchronous
+            // pause reaches the server. A later location callback is the only
+            // event that can make Net-Walking ready again.
+            onSocialLocationInterrupted?()
             if pauseRequired {
                 tracker.pauseForInterruption(message: message)
             } else {
@@ -72,6 +82,7 @@ final class WalkSessionCoordinator: ObservableObject {
             if tracker.enforcesRewardLimits && tracker.status == .walking && tracker.pointCount >= 5000 {
                 tracker.finish()
             }
+            onSocialWalkChanged?(tracker.makeDraft(), tracker.status)
         }
         tracker.onFinish = { [weak self] record in self?.finish(record) }
 

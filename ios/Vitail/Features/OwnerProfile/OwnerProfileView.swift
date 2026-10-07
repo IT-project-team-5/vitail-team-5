@@ -10,14 +10,16 @@ struct OwnerProfileView: View {
     let documentService: any DocumentServing
     let onDocumentsChanged: () async -> Void
     let onGoalsChanged: () async -> Void
+    let onOpenFriends: (() -> Void)?
     let dogService: any DogServicing
 
     init(user: User, session: SessionStore, dogService: any DogServicing = DogService(),
          documentService: any DocumentServing = DocumentService(), onDocumentsChanged: @escaping () async -> Void = {},
-         onGoalsChanged: @escaping () async -> Void = {}) {
+         onGoalsChanged: @escaping () async -> Void = {}, onOpenFriends: (() -> Void)? = nil) {
         self.documentService = documentService
         self.onDocumentsChanged = onDocumentsChanged
         self.onGoalsChanged = onGoalsChanged
+        self.onOpenFriends = onOpenFriends
         self.dogService = dogService
         self.user = user
         self.session = session
@@ -28,6 +30,7 @@ struct OwnerProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: AppSpacing.large) {
                 profileCard
+                if let onOpenFriends { friendsRow(action: onOpenFriends) }
                 DogListView(
                     viewModel: dogViewModel,
                     addDog: { isAddingDog = true },
@@ -48,6 +51,32 @@ struct OwnerProfileView: View {
             DogDetailView(viewModel: dogViewModel, dog: dog, documentService: documentService, session: session,
                           onDocumentsChanged: onDocumentsChanged, onGoalsChanged: onGoalsChanged, goalService: dogService)
         }
+    }
+
+    private func friendsRow(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: AppSpacing.medium) {
+                Image(systemName: "person.2.fill")
+                    .font(.title3)
+                    .foregroundStyle(AppColors.brand)
+                    .frame(width: 44, height: 44)
+                    .background(AppColors.brand.opacity(0.10))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Friends").font(.headline).foregroundStyle(AppColors.primaryText)
+                    Text("Manage friends, privacy and Net-Walking")
+                        .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").foregroundStyle(AppColors.secondaryText)
+            }
+            .padding(AppSpacing.medium)
+            .background(AppColors.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens friend and location-sharing settings")
     }
 
     private var profileCard: some View {

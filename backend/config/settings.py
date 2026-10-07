@@ -130,3 +130,16 @@ SIMPLE_JWT = {
         days=int(os.getenv("JWT_REFRESH_DAYS", "7"))
     ),
 }
+
+# Matching and verified together-distance are usable. Wallet settlement stays
+# disabled until the Net-Walk reward policy is approved.
+NET_WALK_REWARDS_ENABLED = env_bool("NET_WALK_REWARDS_ENABLED", False)
+SOCIAL_PRESENCE_TTL_SECONDS = 30
+SOCIAL_GPS_RETENTION_SECONDS = 900
+SOCIAL_MAX_SESSION_SAMPLES = 180
+SOCIAL_MIN_SAMPLE_SECONDS = 1
+NET_WALK_RADIUS_M = 50
+SOCIAL_NEARBY_RADIUS_M = 2000
+# Bounding-box filtering runs in the database; exact distance is calculated for
+# at most this many fresh, opted-in candidates per map refresh.
+SOCIAL_DISCOVERY_CANDIDATE_LIMIT = 200

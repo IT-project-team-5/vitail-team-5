@@ -135,8 +135,9 @@ share the same persisted validation checks.
 Every explicitly selected dog receives its own validated participation time;
 dog count does not multiply base walking points. Overlapping owner uploads are
 already rejected. Walk request IDs and WalkDog uniqueness prevent retry double
-counting. Net-walk intervals refer to those same base walks and add no goal time.
-There is still no public shared-walk matcher or net-walk reward producer.
+counting. Net-Walk intervals refer to those same base walks and add no goal
+time. The connected social session can verify together-distance, but it does
+not produce a goal qualification or wallet reward.
 
 Each dog shows the seven calendar days ending today: completed, missed,
 incomplete today, or not eligible. Its goal streak counts consecutive completed
@@ -233,13 +234,3 @@ tests require disposable MySQL. iOS Quest tests cover calendar presentation,
 midnight invalidation, refresh after an in-flight read and appearance at large
 text sizes. Test source alone is not evidence of a successful build; record only
 results produced by the current checkout.
-
-### Verification recorded on 7 October 2026
-
-- Migration drift check: no changes detected.
-- Full disposable-MySQL backend suite: 422 tests passed.
-- Full iOS simulator XCTest suite: 356 tests passed and one device-protection
-  test was skipped; visual snapshots passed. QuestTests were rerun after the
-  final review edits and passed.
-- Forward migration preservation remains covered by the backend suite; existing
-  daily targets/results and ledger balances are not rewritten.

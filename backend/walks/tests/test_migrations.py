@@ -46,3 +46,61 @@ class ExplicitWalkDogMigrationTests(TransactionTestCase):
             self.assertEqual(current.get_model("rewards", "PointEntry").objects.filter(user_id=owner.pk).count(), 1)
         finally:
             MigrationExecutor(connection).migrate(leaves)
+
+
+class LocationSamplePurposeMigrationTests(TransactionTestCase):
+    def test_legacy_checkin_samples_are_removed_and_walk_samples_survive(self):
+        executor = MigrationExecutor(connection)
+        leaves = executor.loader.graph.leaf_nodes()
+        try:
+            executor.migrate([("walks", "0005_netwalkinterval_invitation")])
+            executor = MigrationExecutor(connection)
+            old = executor.loader.project_state(
+                list(executor.loader.applied_migrations)
+            ).apps
+            User = old.get_model("accounts", "User")
+            Venue = old.get_model("venues", "Venue")
+            CheckIn = old.get_model("checkins", "CheckIn")
+            Session = old.get_model("walks", "WalkSession")
+            Sample = old.get_model("walks", "LocationSample")
+            owner = User.objects.create(
+                email="sample-migration@example.com", display_name="Owner", role="OWNER"
+            )
+            now = timezone.now()
+            venue = Venue.objects.create(
+                name="Migration venue", kind="CAFE", latitude=0, longitude=0,
+                checkin_enabled=True,
+            )
+            checkin = CheckIn.objects.create(
+                owner=owner, venue=venue, venue_name_snapshot=venue.name,
+                local_date=now.date(), category_slot="CAFE", radius_m=20,
+                center_latitude=0, center_longitude=0, required_seconds=600,
+                verified_seconds=0, started_at=now,
+                expires_at=now + timedelta(hours=1), promised_points=12,
+            )
+            session = Session.objects.create(
+                owner=owner, request_id=uuid4(), state="RECORDING",
+                started_at=now, heartbeat_at=now, validation_version="migration-test",
+            )
+            shared = dict(
+                owner=owner, sequence=0, segment_id=0, recorded_at=now,
+                received_at=now, latitude=0, longitude=0, accuracy_m=5,
+            )
+            legacy = Sample.objects.create(
+                **shared, session=None, checkin=checkin,
+                checkin_attempt_id=checkin.attempt_id, stream_id=uuid4(),
+            )
+            retained = Sample.objects.create(
+                **shared, session=session, checkin=None, checkin_attempt_id=None,
+                stream_id=uuid4(),
+            )
+
+            executor = MigrationExecutor(connection)
+            executor.migrate(leaves)
+            current = executor.loader.project_state(leaves).apps
+            CurrentSample = current.get_model("walks", "LocationSample")
+            self.assertFalse(CurrentSample.objects.filter(pk=legacy.pk).exists())
+            upgraded = CurrentSample.objects.get(pk=retained.pk)
+            self.assertEqual(upgraded.session_id, session.pk)
+        finally:
+            MigrationExecutor(connection).migrate(leaves)

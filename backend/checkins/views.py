@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from rewards.permissions import IsOwnerRole
@@ -10,6 +11,26 @@ from venues.models import Venue
 from .models import CheckIn
 from .serializers import LocationSampleSerializer, RequestIDSerializer, VenueCheckInSerializer, VenueMapSerializer
 from .services import cancel_checkin, collect_checkin, current_progress, report_checkin_location, start_checkin
+
+
+class CheckInStartThrottle(UserRateThrottle):
+    scope = "checkin_start"
+    rate = "12/min"
+
+
+class CheckInLocationThrottle(UserRateThrottle):
+    scope = "checkin_location"
+    rate = "12/min"
+
+
+class CheckInCollectThrottle(UserRateThrottle):
+    scope = "checkin_collect"
+    rate = "30/min"
+
+
+class CheckInCancelThrottle(UserRateThrottle):
+    scope = "checkin_cancel"
+    rate = "30/min"
 
 
 class VenueMapView(APIView):
@@ -52,6 +73,7 @@ class CheckInProgressView(APIView):
 
 class VenueCheckInStartView(APIView):
     permission_classes = [IsOwnerRole]
+    throttle_classes = [CheckInStartThrottle]
 
     def post(self, request, venue_id):
         serializer = LocationSampleSerializer(data=request.data)
@@ -62,6 +84,7 @@ class VenueCheckInStartView(APIView):
 
 class CheckInLocationView(APIView):
     permission_classes = [IsOwnerRole]
+    throttle_classes = [CheckInLocationThrottle]
 
     def post(self, request, attempt_id):
         serializer = LocationSampleSerializer(data=request.data)
@@ -73,6 +96,7 @@ class CheckInLocationView(APIView):
 
 class CheckInCancelView(APIView):
     permission_classes = [IsOwnerRole]
+    throttle_classes = [CheckInCancelThrottle]
 
     def post(self, request, attempt_id):
         row = get_object_or_404(CheckIn, owner=request.user, attempt_id=attempt_id)
@@ -82,6 +106,7 @@ class CheckInCancelView(APIView):
 
 class CheckInCollectionView(APIView):
     permission_classes = [IsOwnerRole]
+    throttle_classes = [CheckInCollectThrottle]
 
     def post(self, request, attempt_id):
         RequestIDSerializer(data=request.data).is_valid(raise_exception=True)
