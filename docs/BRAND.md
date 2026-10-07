@@ -7,8 +7,10 @@ background. There is no drawn outer frame or baked-in rounded corner mask.
 This revised artwork was approved on 23 September 2026 and resized to a
 1024 × 1024 opaque RGB PNG without changing its composition. The same image is
 included as `Assets.xcassets/AppIcon.appiconset` for the Home Screen and
-`BrandMark.imageset` for the sign-in screen. The system applies the Home Screen
-icon mask; the in-app brand component applies its own rounded clipping shape.
+`BrandMark.imageset` for sign-in and activity sharing. The system applies the
+Home Screen icon mask; the in-app brand component applies its own rounded
+clipping shape. Screens show this complete artwork without a second text
+wordmark beside it.
 
 The shared palette lives in `Core/DesignSystem/AppTheme.swift`:
 
@@ -40,11 +42,10 @@ This is not a claim of a full accessibility audit.
 
 Shared form prompts use the secondary text color. Account choices and primary
 buttons can grow vertically for larger system text instead of truncating labels.
-Verification on 23 September 2026, including café product management: the iOS
-Simulator test suite passed with 181 tests passed, 1 device-only test skipped
-and no failures. The iPhone Release build passed with signing disabled.
-Light/dark and large-text captures were visually reviewed; this does not replace
-real-device appearance or signing checks.
+The current automated suite checks brand packaging, contrast and representative
+light/dark layouts. Release verification also includes an unsigned iPhone build
+and visual review at standard and large text sizes; simulator results do not
+replace real-device appearance or signing checks.
 
 The flat AppIcon uses Xcode's single-size asset support. The system generates
 required sizes; no custom layered Icon Composer, dark-icon or tinted-icon artwork

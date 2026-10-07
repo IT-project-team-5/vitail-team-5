@@ -117,13 +117,13 @@ struct AuthView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
-            VitailBrandMark()
-            Text("Vitail")
-                .font(.largeTitle.bold())
+            VitailBrandMark(size: 136)
             Text("Walk more. Earn local rewards.")
                 .foregroundStyle(AppColors.secondaryText)
         }
         .padding(.top, AppSpacing.extraLarge)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Vitail. Walk more. Earn local rewards.")
     }
 
     #if DEBUG

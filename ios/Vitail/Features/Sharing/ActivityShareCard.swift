@@ -21,8 +21,7 @@ struct ActivityShareCard: View {
                 .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(ink, lineWidth: 3))
             VStack(spacing: 14) {
                 HStack(spacing: 10) {
-                    VitailBrandMark(size: 40)
-                    Text("Vitail").font(.system(size: 26, weight: .heavy, design: .rounded))
+                    VitailBrandMark(size: 56)
                     Spacer()
                     if options.showDate {
                         Text(summary.date, format: .dateTime.day().month(.abbreviated).year())
