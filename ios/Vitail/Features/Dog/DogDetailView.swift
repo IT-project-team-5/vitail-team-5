@@ -32,9 +32,23 @@ struct DogDetailView: View {
                     .padding(AppSpacing.large)
                     .background(AppColors.surface)
                     .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
-                    NavigationLink("Daily walking goal") {
+                    NavigationLink {
                         DogGoalView(dog: currentDog, service: goalService, onChanged: onGoalsChanged)
-                    }
+                    } label: {
+                        HStack {
+                            Label("Daily walking goal", systemImage: "figure.walk")
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .accessibilityHidden(true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.headline).padding(AppSpacing.large)
+                        .foregroundStyle(AppColors.primaryText)
+                        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+                        .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                    }.buttonStyle(.plain)
                     NavigationLink {
                         DogDocumentsView(dogID: currentDog.id, service: documentService, session: session,
                                          onChanged: onDocumentsChanged)
