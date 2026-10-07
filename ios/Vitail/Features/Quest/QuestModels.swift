@@ -120,6 +120,17 @@ struct GoalCalendarDay: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// A presentation group built from the store's eligible, ordered tasks.
+struct DogQuestGroup: Identifiable, Equatable, Sendable {
+    let id: Int
+    let tasks: [QuestTask]
+
+    var name: String { tasks.first?.subjectName ?? "Dog" }
+    var photo: String? { tasks.compactMap(\.photo).first }
+    var readyCount: Int { tasks.filter { $0.status == .ready }.count }
+    var summary: String { "\(tasks.count) \(tasks.count == 1 ? "task" : "tasks") · \(readyCount) ready" }
+}
+
 struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
     let id: String
     let kind: String

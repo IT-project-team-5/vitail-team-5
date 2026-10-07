@@ -522,6 +522,91 @@ final class QuestTests: XCTestCase {
         XCTAssertNil(store.inProgressTasks.first?.progressRatio)
     }
 
+    func testDogGroupsPartitionAllVisibleTasksByIDAndPrioritizeReadyRewards() async throws {
+        let session = await makeSession()
+        let tasks = [
+            QuestFixture.task(id: "collected", status: .collected, collectedAt: QuestFixture.timestamp),
+            QuestFixture.task(id: "progress"),
+            QuestFixture.task(id: "ready", kind: "BIRTHDAY", status: .ready),
+            QuestFixture.task(id: "same-name", dogID: 3),
+            QuestFixture.streak()
+        ]
+        let store = QuestStore(ownerID: 1, session: session, service: QuestFixture(tasks: tasks))
+        await store.refresh()
+
+        // Both dogs are named Luna; only the higher-ID dog has a ready reward.
+        XCTAssertEqual(store.dogTaskGroups.map(\.id), [8, 3])
+        XCTAssertEqual(store.dogTaskGroups.map(\.name), ["Luna", "Luna"])
+        let group = try XCTUnwrap(store.dogTaskGroups.first)
+        XCTAssertEqual(group.tasks.map(\.id), ["ready", "progress", "collected"])
+        XCTAssertEqual(group.summary, "3 tasks · 1 ready")
+        XCTAssertEqual(store.dogTaskGroups.last?.summary, "1 task · 0 ready")
+        XCTAssertEqual(store.accountTasks, [QuestFixture.streak()])
+        let displayed = store.dogTaskGroups.flatMap(\.tasks) + store.accountTasks
+        XCTAssertEqual(displayed.count, tasks.count)
+        XCTAssertEqual(Set(displayed.map(\.id)).count, displayed.count)
+        XCTAssertEqual(Set(displayed.map(\.id)), Set(store.visibleTasks.map(\.id)))
+    }
+
+    func testDogGroupIdentitySurvivesRefreshRenameAndTaskReplacement() async throws {
+        let session = await makeSession()
+        let service = QuestFixture(tasks: [QuestFixture.task(id: "before")])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        let originalID = try XCTUnwrap(store.dogTaskGroups.first?.id)
+
+        await service.setTasks([
+            QuestFixture.task(id: "after", subjectName: "Renamed dog"),
+            QuestFixture.task(id: "new-dog", kind: "BIRTHDAY", status: .ready, dogID: 9)
+        ])
+        await store.refresh()
+        XCTAssertEqual(store.dogTaskGroups.map(\.id), [9, originalID])
+        XCTAssertEqual(store.dogTaskGroups.last?.name, "Renamed dog")
+        XCTAssertEqual(store.dogTaskGroups.last?.tasks.map(\.id), ["after"])
+        await service.failNextFetch()
+        await store.refresh()
+        XCTAssertEqual(store.dogTaskGroups.map(\.id), [9, originalID])
+    }
+
+    func testGroupedTasksKeepDocumentRoutesAndCollectionBehavior() async throws {
+        let session = await makeSession()
+        let service = QuestFixture()
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        await store.refresh()
+        let inProgress = try XCTUnwrap(store.dogTaskGroups.flatMap(\.tasks).first { $0.status == .inProgress })
+        XCTAssertEqual(inProgress.documentRoute?.dogID, 8)
+        XCTAssertEqual(inProgress.documentRoute?.kind, .vet)
+        let ready = try XCTUnwrap(store.dogTaskGroups.flatMap(\.tasks).first { $0.id == "document:10" })
+        XCTAssertTrue(store.canCollect(ready))
+        await store.collect(taskID: ready.id)
+        let collected = try XCTUnwrap(store.dogTaskGroups.flatMap(\.tasks).first { $0.id == ready.id })
+        XCTAssertEqual(collected.status, .collected)
+        XCTAssertFalse(store.canCollect(collected))
+        XCTAssertEqual(store.dogTaskGroups.flatMap(\.tasks).filter { $0.id == ready.id }.count, 1)
+        let calls = await service.calls
+        XCTAssertEqual(calls, ["document:10"])
+    }
+
+    func testDogAccordionAppearanceSnapshots() async throws {
+        let group = DogQuestGroup(id: 8, tasks: [
+            QuestFixture.task(id: "ready", kind: "BIRTHDAY", status: .ready,
+                              subjectName: "Luna the Very Adventurous Walking Companion"),
+            QuestFixture.task(id: "progress"),
+            QuestFixture.task(id: "collected", status: .collected, collectedAt: QuestFixture.timestamp)
+        ])
+        for dark in [false, true] {
+            for expanded in [false, true] {
+                for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
+                    try await snapshot(ScrollView {
+                        DogQuestGroupCard(group: group, isExpanded: .constant(expanded), onOpenTask: { _ in })
+                            .padding(AppSpacing.medium)
+                    }.environment(\.dynamicTypeSize, size),
+                        name: "Quest-Accordion-320-\(dark)-\(expanded)-\(size)", dark: dark, width: 320)
+                }
+            }
+        }
+    }
+
     func testCollectedRowsDisappearAtMelbourneMidnightWithoutBecomingReadyAgain() async {
         let session = await makeSession()
         var clock = Date(timeIntervalSince1970: 0)
@@ -932,10 +1017,11 @@ private actor QuestFixture: QuestServing {
     func releaseFetch() { pauseFetch = false; fetchContinuation?.resume(); fetchContinuation = nil }
     func releaseClaim() { pauseClaim = false; claimContinuation?.resume(); claimContinuation = nil }
     nonisolated static let timestamp = "2026-09-25T01:00:00Z"
-    nonisolated static func task(id: String, kind: String = "VET_CHECKUP", status: QuestTaskStatus = .inProgress, collectedAt: String? = nil) -> QuestTask {
-        QuestTask(id: id, kind: kind, status: status, title: "Vet check-up", subjectName: "Luna",
-                  photo: nil, icon: "doc.text", detail: "Add a photo of the visit evidence.", rewardPoints: 200, progress: nil,
-                  dogID: 8, entitlementID: nil, collectedAt: collectedAt)
+    nonisolated static func task(id: String, kind: String = "VET_CHECKUP", status: QuestTaskStatus = .inProgress,
+                                collectedAt: String? = nil, dogID: Int = 8, subjectName: String = "Luna") -> QuestTask {
+        QuestTask(id: id, kind: kind, status: status, title: kind == "BIRTHDAY" ? "Birthday treat" : "Vet check-up", subjectName: subjectName,
+                  photo: nil, icon: "doc.text", detail: "Add a photo of the visit evidence.", rewardPoints: kind == "BIRTHDAY" ? 60 : 200, progress: nil,
+                  dogID: dogID, entitlementID: nil, collectedAt: collectedAt)
     }
     nonisolated static func streak(current: Int = 7, milestone: Int = 7, run: String? = "2026-09-01",
                                    status: QuestTaskStatus = .ready, points: Int? = nil) -> QuestTask {

@@ -39,6 +39,7 @@ struct QuestView: View {
     var onOpenDocuments: ((DocumentQuestRoute) -> Void)?
     @State private var selectedTask: QuestTask?
     @State private var pendingDocument: DocumentQuestRoute?
+    @State private var expandedDogIDs: Set<Int> = []
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -58,11 +59,25 @@ struct QuestView: View {
                     } else if store.snapshot?.dailyGoals != nil {
                         Text("Refresh to see today's walking goals.").font(.subheadline)
                     }
-                    taskRows(store.readyTasks)
+                    ForEach(store.dogTaskGroups) { group in
+                        DogQuestGroupCard(group: group, isExpanded: Binding(
+                            get: { expandedDogIDs.contains(group.id) },
+                            set: { expanded in
+                                if expanded { expandedDogIDs.insert(group.id) }
+                                else { expandedDogIDs.remove(group.id) }
+                            }
+                        ), onOpenTask: openTask)
+                    }
+                    if !store.accountTasks.isEmpty {
+                        Text("Account tasks")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, AppSpacing.small)
+                            .accessibilityAddTraits(.isHeader)
+                        taskRows(store.accountTasks)
+                    }
                     checkInRows(checkIns.activeItems.filter { $0.status == .ready })
-                    taskRows(store.inProgressTasks)
                     checkInRows(checkIns.activeItems.filter { $0.status == .inProgress })
-                    taskRows(store.collectedTodayTasks)
                     checkInRows(checkIns.collectedTodayItems)
                     if store.snapshot == nil && store.isRefreshing {
                         ProgressView().frame(maxWidth: .infinity).padding(AppSpacing.large)
@@ -105,11 +120,7 @@ struct QuestView: View {
     private func taskRows(_ tasks: [QuestTask]) -> some View {
         ForEach(tasks) { task in
             Button {
-                if task.status == .inProgress, let route = task.documentRoute, let onOpenDocuments {
-                    onOpenDocuments(route)
-                } else {
-                    selectedTask = task
-                }
+                openTask(task)
             } label: {
                 if task.isStreak, let progress = task.streakProgress {
                     StreakProgressView(currentDays: progress.currentDays, targetDays: progress.targetDays,
@@ -122,6 +133,13 @@ struct QuestView: View {
                 .accessibilityHint("Opens task details")
         }
     }
+    private func openTask(_ task: QuestTask) {
+        if task.status == .inProgress, let route = task.documentRoute, let onOpenDocuments {
+            onOpenDocuments(route)
+        } else {
+            selectedTask = task
+        }
+    }
     private func checkInRows(_ items: [VenueCheckInProgress]) -> some View {
         ForEach(items) { item in CheckInProgressCard(store: checkIns, checkInID: item.id) }
     }
@@ -132,45 +150,108 @@ struct QuestView: View {
     }
 }
 
+struct DogQuestGroupCard: View {
+    let group: DogQuestGroup
+    @Binding var isExpanded: Bool
+    let onOpenTask: (QuestTask) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(spacing: AppSpacing.medium) {
+                    AvatarView(url: group.photo, name: group.name, systemImage: "dog.fill", size: 44)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(group.name).font(.headline)
+                        Text(group.summary).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.secondaryText)
+                        .accessibilityHidden(true)
+                }
+                .padding(AppSpacing.medium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(group.name), \(group.summary)")
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Collapse tasks" : "Expand tasks")
+
+            if isExpanded {
+                ForEach(group.tasks) { task in
+                    Divider().padding(.horizontal, AppSpacing.medium)
+                    Button { onOpenTask(task) } label: {
+                        QuestTaskRow(task: task, isNested: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(task.status == .inProgress && task.documentRoute != nil
+                                       ? "Opens document or task details" : "Opens task details")
+                }
+            }
+        }
+        .foregroundStyle(AppColors.primaryText)
+        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+    }
+}
+
 struct QuestTaskRow: View {
     let task: QuestTask
+    var isNested = false
     private var ready: Bool { task.status == .ready }
     private var collected: Bool { task.status == .collected }
 
     var body: some View {
         HStack(spacing: AppSpacing.medium) {
-            AvatarView(url: task.photo, name: task.subjectName, systemImage: task.dogID == nil ? task.icon : "dog.fill", size: 44)
-                .accessibilityHidden(true)
+            if !isNested {
+                AvatarView(url: task.photo, name: task.subjectName, systemImage: task.dogID == nil ? task.icon : "dog.fill", size: 44)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                Text(task.subjectLabel).font(.subheadline).foregroundStyle(AppColors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                if !isNested {
+                    Text(task.subjectLabel).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if collected {
                     Label("Collected", systemImage: "checkmark.circle.fill").font(.caption)
                 } else if ready {
                     Text("Ready to collect").font(.caption.weight(.semibold)).foregroundStyle(AppColors.brand)
-                } else if let progress = task.progressRatio {
-                    ProgressView(value: progress).tint(AppColors.brand)
-                        .accessibilityLabel("Task progress")
-                        .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
                 } else {
                     Label("In progress", systemImage: "clock").font(.caption)
                         .foregroundStyle(AppColors.secondaryText)
                 }
+                if !ready && !collected, let progress = task.progressRatio {
+                    ProgressView(value: progress).tint(AppColors.brand)
+                        .accessibilityLabel("Task progress")
+                        .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
+                }
+                if isNested && task.rewardPoints > 0 {
+                    Text("\(task.rewardPoints) points").font(.subheadline)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: "chevron.right").font(.caption.weight(.semibold))
                 .foregroundStyle(AppColors.secondaryText).accessibilityHidden(true)
         }
         .padding(AppSpacing.medium)
         .foregroundStyle(collected ? AppColors.secondaryText : AppColors.primaryText)
-        .background(ready ? AppColors.brand.opacity(0.12) : AppColors.surface)
+        .background(isNested ? Color.clear : ready ? AppColors.brand.opacity(0.12) : AppColors.surface)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
         .overlay {
-            if ready { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
+            if ready && !isNested { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
         }
         .opacity(collected ? 0.6 : 1)
-        .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 }
