@@ -63,4 +63,6 @@ class VenueMapSerializer(serializers.Serializer):
         row = self.context.get("by_category", {}).get(venue.kind)
         if row is None:
             return "AVAILABLE"
+        if row.venue_id != venue.pk:
+            return "UNAVAILABLE"
         return row.status

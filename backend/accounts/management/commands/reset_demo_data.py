@@ -25,6 +25,8 @@ DEMO_CAFES = (
         "email": "riverside@vitail.test",
         "name": "Riverside Paws Café",
         "address": "Demo address: 12 Fictional River Walk, Southbank VIC 3006",
+        "latitude": "-37.821000",
+        "longitude": "144.964000",
         "description": (
             "A relaxed coffee stop after a riverside walk, with smooth espresso and "
             "freshly prepared breakfast favourites. Our dog-friendly terrace has water "
@@ -43,6 +45,8 @@ DEMO_CAFES = (
         "email": "garden@vitail.test",
         "name": "Garden Tails Café",
         "address": "Demo address: 28 Imaginary Garden Lane, Carlton VIC 3053",
+        "latitude": "-37.800400",
+        "longitude": "144.967000",
         "description": (
             "A welcoming neighbourhood café inspired by Melbourne's leafy gardens. "
             "Bring your dog to our sunny courtyard for seasonal brunch, freshly baked "
@@ -61,6 +65,8 @@ DEMO_CAFES = (
         "email": "laneway@vitail.test",
         "name": "Laneway Bark Espresso",
         "address": "Demo address: 7 Make-Believe Espresso Lane, Melbourne VIC 3000",
+        "latitude": "-37.813600",
+        "longitude": "144.963100",
         "description": (
             "A friendly laneway coffee bar serving specialty espresso, slow-steeped "
             "cold brew and buttery bakery treats. Stop by for a quick takeaway or enjoy "
@@ -207,6 +213,7 @@ class Command(BaseCommand):
             venue = Venue.objects.create(
                 manager_user=cafe, name=cafe.display_name, is_partner=True, address=cafe_data["address"],
                 description=cafe_data["description"], opening_hours=cafe_data["opening_hours"],
+                latitude=cafe_data["latitude"], longitude=cafe_data["longitude"], checkin_enabled=True,
             )
             for name, description, cost in cafe_data["products"]:
                 Reward.objects.create(

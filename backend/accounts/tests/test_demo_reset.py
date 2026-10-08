@@ -189,12 +189,19 @@ class DemoResetTests(TestCase):
         self.assertGreater(grant.expires_at, before + timedelta(days=364))
         self.assertLess(grant.expires_at, timezone.now() + timedelta(days=367))
         self.assertEqual(Venue.objects.count(), 3)
+        self.assertEqual(Venue.objects.filter(checkin_enabled=True).count(), 3)
+        self.assertEqual(Venue.objects.filter(latitude__isnull=False, longitude__isnull=False).count(), 3)
+        self.assertEqual(Venue.objects.values("latitude", "longitude").distinct().count(), 3)
         self.assertEqual(Reward.objects.count(), 15)
         for cafe in User.objects.filter(role=User.Role.CAFE):
             with self.subTest(cafe=cafe.email):
                 profile = cafe.managed_venue
                 self.assertGreater(len(profile.description), 100)
                 self.assertTrue(profile.address)
+                self.assertTrue(profile.address.startswith("Demo address:"))
+                self.assertTrue(profile.checkin_enabled)
+                self.assertIsNotNone(profile.latitude)
+                self.assertIsNotNone(profile.longitude)
                 self.assertTrue(profile.opening_hours)
                 self.assertEqual(cafe.managed_venue.rewards.count(), 5)
                 for reward in cafe.managed_venue.rewards.all():

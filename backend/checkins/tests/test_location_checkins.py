@@ -17,6 +17,7 @@ from checkins.views import (
 )
 from rewards.models import PointEntry
 from rewards.policy import CHECKIN_SECONDS, local_date
+from venues.models import Venue
 
 
 class LocationCheckInTests(CheckInFixture, TestCase):
@@ -48,6 +49,35 @@ class LocationCheckInTests(CheckInFixture, TestCase):
             response = client.get("/api/venues")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(venue.pk, [row["id"] for row in response.data])
+
+    def test_map_returns_every_pin_and_marks_other_venues_in_used_category_unavailable(self):
+        second_cafe = Venue.objects.create(
+            name="Second Test CAFE", kind=Venue.Kind.CAFE,
+            latitude=-37.8, longitude=144.9, checkin_enabled=True,
+        )
+        client = APIClient()
+        client.force_authenticate(self.owner)
+
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            available = client.get("/api/venues")
+        self.assertEqual(available.status_code, 200)
+        self.assertEqual(
+            {row["id"] for row in available.data},
+            {venue.pk for venue in self.venues.values()} | {second_cafe.pk},
+        )
+        self.assertTrue(all(row["checkin_status"] == "AVAILABLE" for row in available.data))
+
+        started = start_checkin(
+            owner=self.owner, venue_id=self.venues["CAFE"].pk,
+            sample=self.sample, now=self.now,
+        )
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            in_progress = client.get("/api/venues")
+        statuses = {row["id"]: row["checkin_status"] for row in in_progress.data}
+        self.assertEqual(statuses[self.venues["CAFE"].pk], started.status)
+        self.assertEqual(statuses[second_cafe.pk], "UNAVAILABLE")
+        for kind in ("RESTAURANT", "PARK", "VET"):
+            self.assertEqual(statuses[self.venues[kind].pk], "AVAILABLE")
 
 
     def test_server_times_continuous_dwell_then_requires_collection(self):
