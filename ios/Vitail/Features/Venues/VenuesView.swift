@@ -127,30 +127,28 @@ struct VenuesView: View {
     }
 
     private func displayedAvailability(for venue: CheckInVenue) -> CheckInVenueAvailability {
-        switch viewModel.phase {
-        case let .finished(checkIn) where checkIn.venueID == venue.id && checkIn.status == .collected:
-            return .collected
-        default:
-            break
-        }
-        if let progress = progressStore.visibleItems.first(where: { $0.venueID == venue.id }) {
-            switch progress.status {
-            case .collected: return .collected
-            case .ready: return .ready
-            case .inProgress: return .inProgress
-            case .cancelled: return .unavailable
-            }
-        }
+        let local: CheckInVenueAvailability?
         switch viewModel.phase {
         case let .starting(venueID) where venueID == venue.id:
-            return .inProgress
+            local = .inProgress
         case let .active(checkIn) where checkIn.venueID == venue.id:
-            return .inProgress
+            local = .inProgress
         case let .finished(checkIn) where checkIn.venueID == venue.id:
-            return checkIn.status == .collected ? .collected : .ready
+            local = checkIn.status == .collected ? .collected : .ready
         default:
-            return venue.availability
+            local = nil
         }
+        let shared: CheckInVenueAvailability? = progressStore.visibleItems
+            .first(where: { $0.venueID == venue.id })
+            .map { progress in
+                switch progress.status {
+                case .collected: return .collected
+                case .ready: return .ready
+                case .inProgress: return .inProgress
+                case .cancelled: return .unavailable
+                }
+            }
+        return .resolved(server: venue.availability, local: local, shared: shared)
     }
 
     private func frameVenuesIfNeeded() {
@@ -302,32 +300,53 @@ private struct VenueCheckInStatusCard: View {
     @ObservedObject var viewModel: VenuesViewModel
     @ObservedObject var progressStore: CheckInProgressStore
 
+    @ViewBuilder
     var body: some View {
-        switch viewModel.phase {
-        case let .active(checkIn):
-            ActiveCheckInCard(viewModel: viewModel, checkIn: checkIn)
-        case let .finished(checkIn):
-            if progressStore.visibleItems.contains(where: {
-                $0.venueID == checkIn.venueID && $0.status == .collected
-            }), checkIn.status != .collected {
-                SharedCollectedCheckInCard(venueName: checkIn.venueName) { viewModel.dismissResult() }
-            } else {
-                FinishedCheckInCard(viewModel: viewModel, checkIn: checkIn) { viewModel.dismissResult() }
-            }
-        case .starting:
-            HStack(spacing: AppSpacing.small) {
-                ProgressView().tint(AppColors.brand)
-                Text("Confirming your location…")
-                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
-            }
-            .padding(AppSpacing.medium)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppColors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
-            .overlay { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.border, lineWidth: 1) }
-        case .idle:
+        if phaseIsUnavailable {
             EmptyView()
+        } else {
+            switch viewModel.phase {
+            case let .active(checkIn):
+                ActiveCheckInCard(viewModel: viewModel, checkIn: checkIn)
+            case let .finished(checkIn):
+                if progressStore.visibleItems.contains(where: {
+                    $0.venueID == checkIn.venueID && $0.status == .collected
+                }), checkIn.status != .collected {
+                    SharedCollectedCheckInCard(venueName: checkIn.venueName) { viewModel.dismissResult() }
+                } else {
+                    FinishedCheckInCard(viewModel: viewModel, checkIn: checkIn) { viewModel.dismissResult() }
+                }
+            case .starting:
+                HStack(spacing: AppSpacing.small) {
+                    ProgressView().tint(AppColors.brand)
+                    Text("Confirming your location…")
+                        .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                }
+                .padding(AppSpacing.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                .overlay { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.border, lineWidth: 1) }
+            case .idle:
+                EmptyView()
+            }
         }
+    }
+
+    private var phaseIsUnavailable: Bool {
+        let venueID: Int
+        switch viewModel.phase {
+        case .idle:
+            return false
+        case let .starting(id):
+            venueID = id
+        case let .active(checkIn):
+            venueID = checkIn.venueID
+        case let .finished(checkIn):
+            guard checkIn.status != .collected else { return false }
+            venueID = checkIn.venueID
+        }
+        return viewModel.venues.first(where: { $0.id == venueID })?.availability == .unavailable
     }
 }
 
@@ -422,10 +441,13 @@ struct VenueDetailSheet: View {
     let venue: CheckInVenue
     @Environment(\.dismiss) private var dismiss
 
-    private var isCheckingInHere: Bool { viewModel.activeCheckIn?.venueID == venue.id }
+    private var isCheckingInHere: Bool {
+        effectiveAvailability != .unavailable && viewModel.activeCheckIn?.venueID == venue.id
+    }
     private var isStartingHere: Bool { viewModel.phase == .starting(venueID: venue.id) }
     private var finishedHere: VenueCheckInSession? {
         guard case let .finished(checkIn) = viewModel.phase, checkIn.venueID == venue.id else { return nil }
+        if effectiveAvailability == .unavailable, checkIn.status != .collected { return nil }
         if checkIn.status != .collected,
            progressStore.visibleItems.contains(where: { $0.venueID == venue.id && $0.status == .collected }) {
             return nil
@@ -433,17 +455,28 @@ struct VenueDetailSheet: View {
         return checkIn
     }
     private var effectiveAvailability: CheckInVenueAvailability {
-        if case let .finished(checkIn) = viewModel.phase,
-           checkIn.venueID == venue.id, checkIn.status == .collected { return .collected }
-        if let progress = progressStore.visibleItems.first(where: { $0.venueID == venue.id }) {
-            switch progress.status {
-            case .collected: return .collected
-            case .ready: return .ready
-            case .inProgress: return .inProgress
-            case .cancelled: return .unavailable
-            }
+        let local: CheckInVenueAvailability?
+        switch viewModel.phase {
+        case let .starting(venueID) where venueID == venue.id:
+            local = .inProgress
+        case let .active(checkIn) where checkIn.venueID == venue.id:
+            local = .inProgress
+        case let .finished(checkIn) where checkIn.venueID == venue.id:
+            local = checkIn.status == .collected ? .collected : .ready
+        default:
+            local = nil
         }
-        return venue.availability
+        let shared: CheckInVenueAvailability? = progressStore.visibleItems
+            .first(where: { $0.venueID == venue.id })
+            .map { progress in
+                switch progress.status {
+                case .collected: return .collected
+                case .ready: return .ready
+                case .inProgress: return .inProgress
+                case .cancelled: return .unavailable
+                }
+            }
+        return .resolved(server: venue.availability, local: local, shared: shared)
     }
 
     var body: some View {

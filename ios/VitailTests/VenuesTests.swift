@@ -21,6 +21,14 @@ final class VenuesTests: XCTestCase {
             XCTAssertEqual(venue.availability, expected)
             XCTAssertEqual(venue.availability.canStart, canStart)
         }
+        XCTAssertEqual(
+            CheckInVenueAvailability.resolved(server: .unavailable, local: .inProgress, shared: .ready),
+            .unavailable
+        )
+        XCTAssertEqual(
+            CheckInVenueAvailability.resolved(server: .unavailable, local: .ready, shared: .collected),
+            .collected
+        )
     }
 
     func testUnavailableVenueCannotRequestLocationOrStartServerAttempt() async {
@@ -35,6 +43,41 @@ final class VenuesTests: XCTestCase {
         XCTAssertEqual(location.startCount, 0)
         let startedVenueIDs = await service.startedVenueIDs
         XCTAssertTrue(startedVenueIDs.isEmpty)
+        model.stop()
+    }
+
+    func testUnavailableRefreshStopsActiveAttemptAndRejectsLateReport() async {
+        let service = VenueCheckInStub(); let location = LocationStub(); let clock = VenueClock()
+        let model = makeModel(service: service, location: location, clock: clock)
+        await model.load(); await model.start(model.venues[0])
+        await service.suspendReport()
+        clock.advance(25); location.emit(sample)
+        await service.waitForReport()
+
+        await service.setVenueStatus("UNAVAILABLE")
+        await model.load()
+
+        XCTAssertEqual(model.phase, .idle)
+        XCTAssertEqual(model.venues.first?.availability, .unavailable)
+        XCTAssertEqual(location.stopCount, 1)
+        await service.finishReport(); await settle()
+        XCTAssertEqual(model.phase, .idle)
+        model.stop()
+    }
+
+    func testSuccessfulStartImmediatelyRefreshesSameKindAvailability() async {
+        let service = VenueCheckInStub(); let location = LocationStub()
+        await service.setVenueCount(2)
+        await service.setSameKindCompetition(true)
+        let model = makeModel(service: service, location: location)
+        await model.load()
+        XCTAssertEqual(model.venues.map(\.availability), [.available, .available])
+
+        await model.start(model.venues[0])
+
+        XCTAssertEqual(model.activeCheckIn?.venueID, 1)
+        XCTAssertEqual(model.venues.map(\.availability), [.inProgress, .unavailable])
+        XCTAssertEqual(location.startCount, 1)
         model.stop()
     }
 
@@ -348,6 +391,8 @@ actor VenueCheckInStub: VenueCheckInServing {
     private var venueStatus = "AVAILABLE"
     private var venueCount = 1
     private var fetchFails = false
+    private var sameKindCompetition = false
+    private var activeVenueID: Int?
     private var seconds = 0
     private var holdsStart = false, holdsReport = false
     private var startWaiter: CheckedContinuation<Void, Never>?
@@ -357,6 +402,7 @@ actor VenueCheckInStub: VenueCheckInServing {
     func setVenueStatus(_ value: String) { venueStatus = value }
     func setVenueCount(_ value: Int) { venueCount = value }
     func setFetchFailure(_ value: Bool) { fetchFails = value }
+    func setSameKindCompetition(_ value: Bool) { sameKindCompetition = value }
     func setVerifiedSeconds(_ value: Int) { seconds = value }
     func suspendStart() { holdsStart = true }
     func suspendReport() { holdsReport = true }
@@ -378,6 +424,7 @@ actor VenueCheckInStub: VenueCheckInServing {
     }
     func startCheckIn(venueID: Int, sample: LocationSample) async throws -> VenueCheckInSession {
         startedVenueIDs.append(venueID)
+        activeVenueID = venueID
         let result = session()
         if holdsStart {
             await withCheckedContinuation { startWaiter = $0; startEntered?.resume(); startEntered = nil }
@@ -391,19 +438,30 @@ actor VenueCheckInStub: VenueCheckInServing {
         }
         return result
     }
-    func cancelCheckIn(checkInID: UUID) async throws { cancelledIDs.append(checkInID); attemptID = UUID() }
+    func cancelCheckIn(checkInID: UUID) async throws {
+        cancelledIDs.append(checkInID)
+        activeVenueID = nil
+        attemptID = UUID()
+    }
     func collectCheckIn(attemptID: UUID) async throws -> VenueCheckInCollectionReceipt {
         VenueCheckInCollectionReceipt(checkIn: session(.collected), awardedPoints: 12)
     }
 
     private func venue(id: Int) -> CheckInVenue {
         let kinds = ["CAFE", "PARK", "VET"]
+        let kind = sameKindCompetition ? "CAFE" : kinds[(id - 1) % kinds.count]
+        let status: String
+        if sameKindCompetition, let activeVenueID {
+            status = id == activeVenueID ? "IN_PROGRESS" : "UNAVAILABLE"
+        } else {
+            status = venueStatus
+        }
         return CheckInVenue(
-            id: id, name: "Venue \(id)", kindRaw: kinds[(id - 1) % kinds.count],
+            id: id, name: "Venue \(id)", kindRaw: kind,
             description: "A dog-friendly Melbourne venue.", address: "\(id) Demo Street",
             openingHours: "Daily 7 am–5 pm", latitude: -37.8136 + Double(id - 1) * 0.008,
             longitude: 144.9631 + Double(id - 1) * 0.008, checkinRadiusM: 20,
-            requiredSeconds: id == 2 ? 300 : 600, checkInStatus: venueStatus
+            requiredSeconds: id == 2 ? 300 : 600, checkInStatus: status
         )
     }
     private func session(_ status: VenueCheckInSessionStatus = .inProgress) -> VenueCheckInSession {

@@ -51,6 +51,18 @@ enum CheckInVenueAvailability: String, Sendable {
     }
 
     var canStart: Bool { self == .available || self == .inProgress }
+
+    /// A collected visit is final. Otherwise the latest venue response is the
+    /// authority for server-side flags and daily-cap availability.
+    static func resolved(
+        server: Self,
+        local: Self? = nil,
+        shared: Self? = nil
+    ) -> Self {
+        if server == .collected || local == .collected || shared == .collected { return .collected }
+        if server == .unavailable { return .unavailable }
+        return shared ?? local ?? server
+    }
 }
 
 struct CheckInVenue: Decodable, Identifiable, Equatable, Sendable {

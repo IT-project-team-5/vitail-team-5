@@ -79,6 +79,7 @@ final class VenuesViewModel: ObservableObject {
             let result = try await service.fetchVenues()
             guard isEnabled, !Task.isCancelled else { return }
             venues = result
+            clearPhaseIfServerUnavailable(in: result)
             hasLoaded = true
             if !isBusy { errorMessage = nil }
         } catch is CancellationError {
@@ -109,8 +110,12 @@ final class VenuesViewModel: ObservableObject {
             guard checkIn.venueID == venue.id else { throw APIError.invalidResponse }
             if checkIn.status == .inProgress {
                 begin(checkIn)
+                // Starting one venue can make nearby venues of the same kind
+                // unavailable immediately; do not wait for the polling cycle.
+                await load()
             } else {
                 phase = .finished(checkIn)
+                await load()
                 await onProgressChanged?()
             }
         } catch {
@@ -211,6 +216,28 @@ final class VenuesViewModel: ObservableObject {
         connectionNotice = nil
         phase = .active(checkIn)
         location.startMonitoring()
+    }
+
+    private func clearPhaseIfServerUnavailable(in venues: [CheckInVenue]) {
+        let venueID: Int
+        switch phase {
+        case .idle:
+            return
+        case let .starting(id):
+            venueID = id
+        case let .active(checkIn):
+            venueID = checkIn.venueID
+        case let .finished(checkIn):
+            guard checkIn.status != .collected else { return }
+            venueID = checkIn.venueID
+        }
+        guard venues.first(where: { $0.id == venueID })?.availability == .unavailable else { return }
+
+        generation += 1
+        startTask?.cancel()
+        startTask = nil
+        endSession()
+        phase = .idle
     }
 
     private func endSession(cancelReport: Bool = true) {
