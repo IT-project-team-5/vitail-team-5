@@ -256,8 +256,7 @@ struct QuestView: View {
                     QuestTaskRow(task: task)
                 }
             }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens task details")
+            .buttonStyle(.plain)
         }
     }
     private func openTask(_ task: QuestTask) {
@@ -469,6 +468,9 @@ struct QuestDetailView: View {
     @ObservedObject var store: QuestStore
     let taskID: String
     var onOpenDocuments: ((DocumentQuestRoute) -> Void)?
+    @State private var presentedAward: QuestAwardEvent?
+    @State private var isAwardVisible = false
+    @State private var isAwardPulsing = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
@@ -523,10 +525,45 @@ struct QuestDetailView: View {
             .animation(reduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.75),
                        value: store.detailTask(id: taskID)?.status)
         }
+        .overlay(alignment: .top) {
+            if isAwardVisible, let presentedAward {
+                QuestAwardToast(points: presentedAward.receipt.points)
+                    .padding(.top, AppSpacing.medium)
+                    .scaleEffect(isAwardPulsing ? 1.04 : 1)
+                    .transition(.scale(scale: 0.82).combined(with: .opacity))
+            }
+        }
+        .onChange(of: store.lastAwardEvent?.id) { _, _ in
+            guard let event = store.lastAwardEvent, event.taskID == taskID else { return }
+            present(event)
+        }
         .foregroundStyle(AppColors.primaryText)
         .tint(AppColors.brand)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+    }
+
+    private func present(_ event: QuestAwardEvent) {
+        presentedAward = event
+        if reduceMotion {
+            isAwardVisible = true
+        } else {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.7)) {
+                isAwardVisible = true
+                isAwardPulsing = true
+            }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(850))
+            if reduceMotion {
+                isAwardVisible = false
+            } else {
+                withAnimation(.easeOut(duration: 0.24)) {
+                    isAwardVisible = false
+                    isAwardPulsing = false
+                }
+            }
+        }
     }
 }
 
