@@ -15,6 +15,7 @@ from checkins.views import (
     CheckInLocationThrottle,
     CheckInStartThrottle,
 )
+from quests.models import QuestDefinition
 from rewards.models import PointEntry
 from rewards.policy import CHECKIN_SECONDS, local_date
 from venues.models import Venue
@@ -78,6 +79,58 @@ class LocationCheckInTests(CheckInFixture, TestCase):
         self.assertEqual(statuses[second_cafe.pk], "UNAVAILABLE")
         for kind in ("RESTAURANT", "PARK", "VET"):
             self.assertEqual(statuses[self.venues[kind].pk], "AVAILABLE")
+
+    def test_map_marks_all_uncollected_venues_unavailable_when_checkins_are_disabled(self):
+        QuestDefinition.objects.filter(code=QuestDefinition.Code.CHECK_IN).update(is_enabled=False)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            response = client.get("/api/venues")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(all(row["checkin_status"] == "UNAVAILABLE" for row in response.data))
+
+    def test_ready_venue_is_unavailable_when_daily_allowance_cannot_cover_reward(self):
+        ready = self.opportunity()
+        self.credit(61)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            response = client.get("/api/venues")
+
+        statuses = {row["id"]: row["checkin_status"] for row in response.data}
+        self.assertEqual(statuses[ready.venue_id], "UNAVAILABLE")
+        self.assertTrue(all(status == "UNAVAILABLE" for status in statuses.values()))
+
+    def test_ready_can_fill_daily_cap_and_collected_status_survives_exhausted_allowance(self):
+        second_cafe = Venue.objects.create(
+            name="Second Test CAFE", kind=Venue.Kind.CAFE,
+            latitude=-37.8, longitude=144.9, checkin_enabled=True,
+        )
+        ready = self.opportunity()
+        self.credit(60)
+        client = APIClient()
+        client.force_authenticate(self.owner)
+
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            before = client.get("/api/venues")
+        before_statuses = {row["id"]: row["checkin_status"] for row in before.data}
+        self.assertEqual(before_statuses[ready.venue_id], "READY")
+        self.assertEqual(before_statuses[second_cafe.pk], "UNAVAILABLE")
+
+        collect_checkin(owner=self.owner, checkin_id=ready.pk, now=self.now)
+        with patch("checkins.views.local_date", return_value=local_date(self.now)):
+            after = client.get("/api/venues")
+        after_statuses = {row["id"]: row["checkin_status"] for row in after.data}
+        self.assertEqual(after_statuses[ready.venue_id], "COLLECTED")
+        self.assertEqual(after_statuses[second_cafe.pk], "UNAVAILABLE")
+        self.assertTrue(all(
+            status == "UNAVAILABLE"
+            for venue_id, status in after_statuses.items()
+            if venue_id != ready.venue_id
+        ))
 
 
     def test_server_times_continuous_dwell_then_requires_collection(self):

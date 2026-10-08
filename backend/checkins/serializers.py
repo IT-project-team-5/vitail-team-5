@@ -61,6 +61,10 @@ class VenueMapSerializer(serializers.Serializer):
 
     def get_checkin_status(self, venue):
         row = self.context.get("by_category", {}).get(venue.kind)
+        if row is not None and row.venue_id == venue.pk and row.status == "COLLECTED":
+            return "COLLECTED"
+        if not self.context.get("checkin_available", False):
+            return "UNAVAILABLE"
         if row is None:
             return "AVAILABLE"
         if row.venue_id != venue.pk:

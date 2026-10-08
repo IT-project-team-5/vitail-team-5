@@ -4,13 +4,21 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from quests.models import QuestDefinition
 from rewards.permissions import IsOwnerRole
-from rewards.policy import local_date
+from rewards.policy import CHECKIN_POINTS, DAILY_ACTIVITY_CAP, local_date
 from venues.models import Venue
 
 from .models import CheckIn
 from .serializers import LocationSampleSerializer, RequestIDSerializer, VenueCheckInSerializer, VenueMapSerializer
-from .services import cancel_checkin, collect_checkin, current_progress, report_checkin_location, start_checkin
+from .services import (
+    cancel_checkin,
+    collect_checkin,
+    current_progress,
+    daily_activity_points,
+    report_checkin_location,
+    start_checkin,
+)
 
 
 class CheckInStartThrottle(UserRateThrottle):
@@ -38,6 +46,10 @@ class VenueMapView(APIView):
 
     def get(self, request):
         day = local_date()
+        checkin_available = (
+            QuestDefinition.objects.filter(code=QuestDefinition.Code.CHECK_IN, is_enabled=True).exists()
+            and daily_activity_points(request.user, day) + CHECKIN_POINTS <= DAILY_ACTIVITY_CAP
+        )
         by_category = {
             row.category_slot: row for row in CheckIn.objects.filter(owner=request.user, local_date=day).select_related("venue", "point_entry")
         }
@@ -45,7 +57,11 @@ class VenueMapView(APIView):
             is_active=True, checkin_enabled=True, latitude__isnull=False, longitude__isnull=False,
         ).order_by("kind", "name", "id"))
         return Response(VenueMapSerializer(venues, many=True,
-                                           context={"request": request, "by_category": by_category}).data)
+                                           context={
+                                               "request": request,
+                                               "by_category": by_category,
+                                               "checkin_available": checkin_available,
+                                           }).data)
 
 
 class CheckInProgressView(APIView):
