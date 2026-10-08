@@ -109,7 +109,7 @@ struct OwnerHomeView: View {
                               onOpenDocuments: documentService != nil
                                 ? { route in documentSelection = route } : nil)
                         .tag(Page.quest)
-                    VenuesView(viewModel: venueCheckIns)
+                    VenuesView(viewModel: venueCheckIns, progressStore: checkIns)
                         .tag(Page.venues)
                     RedemptionView(viewModel: redemptionViewModel)
                     .tag(Page.redeem)

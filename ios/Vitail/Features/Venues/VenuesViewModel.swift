@@ -90,7 +90,7 @@ final class VenuesViewModel: ObservableObject {
 
     func start(_ venue: CheckInVenue) async {
         guard isEnabled, !isBusy, !Task.isCancelled,
-              ["AVAILABLE", "IN_PROGRESS"].contains(venue.checkInStatus) else { return }
+              venue.availability.canStart else { return }
         generation += 1
         let request = generation
         errorMessage = nil
@@ -167,6 +167,16 @@ final class VenuesViewModel: ObservableObject {
 
     func dismissResult() {
         if case .finished = phase { phase = .idle }
+    }
+
+    /// Quest and Venues share the same server qualification. If Quest collects
+    /// a result while this page still holds a local READY phase, discard that
+    /// stale phase so it cannot offer a second collection action.
+    func reconcileSharedProgress(_ items: [VenueCheckInProgress]) {
+        guard case let .finished(checkIn) = phase, checkIn.status == .ready,
+              items.contains(where: { $0.venueID == checkIn.venueID && $0.status == .collected }) else { return }
+        phase = .idle
+        errorMessage = nil
     }
 
     func collect() async {

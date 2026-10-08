@@ -29,6 +29,30 @@ enum CheckInVenueKind: String, Sendable {
     }
 }
 
+enum CheckInVenueAvailability: String, Sendable {
+    case available = "AVAILABLE"
+    case inProgress = "IN_PROGRESS"
+    case ready = "READY"
+    case collected = "COLLECTED"
+    case unavailable = "UNAVAILABLE"
+
+    init(serverValue: String) {
+        self = Self(rawValue: serverValue) ?? .unavailable
+    }
+
+    var title: String {
+        switch self {
+        case .available: return "Available"
+        case .inProgress: return "In progress"
+        case .ready: return "Ready to collect"
+        case .collected: return "Collected today"
+        case .unavailable: return "Unavailable today"
+        }
+    }
+
+    var canStart: Bool { self == .available || self == .inProgress }
+}
+
 struct CheckInVenue: Decodable, Identifiable, Equatable, Sendable {
     let id: Int
     let name: String
@@ -56,6 +80,7 @@ struct CheckInVenue: Decodable, Identifiable, Equatable, Sendable {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
     var dwellText: String { DwellFormat.text(seconds: requiredSeconds) }
+    var availability: CheckInVenueAvailability { CheckInVenueAvailability(serverValue: checkInStatus) }
 }
 
 enum VenueCheckInSessionStatus: String, Decodable, Sendable {
