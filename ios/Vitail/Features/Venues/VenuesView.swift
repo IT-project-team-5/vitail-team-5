@@ -6,6 +6,7 @@ struct VenuesView: View {
     @ObservedObject var progressStore: CheckInProgressStore
     @State private var selectedVenueID: Int?
     @State private var position: MapCameraPosition = .automatic
+    @State private var hasFramedVenues = false
 
     private var selectedVenue: CheckInVenue? {
         viewModel.venues.first { $0.id == selectedVenueID }
@@ -71,6 +72,7 @@ struct VenuesView: View {
                 .presentationDragIndicator(.visible)
         }
         .onChange(of: viewModel.venues.map(\.id)) { _, venueIDs in
+            frameVenuesIfNeeded()
             if let selectedVenueID, !venueIDs.contains(selectedVenueID) {
                 self.selectedVenueID = nil
             }
@@ -78,7 +80,10 @@ struct VenuesView: View {
         .onChange(of: progressStore.visibleItems) { _, items in
             viewModel.reconcileSharedProgress(items)
         }
-        .onAppear { viewModel.reconcileSharedProgress(progressStore.visibleItems) }
+        .onAppear {
+            frameVenuesIfNeeded()
+            viewModel.reconcileSharedProgress(progressStore.visibleItems)
+        }
     }
 
     @ViewBuilder
@@ -146,6 +151,32 @@ struct VenuesView: View {
         default:
             return venue.availability
         }
+    }
+
+    private func frameVenuesIfNeeded() {
+        guard !hasFramedVenues, let region = paddedVenueRegion else { return }
+        position = .region(region)
+        hasFramedVenues = true
+    }
+
+    private var paddedVenueRegion: MKCoordinateRegion? {
+        guard !viewModel.venues.isEmpty else { return nil }
+        let latitudes = viewModel.venues.map(\.latitude)
+        let longitudes = viewModel.venues.map(\.longitude)
+        guard let minLatitude = latitudes.min(), let maxLatitude = latitudes.max(),
+              let minLongitude = longitudes.min(), let maxLongitude = longitudes.max() else { return nil }
+
+        // Keep edge pins and labels clear of map controls and attribution. The
+        // minimum span also gives a useful Melbourne-area view for one venue.
+        let latitudeDelta = max((maxLatitude - minLatitude) * 2, 0.025)
+        let longitudeDelta = max((maxLongitude - minLongitude) * 2, 0.03)
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: (minLatitude + maxLatitude) / 2,
+                longitude: (minLongitude + maxLongitude) / 2
+            ),
+            span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
+        )
     }
 }
 
