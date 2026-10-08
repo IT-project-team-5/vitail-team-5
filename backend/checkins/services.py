@@ -87,6 +87,27 @@ def start_checkin(*, owner, venue_id, sample, now=None):
     ).first()
     if existing:
         if existing.venue_id == venue.pk and existing.expires_at > now:
+            # A DEBUG Quest reset keeps the qualification ID so collection can
+            # replay its original ledger key. Re-initialize that dormant row
+            # from the next authenticated start sample.
+            if existing.started_at is None and existing.point_entry_id is None:
+                existing.radius_m = CHECKIN_RADIUS_M
+                existing.center_latitude = venue.latitude
+                existing.center_longitude = venue.longitude
+                existing.required_seconds = CHECKIN_SECONDS[venue.kind]
+                existing.verified_seconds = 0
+                existing.last_recorded_at = now
+                existing.last_latitude = sample["latitude"]
+                existing.last_longitude = sample["longitude"]
+                existing.last_verified_at = now
+                existing.started_at = now
+                existing.ready_at = None
+                existing.promised_points = CHECKIN_POINTS
+                existing.save(update_fields=(
+                    "radius_m", "center_latitude", "center_longitude", "required_seconds",
+                    "verified_seconds", "last_recorded_at", "last_latitude", "last_longitude",
+                    "last_verified_at", "started_at", "ready_at", "promised_points", "updated_at",
+                ))
             return existing
         raise ValidationError({"code": "CATEGORY_ALREADY_USED", "message": "Today's check-in for this venue type has already started."})
 
@@ -176,7 +197,7 @@ def current_progress(*, owner, now=None):
     enabled = QuestDefinition.objects.filter(code="CHECK_IN", is_enabled=True).exists()
     rows = CheckIn.objects.filter(owner=owner, local_date=day).select_related("venue", "point_entry")
     visible = [row for row in rows if row.collected_at or (
-        enabled and earned < DAILY_ACTIVITY_CAP and row.venue_id and row.venue.is_active
+        row.started_at and enabled and earned < DAILY_ACTIVITY_CAP and row.venue_id and row.venue.is_active
         and row.venue.checkin_enabled and row.expires_at > now)]
     return {"local_date": day, "server_time": now, "earned_points_today": earned, "items": visible}
 

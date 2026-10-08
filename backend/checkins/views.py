@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
@@ -51,7 +52,10 @@ class VenueMapView(APIView):
             and daily_activity_points(request.user, day) + CHECKIN_POINTS <= DAILY_ACTIVITY_CAP
         )
         by_category = {
-            row.category_slot: row for row in CheckIn.objects.filter(owner=request.user, local_date=day).select_related("venue", "point_entry")
+            row.category_slot: row for row in CheckIn.objects.filter(
+                Q(started_at__isnull=False) | Q(point_entry__isnull=False),
+                owner=request.user, local_date=day,
+            ).select_related("venue", "point_entry")
         }
         venues = list(Venue.objects.filter(
             is_active=True, checkin_enabled=True, latitude__isnull=False, longitude__isnull=False,

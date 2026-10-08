@@ -1,9 +1,12 @@
+from django.conf import settings
+from django.http import Http404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from rewards.permissions import IsOwnerRole
 
 from .serializers import BirthdayCollectionSerializer, QuestDashboardSerializer, StreakCollectionRequestSerializer, StreakCollectionSerializer
+from .debug_reset import reset_quest_test_state
 from .services import BirthdayClaimError, collect_birthday, quest_dashboard
 from .streaks import StreakClaimError, collect_streak
 
@@ -38,3 +41,12 @@ class StreakCollectionView(APIView):
         except StreakClaimError as exc:
             return Response({"code": exc.code, "message": exc.message}, status=exc.status_code)
         return Response(StreakCollectionSerializer(result).data, status=201 if result["created"] else 200)
+
+
+class QuestTestResetView(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def post(self, request):
+        if not (settings.DEBUG or getattr(settings, "TESTING", False)):
+            raise Http404
+        return Response(reset_quest_test_state(owner=request.user))
