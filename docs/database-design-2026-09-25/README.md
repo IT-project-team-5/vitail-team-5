@@ -21,9 +21,9 @@
 | `WalkSession`、`LocationSample`、`NetWalkInterval` | 認證 live session、有限 GPS 證據與同行區間已供 Walk 地圖及 verified together-distance 使用。完成散步上傳只按 UUID 連結 session，不把完整路線複製進這些表。raw GPS 採 15 分鐘 rolling retention。 |
 | `DogGoalTarget`、`DogDailyGoal` | 每狗生效日版本化的個人化目標、每日凍結目標、七日進度與最終結果已連接。建議值依體重、品種活動量、年齡與短吻係數計算，飼主可調整 50–200%；20 點獎勵的多狗資格政策未定，因此對外發點停用。 |
 | `QuestDefinition`、`QuestAward` | Quest 目錄、生日與 streak 資格及 Collect 已連接；streak 沿用 Walk 與 QuestAward，不另建進度表。Daily Goal 進度由 `DogDailyGoal` 投影，僅保留不可由 HTTP 觸發的結算基礎。 |
-| `CheckIn` | 認證地點查詢、Start／Resume、定位回報、取消、進度與 Collect 已連接；Map／Quest 共用 iOS store。每次回報只更新最新定位與伺服器計時進度，不另存 raw sample rows。伺服器驗證半徑與 dwell，每日類別唯一性及 cap；實機／背景驗收仍待完成。 |
+| `CheckIn` | 認證地點查詢、Start／Resume、定位回報、取消、進度與 Collect 已連接；Walk／Quest／Venues 共用 iOS store。每次回報只更新最新定位與伺服器計時進度，不另存 raw sample rows。伺服器驗證半徑與 dwell，每日類別唯一性及 cap；實機／背景驗收仍待完成。 |
 | `DocumentEntitlement`、`DocumentSubmission`、`EvidenceFingerprint` | 每狗私人文件、版本、證據重用保護、提交 READY → Collect 已連接；Council 依實際到期日更新的資格與每狗晶片終身資格已對齊。Council entitlement 保存確認後的到期日；submission 保存核對值與有來源的讀取候選。抽查／凍結欄位已建立，完整人工抽查與追回點數流程未交付。 |
-| `Friendship`、`UserBlock`、`NetWalkInvitation` | 好友搜尋／邀請／回覆／移除、directional block、default-off privacy、map avatar、附近使用者與明確同行 consent 已連接。Friends 從 Account 進入，Walk 是唯一 live map；沒有 leaderboard。 |
+| `Friendship`、`UserBlock`、`NetWalkInvitation` | 好友搜尋／邀請／回覆／移除、directional block、default-off privacy、map avatar、附近使用者與明確同行 consent 已連接。Friends 從 Account 進入；Walk 是唯一散步／社交 live map 與 location stream，Venues 另有 check-in discovery map；沒有 leaderboard。 |
 
 延後且**未建立**：`ExternalIdentity`（Apple）、`ChatMessage`（單對單聊天／nudge）、`Charity`＋`Donation`（捐點）、`PushDevice`＋`NotificationDelivery`（遠端通知）。這裡只保留需求落點，不刊登尚未實作的欄位作為現有 schema。
 

@@ -9,9 +9,11 @@ development database's accounts and activity with:
 - `garden@vitail.test`: Garden Tails Café.
 - `laneway@vitail.test`: Laneway Bark Espresso.
 
-Each café has an introduction, demo address, opening hours and five available
-products with descriptions and prices between 40 and 180 points. These venues
-are fictional. Products use the existing Reward catalogue and can be edited
+Each café has an introduction, explicitly fictional demo address, a distinct
+Melbourne demo coordinate, opening hours and five available products with
+descriptions and prices between 40 and 180 points. All three are enabled as
+check-in hotspots; they are not claims about real businesses. Products use the
+existing Reward catalogue and can be edited
 after signing in as the café and opening Products. The owner can redeem them
 using the same wallet and order flow.
 
@@ -45,7 +47,7 @@ local route archives cannot become another user's data.
    An existing credentials file, incorrect database confirmation or `DEBUG=False`
    prevents the reset. `--owner-points` accepts 1 through 1,000,000. All deletions
    and creations share a transaction; failure to save credentials rolls it back.
-4. Verify five users, three populated Venues, fifteen available products,
+4. Verify five users, three populated and geocoded Venues, fifteen available products,
    the owner's balance, and an empty order/walk history. Restart API and expiry.
 5. Sign out of any old iOS session, then sign in with the generated credentials.
    The admin uses the web admin; the owner and cafés use the iOS app.

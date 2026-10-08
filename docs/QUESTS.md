@@ -60,7 +60,8 @@ dwell or create check-in points.
 ## Task presentation
 
 Owner navigation is Account / Walk / Quest / Venues / Redeem. Friends and
-Net-Walking settings open from Account, while Walk remains the single live map.
+Net-Walking settings open from Account. Walk is the walk/social map and owns the
+sole walk/social location stream; Venues has a separate check-in discovery map.
 There is no leaderboard tab, endpoint or table in this delivery.
 
 Quest uses compact horizontal avatar/venue rows with detail sheets. READY rows
@@ -214,9 +215,17 @@ available when new awards are disabled.
 
 Production dependencies inject `CheckInProgressService` and
 `VenueCheckInService`. The Venues tab uses `CheckInLocationManager` for explicit
-start/resume, location reporting, cancellation and collection. Walk and Quest
-share `CheckInProgressStore`. Venue IDs are integers; check-in IDs are attempt
-UUIDs and must never be interchanged. APIs are listed in [OpenAPI](openapi.yaml).
+start/resume, location reporting, cancellation and collection. Walk, Quest and
+Venues share `CheckInProgressStore`. Venue IDs are integers; check-in IDs are
+attempt UUIDs and must never be interchanged. APIs are listed in
+[OpenAPI](openapi.yaml).
+
+The Venues map returns every active, check-in-enabled place with a complete
+coordinate pair, including several places of the same kind. Once one place in a
+kind starts its daily attempt, the other pins in that kind remain visible but
+become unavailable. A disabled check-in catalogue or less than the full 12-point
+daily allowance likewise leaves pins visible and unavailable rather than
+offering an action the server will reject.
 
 The server measures continuous dwell from receipt times, with a 90-second
 maximum gap. The client reports fresh precise fixes at most once per 25 seconds
@@ -246,13 +255,14 @@ opportunity. Collection returns the actual item/credit, wallet balance, daily
 activity total and date. The server enforces ownership, qualification, daily
 uniqueness and the full-reward allowance; it never trusts client progress.
 
-Walk map and Quest share one store, serialized collection and stable ambiguous-retry
-request UUIDs. Venues collection also uses the same backend check-in/credit;
-idempotency is enforced by the attempt and its one credit, including concurrent
-collection through different surfaces. Confirmed state/cap cannot be undone by old responses. Previous-day rows
-hide until a fresh snapshot arrives. Foreground Walk/Quest polling is five
-seconds and stops when inactive. Neither verified progress nor points advance
-using the device clock.
+Walk, Quest and Venues share one store, serialized collection and stable
+ambiguous-retry request UUIDs. Idempotency is enforced by the attempt and its
+one credit, including concurrent collection through different surfaces.
+Confirmed state/cap cannot be undone by old responses. Previous-day rows hide
+until a fresh snapshot arrives. While Walk, Quest or Venues is foreground,
+shared check-in progress polls every five seconds and stops when inactive;
+Venues also refreshes map availability, and Quest refreshes its list. Neither
+verified progress nor points advance using the device clock.
 
 ## Validation boundary
 

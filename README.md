@@ -79,10 +79,12 @@ persisted System/Light/Dark appearance settings.
 Friends and Net-Walking are reached from Account instead of taking a sixth tab.
 Owners can search by name or public ID, handle requests and blocks, choose a
 map avatar, and separately opt into friend location sharing or nearby partner
-discovery. Both controls default off. Walk is the single live map: it shows
-fresh friend/partner positions and hosts Net-Walking invitations while a walk
-is recording. Verified together-distance is displayed, but wallet rewards stay
-disabled until the point policy is approved. See [social behavior](docs/SOCIAL.md).
+discovery. Both controls default off. Walk is the walk/social map and owns the
+sole walk/social location stream: it shows fresh friend/partner positions and
+hosts Net-Walking invitations while a walk is recording. The separate Venues
+map is for check-in discovery. Verified together-distance is displayed, but
+wallet rewards stay disabled until the point policy is approved. See [social
+behavior](docs/SOCIAL.md).
 
 Walk uses a map and draggable menu. Start/Pause/Resume/Finish leads to a saved
 summary where the owner chooses participating dogs and confirms upload.
@@ -95,10 +97,11 @@ and document tasks, plus one walking-streak
 progress bar, with explicit Collect. Collected birthday/document rows leave
 the list after Melbourne midnight; their history remains. Streak advances to
 its next milestone after collection.
-The Walk map and Quest share check-in progress. Venues supplies explicit GPS
-start/resume/cancel and collection through authenticated APIs. Dwell is verified
-by server receipt times; gaps over 90 seconds reset progress. Physical-device
-location and background acceptance still need testing.
+Walk, Quest and Venues observe the same check-in progress. The separate Venues
+map shows every active, check-in-enabled place with coordinates and supplies
+explicit GPS start/resume/cancel and collection through authenticated APIs.
+Dwell is verified by server receipt times; gaps over 90 seconds reset progress.
+Physical-device location and background acceptance still need testing.
 
 Redeem lists cafés, menus and actual product prices. Purchase deducts points
 once and opens a receipt; the owner slides to collect. Uncollected orders
@@ -127,6 +130,12 @@ chat, notifications, charity donations or daily-goal rewards. See
    and refund points**. Repeating the action must not add another refund.
 6. For real walking points, use an iPhone outdoors, finish the walk, choose dogs
    and confirm. Simulator-generated locations cannot earn points.
+
+Admin can add parks, restaurants and veterinary clinics under **Venues** without
+creating a café login; `manager_user` is optional. To expose one for check-in,
+save both latitude and longitude, keep it active, and enable check-in. The repo
+does not currently include a bulk venue-import command or a default veterinary
+clinic.
 
 ## Documentation
 

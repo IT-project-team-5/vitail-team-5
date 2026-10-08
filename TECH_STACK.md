@@ -39,18 +39,19 @@ new login. Refresh authentication failures clear the stale session; transient
 server/network failures retain credentials for retry.
 
 Owner navigation is Account / Walk / Quest / Venues / Redeem. Friends and
-Net-Walking settings open from Account; Walk remains the only live map. Café
-navigation is Account / Products / Orders. The login choice is context, not permission:
+Net-Walking settings open from Account; Walk is the walk/social map and owns the
+sole walk/social location stream, while Venues has a separate check-in discovery
+map. Café navigation is Account / Products / Orders. The login choice is context, not permission:
 registration creates OWNER, café accounts are admin-created, and the returned
 role must match before entering its interface.
 
 `OwnerHomeView` owns the active `WalkSessionCoordinator`, Friends store, Quest
 store, shared check-in store and wallet view model. Switching tabs or opening
 Friends preserves a walk; changing accounts stops work and rejects late
-responses. Walk and Quest observe the same check-in collection state. The
-coordinator also feeds the authenticated social session from the same Core
-Location stream, so Friends never starts a second location manager. Physical
-device location and background acceptance remain release work.
+responses. Walk, Quest and Venues observe the same check-in collection state.
+The coordinator also feeds the authenticated social session from the same Core
+Location stream, so Friends never starts a second walk/social location manager.
+Physical-device location and background acceptance remain release work.
 
 The design system contains semantic colors, spacing, buttons, avatars and
 collection controls. Persisted System/Light/Dark selection applies to pages,

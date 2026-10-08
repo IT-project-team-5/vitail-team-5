@@ -107,11 +107,11 @@
 
 | 方向 | 目前落點 | 仍未完成的部分 |
 |---|---|---|
-| Map／Quest 共用進度、最多四類打卡 | `CheckIn`、認證 API、Core Location、iOS共享store／detail | 戶外／背景實機驗收；不能靠本機倒數宣布達標。 |
+| Walk／Quest／Venues 共用進度、最多四類打卡 | `CheckIn`、認證 API、Core Location、iOS共享store／detail | 戶外／背景實機驗收；不能靠本機倒數宣布達標。 |
 | READY優先、當日COLLECTED置底 | Quest的真實生日／文件tasks及伺服器日期 | 過午夜從主列表隱藏，不刪歷史；未知goal不顯示placeholder；streak以單一進度條顯示真實天數。 |
 | 文件提交與Collect分開 | 三個文件模型與私人存取 | pending占資格；抽查、爭議、追回政策待定。 |
 | 生日、每狗目標、streak | Birthday60、個人化目標進度與streak已連接 | 不由舊age猜DOB；2/29目前只在實際日期領，替代日未定；daily goal 獎勵待多狗政策；streak按每日有效散步判定。 |
-| 朋友、虛擬頭貼、即時位置 | canonical Friendship、directional UserBlock、User 偏好／avatar、social API、30 秒 presence | Account 進 Friends，Walk 為唯一 live map；兩項 sharing control default off。需戶外／背景實機驗收。 |
+| 朋友、虛擬頭貼、即時位置 | canonical Friendship、directional UserBlock、User 偏好／avatar、social API、30 秒 presence | Account 進 Friends；Walk 是唯一散步／社交 live map 與 location stream，Venues 另有 check-in discovery map；兩項 sharing control default off。需戶外／背景實機驗收。 |
 | Net-Walking可與非好友同行 | `NetWalkInvitation`＋`NetWalkInterval`保存明確 consent、狀態與雙方 verified distance | 附近 approximate discovery、接受後精確 partner 位置已接；wallet reward／估算預設不提供，發點 policy 待定。 |
 | 好友stats／leaderboard | 不建固定排名表 | 本組交付範圍外；沒有頁面或 endpoint。 |
 | 簡單聊天／nudge與遠端通知 | 六個延後名稱中的ChatMessage、PushDevice、NotificationDelivery | 沒有表／API；訊息保留、頻率、鎖定畫面內容與安靜時段待定。 |

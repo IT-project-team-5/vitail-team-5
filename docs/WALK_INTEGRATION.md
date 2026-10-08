@@ -1,9 +1,10 @@
 # Walk + connected MVP integration
 
 The active map flow shares authentication, dogs, the canonical wallet, redemption
-and café services. It is also the only live social map: friend, nearby-partner
-and active-partner pins use each owner's selected profile/map avatar. OwnerHome
-owns one WalkSessionCoordinator. The unreachable
+and café services. Walk is the walk/social map and owns the sole walk/social
+location stream: friend, nearby-partner and active-partner pins use each owner's
+selected profile/map avatar. Venues has a separate check-in discovery map.
+OwnerHome owns one WalkSessionCoordinator. The unreachable
 legacy WalkView/WalkViewModel/WalkRecorder stack has been removed; recording and
 recovery use the coordinator, tracker, location, draft, history and sync stores.
 

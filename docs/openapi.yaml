@@ -949,10 +949,10 @@ paths:
         default: {$ref: '#/components/responses/Error'}
   /api/venues:
     get:
-      summary: Owner venue map; at most one enabled geocoded venue per category
+      summary: Owner Venues map with every active, check-in-enabled, geocoded place
       responses:
         '200':
-          description: Configured venues, retaining an eligible venue already visited today
+          description: Configured places; same-category alternatives and places blocked by feature or daily-cap policy remain visible as UNAVAILABLE
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/CheckInVenue'}}
@@ -1376,7 +1376,7 @@ components:
         longitude: {type: number}
         checkin_radius_m: {type: integer, enum: [20]}
         required_seconds: {type: integer, minimum: 1}
-        checkin_status: {type: string, enum: [AVAILABLE, IN_PROGRESS, READY, COLLECTED]}
+        checkin_status: {type: string, enum: [AVAILABLE, IN_PROGRESS, READY, COLLECTED, UNAVAILABLE]}
     VenueCheckIn:
       type: object
       required: [id, venue_id, venue_name, required_seconds, verified_seconds, status, updated_at, reward_points, collected_at]
