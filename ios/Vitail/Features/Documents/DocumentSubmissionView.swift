@@ -33,6 +33,8 @@ struct DocumentSubmissionView: View {
     @State private var isVisible = true
     @State private var choosingExpiry = false
     @State private var expiryChoice = Date()
+    @State private var isFirstGuideExpanded = false
+    @State private var isSecondGuideExpanded = false
 
     init(service: any DocumentServing = DocumentService(), session: SessionStore? = nil,
          initialDogID: Int, initialKind: DocumentKind,
@@ -66,7 +68,6 @@ struct DocumentSubmissionView: View {
                             AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
                             Text(dog.name).font(.headline)
                         }
-                        if !manageRegistration || currentSubmission == nil || isRenewing { tutorial }
                         if let submission = currentSubmission, !isEditing {
                             submissionCard(submission)
                             if manageRegistration {
@@ -91,6 +92,7 @@ struct DocumentSubmissionView: View {
                         } else {
                             submissionForm
                         }
+                        if !manageRegistration || currentSubmission == nil || isRenewing { tutorial }
                     } else {
                         Text("This dog is no longer available. Close this page and refresh your Quests.")
                             .foregroundStyle(AppColors.secondaryText)
@@ -173,24 +175,65 @@ struct DocumentSubmissionView: View {
             case .council:
                 Text(needsExpiry ? "Update the expiry on your existing registration. This does not create another reward." : "Your registration stays current through the expiry date on your document. Submit renewed proof after it expires.")
                     .foregroundStyle(AppColors.secondaryText)
-                guide("Already registered?", "Find the Animal ID or registration number on your council's current certificate or registration confirmation. Ask your council for a copy if it is missing. Do not use a payment reference or tag number.")
-                guide("Not registered yet?", "Microchip your dog, then apply online or by paper form to the council where your dog lives. Wait for its completed-registration confirmation before submitting here.")
-                Link("Find your council", destination: URL(string: "https://www.vec.vic.gov.au/electoral-boundaries/which-boundaries-cover-where-i-live")!)
-                Link("City of Melbourne: apply or contact the council", destination: URL(string: "https://ablis.business.gov.au/service/vic/registration-of-cats-and-dogs-city-of-melbourne/28570")!)
-            case .microchip:
-                guide("Already microchipped?", "Find the number in your pet's records or ask a vet to scan your dog. Use Pet Address to find the registry. For a certificate: CAR → My Animals → your dog → Generate Certificate; AAR → sign in → print registration certificate.")
-                Link("Find your registry with Pet Address", destination: URL(string: "https://www.petaddress.com.au/")!)
-                HStack(spacing: AppSpacing.large) {
-                    Link("CAR help", destination: URL(string: "https://car.com.au/apps/help-center")!)
-                    Link("AAR pet owners", destination: URL(string: "https://www.aar.org.au/pet-owners/")!)
+                registrationGuide("Already registered?", isExpanded: $isFirstGuideExpanded,
+                    body: "Find the Animal ID or registration number on your council's current certificate or registration confirmation. Ask your council for a copy if it is missing. Do not use a payment reference or tag number.")
+                registrationGuide("Not registered yet?", isExpanded: $isSecondGuideExpanded,
+                    body: "Microchip your dog, then apply online or by paper form to the council where your dog lives. Wait for its completed-registration confirmation before submitting here.") {
+                    Link("Find your council", destination: URL(string: "https://www.vec.vic.gov.au/electoral-boundaries/which-boundaries-cover-where-i-live")!)
+                    Link("City of Melbourne: apply or contact the council", destination: URL(string: "https://ablis.business.gov.au/service/vic/registration-of-cats-and-dogs-city-of-melbourne/28570")!)
                 }
-                guide("Not registered yet?", "Book a vet for microchipping and registration. Already has a chip? Ask the registry to register or transfer it to you. Finish any required verification or transfer before submitting.")
-                Link("Victoria's microchipping guide", destination: URL(string: "https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/microchipping-of-dogs-and-cats")!)
+            case .microchip:
+                registrationGuide("Already microchipped?", isExpanded: $isFirstGuideExpanded,
+                    body: "Find the number in your pet's records or ask a vet to scan your dog. Use Pet Address to find the registry. For a certificate: CAR → My Animals → your dog → Generate Certificate; AAR → sign in → print registration certificate.") {
+                    Link("Find your registry with Pet Address", destination: URL(string: "https://www.petaddress.com.au/")!)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: AppSpacing.large) {
+                            Link("CAR help", destination: URL(string: "https://car.com.au/apps/help-center")!)
+                            Link("AAR pet owners", destination: URL(string: "https://www.aar.org.au/pet-owners/")!)
+                        }
+                        VStack(alignment: .leading, spacing: AppSpacing.small) {
+                            Link("CAR help", destination: URL(string: "https://car.com.au/apps/help-center")!)
+                            Link("AAR pet owners", destination: URL(string: "https://www.aar.org.au/pet-owners/")!)
+                        }
+                    }
+                }
+                registrationGuide("Not registered yet?", isExpanded: $isSecondGuideExpanded,
+                    body: "Book a vet for microchipping and registration. Already has a chip? Ask the registry to register or transfer it to you. Finish any required verification or transfer before submitting.") {
+                    Link("Victoria's microchipping guide", destination: URL(string: "https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/microchipping-of-dogs-and-cats")!)
+                }
             case .vet:
                 guide("After your check-up", "Add a photo of your dog's vet visit evidence and the visit date. You can earn 200 points for up to two check-ups per year, at least 60 days apart.")
             }
         }
         .font(.subheadline)
+    }
+
+    private func registrationGuide<Resources: View>(
+        _ title: String,
+        isExpanded: Binding<Bool>,
+        body: String,
+        @ViewBuilder resources: @escaping () -> Resources
+    ) -> some View {
+        DisclosureGroup(isExpanded: isExpanded) {
+            VStack(alignment: .leading, spacing: AppSpacing.small) {
+                Text(body).foregroundStyle(AppColors.secondaryText)
+                resources()
+            }
+            .padding(.top, AppSpacing.small)
+        } label: {
+            Text(title).font(.headline).foregroundStyle(AppColors.primaryText)
+        }
+        .padding(AppSpacing.medium)
+        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.field))
+        .overlay { RoundedRectangle(cornerRadius: AppRadius.field).stroke(AppColors.border.opacity(0.7), lineWidth: 1) }
+    }
+
+    private func registrationGuide(
+        _ title: String,
+        isExpanded: Binding<Bool>,
+        body: String
+    ) -> some View {
+        registrationGuide(title, isExpanded: isExpanded, body: body) { EmptyView() }
     }
 
     private func guide(_ title: String, _ body: String) -> some View {

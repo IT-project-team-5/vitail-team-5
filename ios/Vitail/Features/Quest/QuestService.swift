@@ -5,6 +5,13 @@ protocol QuestServing: Sendable {
     func collectBirthday(dogID: Int) async throws -> BirthdayCollectResponse
     func collectDocument(entitlementID: Int) async throws -> DocumentCollectionReceipt
     func collectStreak(_ request: StreakCollectRequest) async throws -> StreakCollectResponse
+    func resetQuests() async throws -> QuestResetResponse
+}
+
+extension QuestServing {
+    func resetQuests() async throws -> QuestResetResponse {
+        throw APIError.http(status: 404, message: "Quest reset is unavailable on this server.")
+    }
 }
 
 actor QuestService: QuestServing {
@@ -28,5 +35,9 @@ actor QuestService: QuestServing {
 
     func collectStreak(_ request: StreakCollectRequest) async throws -> StreakCollectResponse {
         try await apiClient.post("/api/quests/streaks/collect/", body: request)
+    }
+
+    func resetQuests() async throws -> QuestResetResponse {
+        try await apiClient.post("/api/quests/reset", body: EmptyRequestBody())
     }
 }

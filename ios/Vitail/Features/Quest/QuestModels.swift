@@ -282,6 +282,49 @@ struct QuestAwardReceipt: Equatable, Sendable {
     let created: Bool
 }
 
+struct QuestAwardEvent: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let taskID: String
+    let receipt: QuestAwardReceipt
+
+    init(taskID: String, receipt: QuestAwardReceipt) {
+        id = UUID()
+        self.taskID = taskID
+        self.receipt = receipt
+    }
+}
+
+struct QuestResetResponse: Decodable, Equatable, Sendable {
+    let reset: Bool
+    let walletBalance: Int
+    let cleared: Cleared
+
+    struct Cleared: Decodable, Equatable, Sendable {
+        let questAwards: Int
+        let documentSubmissions: Int
+        let documentEntitlements: Int
+        let evidenceFingerprints: Int
+        let checkIns: Int
+
+        var values: [Int] {
+            [questAwards, documentSubmissions, documentEntitlements, evidenceFingerprints, checkIns]
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case questAwards = "quest_awards"
+            case documentSubmissions = "document_submissions"
+            case documentEntitlements = "document_entitlements"
+            case evidenceFingerprints = "evidence_fingerprints"
+            case checkIns = "check_ins"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case reset, cleared
+        case walletBalance = "wallet_balance"
+    }
+}
+
 enum QuestCalendar {
     static func parse(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()

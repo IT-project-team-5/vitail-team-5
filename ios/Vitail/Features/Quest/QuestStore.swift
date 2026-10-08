@@ -7,8 +7,12 @@ final class QuestStore: ObservableObject {
     @Published private(set) var snapshot: QuestSnapshot?
     @Published private(set) var isRefreshing = false
     @Published private(set) var collectingTaskID: String?
+    @Published private(set) var isResetting = false
+    @Published private(set) var isResetAvailable = true
     @Published private(set) var errorMessage: String?
     @Published private(set) var confirmedCollections: [String: QuestTask] = [:]
+    @Published private(set) var confirmedBalance: Int?
+    @Published private(set) var lastAwardEvent: QuestAwardEvent?
     var onAward: (@MainActor (QuestAwardReceipt) async -> Void)?
 
     private weak var session: SessionStore?
@@ -21,6 +25,7 @@ final class QuestStore: ObservableObject {
     private var isActive = true
     private var refreshTask: Task<Void, Never>?
     private var collectionTask: Task<Void, Never>?
+    private var resetTask: Task<QuestResetResponse?, Never>?
     private var sessionSubscription: AnyCancellable?
 
     init(ownerID: Int, session: SessionStore, service: any QuestServing = QuestService(), now: @escaping () -> Date = Date.init) {
@@ -34,7 +39,7 @@ final class QuestStore: ObservableObject {
         }
     }
 
-    deinit { refreshTask?.cancel(); collectionTask?.cancel() }
+    deinit { refreshTask?.cancel(); collectionTask?.cancel(); resetTask?.cancel() }
 
     var readyTasks: [QuestTask] { visibleTasks.filter { $0.status == .ready } }
     var inProgressTasks: [QuestTask] { visibleTasks.filter { $0.status == .inProgress } }
@@ -109,7 +114,7 @@ final class QuestStore: ObservableObject {
         task(id: id) ?? confirmedCollections[id].flatMap { $0.isStreak ? $0 : nil }
     }
     func canCollect(_ task: QuestTask) -> Bool {
-        guard isActive, isCurrentOwner, !isRefreshing, collectingTaskID == nil,
+        guard isActive, isCurrentOwner, !isRefreshing, !isResetting, collectingTaskID == nil,
               self.task(id: task.id) == task, task.status == .ready, task.isSupported else { return false }
         if task.isStreak { return true }
         return task.rewardPoints == (task.isBirthday ? 60 : task.documentKind?.points)
@@ -118,7 +123,7 @@ final class QuestStore: ObservableObject {
     func refresh() async {
         guard isActive, isCurrentOwner else { stop(); return }
         if let refreshTask { await refreshTask.value; return }
-        guard collectingTaskID == nil, !isRefreshing else { return }
+        guard collectingTaskID == nil, !isRefreshing, !isResetting else { return }
         let requestGeneration = generation
         isRefreshing = true
         let task = Task { @MainActor [weak self] in
@@ -163,7 +168,7 @@ final class QuestStore: ObservableObject {
     }
 
     func collect(taskID: String) async {
-        guard let selected = task(id: taskID), canCollect(selected) else { return }
+        guard !isResetting, let selected = task(id: taskID), canCollect(selected) else { return }
         let requestGeneration = generation
         let expectedYear = snapshot.flatMap { Int($0.localDate.prefix(4)) }
         collectingTaskID = taskID
@@ -221,6 +226,8 @@ final class QuestStore: ObservableObject {
                           days >= milestone - 1 else { throw APIError.invalidResponse }
                 }
                 confirmedCollections[taskID] = selected.collected(at: receipt.collectedAt)
+                confirmedBalance = receipt.balance
+                lastAwardEvent = QuestAwardEvent(taskID: taskID, receipt: receipt)
                 await onAward?(receipt)
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
                 isRefreshing = true
@@ -233,13 +240,54 @@ final class QuestStore: ObservableObject {
         await operation.value
     }
 
+    func resetAllForTesting() async -> QuestResetResponse? {
+        guard isActive, isCurrentOwner, collectingTaskID == nil, !isRefreshing else { return nil }
+        if let resetTask { return await resetTask.value }
+        guard isResetAvailable, !isResetting else { return nil }
+        let requestGeneration = generation
+        isResetting = true
+        errorMessage = nil
+        let operation = Task { @MainActor [weak self] () -> QuestResetResponse? in
+            guard let self else { return nil }
+            defer {
+                if requestGeneration == generation {
+                    isResetting = false
+                    resetTask = nil
+                }
+            }
+            do {
+                let response = try await service.resetQuests()
+                guard accepts(requestGeneration), !Task.isCancelled, response.reset,
+                      response.walletBalance >= 0, response.cleared.values.allSatisfy({ $0 >= 0 }) else {
+                    throw APIError.invalidResponse
+                }
+                snapshotRevision += 1
+                snapshot = nil
+                confirmedCollections = [:]
+                confirmedBalance = response.walletBalance
+                lastAwardEvent = nil
+                await loadSnapshot(generation: requestGeneration, revision: snapshotRevision)
+                return response
+            } catch let APIError.http(status, _) where status == 403 || status == 404 || status == 405 {
+                if accepts(requestGeneration), !Task.isCancelled { isResetAvailable = false }
+                return nil
+            } catch {
+                if accepts(requestGeneration), !Task.isCancelled { errorMessage = error.localizedDescription }
+                return nil
+            }
+        }
+        resetTask = operation
+        return await operation.value
+    }
+
     func stop() {
         isActive = false
         generation += 1
-        refreshTask?.cancel(); collectionTask?.cancel()
-        refreshTask = nil; collectionTask = nil
+        refreshTask?.cancel(); collectionTask?.cancel(); resetTask?.cancel()
+        refreshTask = nil; collectionTask = nil; resetTask = nil
         snapshot = nil; confirmedCollections = [:]
-        errorMessage = nil; isRefreshing = false; collectingTaskID = nil
+        errorMessage = nil; isRefreshing = false; collectingTaskID = nil; isResetting = false
+        confirmedBalance = nil; lastAwardEvent = nil
         receivedAt = nil; serverDate = nil; onAward = nil
         sessionSubscription?.cancel(); sessionSubscription = nil
     }

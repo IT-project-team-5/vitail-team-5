@@ -105,9 +105,15 @@ struct OwnerHomeView: View {
                         .tag(Page.account)
                     WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns, friends: friends)
                     .tag(Page.walk)
-                    QuestView(store: questStore, checkIns: checkIns,
+                    QuestView(store: questStore, checkIns: checkIns, points: redemptionViewModel.balance,
                               onOpenDocuments: documentService != nil
-                                ? { route in documentSelection = route } : nil)
+                                ? { route in documentSelection = route } : nil,
+                              onResetAll: {
+                                  async let wallet: Void = redemptionViewModel.refresh()
+                                  async let checkInProgress: Void = checkIns.refresh()
+                                  async let venues: Void = venueCheckIns.load()
+                                  _ = await (wallet, checkInProgress, venues)
+                              })
                         .tag(Page.quest)
                     VenuesView(viewModel: venueCheckIns, progressStore: checkIns)
                         .tag(Page.venues)
