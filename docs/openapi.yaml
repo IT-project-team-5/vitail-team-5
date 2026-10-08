@@ -1678,10 +1678,11 @@ components:
         target_seconds: {type: integer, minimum: 1, nullable: true}
     DogDailyGoalProgress:
       type: object
-      required: [dog_id, dog_name, active_seconds, target_seconds, completed, current_streak, days]
+      required: [dog_id, dog_name, photo, active_seconds, target_seconds, completed, current_streak, days]
       properties:
         dog_id: {type: integer}
         dog_name: {type: string}
+        photo: {type: string, format: uri, nullable: true}
         active_seconds: {type: integer, minimum: 0}
         target_seconds: {type: integer, minimum: 1, nullable: true, description: 'Null means unconfigured; never implies completion'}
         completed: {type: boolean}

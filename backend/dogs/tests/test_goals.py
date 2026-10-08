@@ -502,6 +502,19 @@ class DailyGoalTests(GoalFixture, TestCase):
         self.assertEqual(response.data["goal_rewards_status"], "PENDING_MULTI_DOG_POLICY")
         self.assertEqual(PointEntry.objects.count(), 0)
 
+    def test_read_api_exposes_each_dog_photo_with_its_daily_goal(self):
+        self.dog.uploaded_photo = "avatars/dogs/milo.jpg"
+        self.dog.save(update_fields=("uploaded_photo",))
+        client = APIClient()
+        client.force_authenticate(self.owner)
+
+        response = client.get("/api/quests")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["daily_goals"][0]["dog_id"], self.dog.pk)
+        self.assertEqual(response.data["daily_goals"][0]["photo"],
+                         "http://testserver/media/avatars/dogs/milo.jpg")
+
     def test_reserved_reward_retries_and_all_point_sources_share_ledger(self):
         self.configure(60)
         self.walk()

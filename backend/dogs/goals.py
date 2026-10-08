@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from accounts.photos import photo_url
 from rewards.policy import local_date, local_midnight
 from walks.models import WalkDog
 from walks.eligibility import SUMMARY_FIELDS, TRUSTED_WALK_RULES, has_validated_movement
@@ -59,7 +60,7 @@ def active_seconds(goal, now=None):
 
 
 @transaction.atomic
-def goal_progress(*, owner, now=None):
+def goal_progress(*, owner, request=None, now=None):
     """Lazily freeze eligible days, including missed days while the app was closed."""
     get_user_model().objects.select_for_update().get(pk=owner.pk)
     now = now or timezone.now()
@@ -118,6 +119,7 @@ def goal_progress(*, owner, now=None):
                 "target_seconds": item[0].target_active_seconds if item else None})
         current = measured.get(today)
         result.append({"dog_id": dog.pk, "dog_name": dog.name,
+            "photo": photo_url(dog.uploaded_photo, request) if dog.uploaded_photo else dog.photo,
             "active_seconds": current[1] if current else 0,
             "target_seconds": current[0].target_active_seconds if current else None,
             "completed": current[2] if current else False,

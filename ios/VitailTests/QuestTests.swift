@@ -522,7 +522,7 @@ final class QuestTests: XCTestCase {
         XCTAssertNil(store.inProgressTasks.first?.progressRatio)
     }
 
-    func testDogGroupsPartitionAllVisibleTasksByIDAndPrioritizeReadyRewards() async throws {
+    func testDogTasksStayFlatAndPreserveVisibleTaskOrdering() async throws {
         let session = await makeSession()
         let tasks = [
             QuestFixture.task(id: "collected", status: .collected, collectedAt: QuestFixture.timestamp),
@@ -534,75 +534,71 @@ final class QuestTests: XCTestCase {
         let store = QuestStore(ownerID: 1, session: session, service: QuestFixture(tasks: tasks))
         await store.refresh()
 
-        // Both dogs are named Luna; only the higher-ID dog has a ready reward.
-        XCTAssertEqual(store.dogTaskGroups.map(\.id), [8, 3])
-        XCTAssertEqual(store.dogTaskGroups.map(\.name), ["Luna", "Luna"])
-        let group = try XCTUnwrap(store.dogTaskGroups.first)
-        XCTAssertEqual(group.tasks.map(\.id), ["ready", "progress", "collected"])
-        XCTAssertEqual(group.summary, "3 tasks · 1 ready")
-        XCTAssertEqual(store.dogTaskGroups.last?.summary, "1 task · 0 ready")
+        // Both dogs are named Luna; each task remains one directly tappable row.
+        XCTAssertEqual(store.dogTasks.map(\.id), ["ready", "progress", "same-name", "collected"])
+        XCTAssertEqual(store.dogTasks.map(\.subjectName), ["Luna", "Luna", "Luna", "Luna"])
         XCTAssertEqual(store.accountTasks, [QuestFixture.streak()])
-        let displayed = store.dogTaskGroups.flatMap(\.tasks) + store.accountTasks
+        let displayed = store.dogTasks + store.accountTasks
         XCTAssertEqual(displayed.count, tasks.count)
         XCTAssertEqual(Set(displayed.map(\.id)).count, displayed.count)
         XCTAssertEqual(Set(displayed.map(\.id)), Set(store.visibleTasks.map(\.id)))
     }
 
-    func testDogGroupIdentitySurvivesRefreshRenameAndTaskReplacement() async throws {
+    func testDogTasksRefreshWithCurrentNameAndIdentity() async throws {
         let session = await makeSession()
         let service = QuestFixture(tasks: [QuestFixture.task(id: "before")])
         let store = QuestStore(ownerID: 1, session: session, service: service)
         await store.refresh()
-        let originalID = try XCTUnwrap(store.dogTaskGroups.first?.id)
+        let originalID = try XCTUnwrap(store.dogTasks.first?.dogID)
 
         await service.setTasks([
             QuestFixture.task(id: "after", subjectName: "Renamed dog"),
             QuestFixture.task(id: "new-dog", kind: "BIRTHDAY", status: .ready, dogID: 9)
         ])
         await store.refresh()
-        XCTAssertEqual(store.dogTaskGroups.map(\.id), [9, originalID])
-        XCTAssertEqual(store.dogTaskGroups.last?.name, "Renamed dog")
-        XCTAssertEqual(store.dogTaskGroups.last?.tasks.map(\.id), ["after"])
+        XCTAssertEqual(store.dogTasks.map(\.id), ["new-dog", "after"])
+        XCTAssertEqual(store.dogTasks.last?.dogID, originalID)
+        XCTAssertEqual(store.dogTasks.last?.subjectName, "Renamed dog")
         await service.failNextFetch()
         await store.refresh()
-        XCTAssertEqual(store.dogTaskGroups.map(\.id), [9, originalID])
+        XCTAssertEqual(store.dogTasks.map(\.id), ["new-dog", "after"])
     }
 
-    func testGroupedTasksKeepDocumentRoutesAndCollectionBehavior() async throws {
+    func testFlatDogTasksKeepDocumentRoutesAndCollectionBehavior() async throws {
         let session = await makeSession()
         let service = QuestFixture()
         let store = QuestStore(ownerID: 1, session: session, service: service)
         await store.refresh()
-        let inProgress = try XCTUnwrap(store.dogTaskGroups.flatMap(\.tasks).first { $0.status == .inProgress })
+        let inProgress = try XCTUnwrap(store.dogTasks.first { $0.status == .inProgress })
         XCTAssertEqual(inProgress.documentRoute?.dogID, 8)
         XCTAssertEqual(inProgress.documentRoute?.kind, .vet)
-        let ready = try XCTUnwrap(store.dogTaskGroups.flatMap(\.tasks).first { $0.id == "document:10" })
+        let ready = try XCTUnwrap(store.dogTasks.first { $0.id == "document:10" })
         XCTAssertTrue(store.canCollect(ready))
         await store.collect(taskID: ready.id)
-        let collected = try XCTUnwrap(store.dogTaskGroups.flatMap(\.tasks).first { $0.id == ready.id })
+        let collected = try XCTUnwrap(store.dogTasks.first { $0.id == ready.id })
         XCTAssertEqual(collected.status, .collected)
         XCTAssertFalse(store.canCollect(collected))
-        XCTAssertEqual(store.dogTaskGroups.flatMap(\.tasks).filter { $0.id == ready.id }.count, 1)
+        XCTAssertEqual(store.dogTasks.filter { $0.id == ready.id }.count, 1)
         let calls = await service.calls
         XCTAssertEqual(calls, ["document:10"])
     }
 
-    func testDogAccordionAppearanceSnapshots() async throws {
-        let group = DogQuestGroup(id: 8, tasks: [
+    func testFlatDogTaskRowAppearanceSnapshots() async throws {
+        let tasks = [
             QuestFixture.task(id: "ready", kind: "BIRTHDAY", status: .ready,
                               subjectName: "Luna the Very Adventurous Walking Companion"),
             QuestFixture.task(id: "progress"),
             QuestFixture.task(id: "collected", status: .collected, collectedAt: QuestFixture.timestamp)
-        ])
+        ]
         for dark in [false, true] {
-            for expanded in [false, true] {
-                for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
-                    try await snapshot(ScrollView {
-                        DogQuestGroupCard(group: group, isExpanded: .constant(expanded), onOpenTask: { _ in })
-                            .padding(AppSpacing.medium)
-                    }.environment(\.dynamicTypeSize, size),
-                        name: "Quest-Accordion-320-\(dark)-\(expanded)-\(size)", dark: dark, width: 320)
-                }
+            for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
+                try await snapshot(ScrollView {
+                    VStack(spacing: AppSpacing.small) {
+                        ForEach(tasks) { QuestTaskRow(task: $0) }
+                    }
+                    .padding(AppSpacing.medium)
+                }.environment(\.dynamicTypeSize, size),
+                    name: "Quest-Flat-Dog-Tasks-320-\(dark)-\(size)", dark: dark, width: 320)
             }
         }
     }

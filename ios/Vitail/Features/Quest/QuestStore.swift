@@ -44,18 +44,9 @@ final class QuestStore: ObservableObject {
     var readyTasks: [QuestTask] { visibleTasks.filter { $0.status == .ready } }
     var inProgressTasks: [QuestTask] { visibleTasks.filter { $0.status == .inProgress } }
     var collectedTodayTasks: [QuestTask] { visibleTasks.filter { $0.status == .collected } }
-    var dogTaskGroups: [DogQuestGroup] {
-        // visibleTasks supplies the existing Ready / In progress / Collected order.
-        Dictionary(grouping: visibleTasks, by: \.dogID)
-            .compactMap { dogID, tasks -> DogQuestGroup? in
-                guard let dogID else { return nil }
-                return DogQuestGroup(id: dogID, tasks: tasks)
-            }
-            .sorted { left, right in
-                if (left.readyCount > 0) != (right.readyCount > 0) { return left.readyCount > 0 }
-                return left.id < right.id
-            }
-    }
+    /// Dog tasks remain flat: every dog/task combination is directly actionable.
+    /// `visibleTasks` preserves Ready, In progress, then Collected ordering.
+    var dogTasks: [QuestTask] { visibleTasks.filter { $0.dogID != nil } }
     var accountTasks: [QuestTask] { visibleTasks.filter { $0.dogID == nil } }
     var dailyGoals: [DogDailyGoalProgress]? {
         guard snapshot?.localDate == displayDate else { return nil }

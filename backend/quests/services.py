@@ -158,5 +158,5 @@ def quest_dashboard(*, owner, request=None, now=None):
     tasks.sort(key=lambda task: (order[task["status"]], task["kind"], task["dog_id"] or 0, task["id"]))
     return {"server_time": now, "timezone": MELBOURNE.key, "local_date": today,
             "next_reset_at": local_midnight(today + timedelta(days=1)), "tasks": tasks,
-            "daily_goals": goal_progress(owner=owner, now=now),
+            "daily_goals": goal_progress(owner=owner, request=request, now=now),
             "goal_rewards_status": "PENDING_MULTI_DOG_POLICY"}

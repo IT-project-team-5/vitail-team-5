@@ -46,6 +46,7 @@ struct QuestSnapshot: Decodable, Equatable, Sendable {
 struct DogDailyGoalProgress: Decodable, Equatable, Identifiable, Sendable {
     let dogID: Int
     let dogName: String
+    var photo: String? = nil
     let activeSeconds: Int
     let targetSeconds: Int?
     let completed: Bool
@@ -78,7 +79,7 @@ struct DogDailyGoalProgress: Decodable, Equatable, Identifiable, Sendable {
     }
     enum CodingKeys: String, CodingKey {
         case completed, days
-        case dogID = "dog_id", dogName = "dog_name", activeSeconds = "active_seconds"
+        case dogID = "dog_id", dogName = "dog_name", photo, activeSeconds = "active_seconds"
         case targetSeconds = "target_seconds", currentStreak = "current_streak"
     }
 }
@@ -118,17 +119,6 @@ struct GoalCalendarDay: Decodable, Equatable, Identifiable, Sendable {
         case date, state
         case activeSeconds = "active_seconds", targetSeconds = "target_seconds"
     }
-}
-
-/// A presentation group built from the store's eligible, ordered tasks.
-struct DogQuestGroup: Identifiable, Equatable, Sendable {
-    let id: Int
-    let tasks: [QuestTask]
-
-    var name: String { tasks.first?.subjectName ?? "Dog" }
-    var photo: String? { tasks.compactMap(\.photo).first }
-    var readyCount: Int { tasks.filter { $0.status == .ready }.count }
-    var summary: String { "\(tasks.count) \(tasks.count == 1 ? "task" : "tasks") · \(readyCount) ready" }
 }
 
 struct QuestTask: Decodable, Equatable, Identifiable, Sendable {

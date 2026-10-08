@@ -34,6 +34,7 @@ class GoalDaySerializer(serializers.Serializer):
 class DogGoalSerializer(serializers.Serializer):
     dog_id = serializers.IntegerField()
     dog_name = serializers.CharField()
+    photo = serializers.CharField(allow_null=True)
     active_seconds = serializers.IntegerField()
     target_seconds = serializers.IntegerField(allow_null=True)
     completed = serializers.BooleanField()

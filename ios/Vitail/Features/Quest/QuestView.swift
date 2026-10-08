@@ -145,7 +145,6 @@ struct QuestView: View {
     var onResetAll: (() async -> Void)? = nil
     @State private var selectedTask: QuestTask?
     @State private var pendingDocument: DocumentQuestRoute?
-    @State private var expandedDogIDs: Set<Int> = []
     @State private var presentedAward: QuestAwardEvent?
     @State private var isAwardVisible = false
     @State private var isPointsPulsing = false
@@ -166,15 +165,7 @@ struct QuestView: View {
                     } else if store.snapshot?.dailyGoals != nil {
                         Text("Refresh to see today's walking goals.").font(.subheadline)
                     }
-                    ForEach(store.dogTaskGroups) { group in
-                        DogQuestGroupCard(group: group, isExpanded: Binding(
-                            get: { expandedDogIDs.contains(group.id) },
-                            set: { expanded in
-                                if expanded { expandedDogIDs.insert(group.id) }
-                                else { expandedDogIDs.remove(group.id) }
-                            }
-                        ), onOpenTask: openTask)
-                    }
+                    taskRows(store.dogTasks)
                     if !store.accountTasks.isEmpty {
                         taskRows(store.accountTasks)
                     }
@@ -333,95 +324,23 @@ struct QuestView: View {
     }
 }
 
-struct DogQuestGroupCard: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let group: DogQuestGroup
-    @Binding var isExpanded: Bool
-    let onOpenTask: (QuestTask) -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Button {
-                isExpanded.toggle()
-            } label: {
-                Group {
-                    if dynamicTypeSize.isAccessibilitySize {
-                        HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                            labels
-                            chevron
-                        }
-                    } else {
-                        HStack(spacing: AppSpacing.medium) {
-                            AvatarView(url: group.photo, name: group.name, systemImage: "dog.fill", size: 44)
-                                .accessibilityHidden(true)
-                            labels
-                            chevron
-                        }
-                    }
-                }
-                .padding(AppSpacing.medium)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(group.name), \(group.summary)")
-            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            .accessibilityHint(isExpanded ? "Collapse tasks" : "Expand tasks")
-
-            if isExpanded {
-                ForEach(group.tasks) { task in
-                    Divider().padding(.horizontal, AppSpacing.medium)
-                    Button { onOpenTask(task) } label: {
-                        QuestTaskRow(task: task, isNested: true)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(task.status == .inProgress && task.documentRoute != nil
-                                       ? "Opens document or task details" : "Opens task details")
-                }
-            }
-        }
-        .foregroundStyle(AppColors.primaryText)
-        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
-    }
-
-    private var labels: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(group.name)
-                .font(.headline)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : nil)
-                .truncationMode(.tail)
-            Text(group.summary)
-                .font(.subheadline)
-                .foregroundStyle(AppColors.secondaryText)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .multilineTextAlignment(.leading)
-    }
-
-    private var chevron: some View {
-        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(AppColors.secondaryText)
-            .accessibilityHidden(true)
-    }
-}
-
 struct QuestTaskRow: View {
     let task: QuestTask
-    var isNested = false
     private var ready: Bool { task.status == .ready }
     private var collected: Bool { task.status == .collected }
 
     var body: some View {
         HStack(spacing: AppSpacing.medium) {
-            if !isNested {
-                AvatarView(url: task.photo, name: task.subjectName, systemImage: task.dogID == nil ? task.icon : "dog.fill", size: 44)
-                    .accessibilityHidden(true)
-            }
+            AvatarView(url: task.photo, name: task.subjectName, systemImage: task.dogID == nil ? task.icon : "dog.fill", size: 44)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(task.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                if !isNested {
+                Text(task.dogID == nil ? task.title : task.subjectName)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                if task.dogID != nil {
+                    Text(task.title).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
                     Text(task.subjectLabel).font(.subheadline).foregroundStyle(AppColors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -438,10 +357,6 @@ struct QuestTaskRow: View {
                         .accessibilityLabel("Task progress")
                         .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
                 }
-                if isNested && task.rewardPoints > 0 {
-                    Text("\(task.rewardPoints) points").font(.subheadline)
-                        .foregroundStyle(AppColors.secondaryText)
-                }
             }
             .fixedSize(horizontal: false, vertical: true)
             .multilineTextAlignment(.leading)
@@ -451,10 +366,10 @@ struct QuestTaskRow: View {
         }
         .padding(AppSpacing.medium)
         .foregroundStyle(collected ? AppColors.secondaryText : AppColors.primaryText)
-        .background(isNested ? Color.clear : ready ? AppColors.brand.opacity(0.12) : AppColors.surface)
+        .background(ready ? AppColors.brand.opacity(0.12) : AppColors.surface)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
         .overlay {
-            if ready && !isNested { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
+            if ready { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
         }
         .opacity(collected ? 0.6 : 1)
         .contentShape(Rectangle())
@@ -568,39 +483,42 @@ struct QuestDetailView: View {
 }
 
 struct DailyWalkingGoalCard: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let goal: DogDailyGoalProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            if let target = goal.targetSeconds, target > 0 {
-                ViewThatFits(in: .horizontal) {
+        HStack(alignment: .top, spacing: AppSpacing.medium) {
+            AvatarView(url: goal.photo, name: goal.dogName, systemImage: "dog.fill", size: 44)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: AppSpacing.medium) {
+                if let target = goal.targetSeconds, target > 0 {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
+                            title
+                            Spacer(minLength: AppSpacing.small)
+                            progressLabel
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            title
+                            progressLabel
+                        }
+                    }
+                    ProgressView(value: min(Double(goal.activeSeconds) / Double(target), 1))
+                        .tint(AppColors.brand)
+                        .scaleEffect(x: 1, y: 1.8, anchor: .center)
+                        .accessibilityLabel("\(goal.dogName)'s walking goal")
+                        .accessibilityValue("\(goal.activeSeconds) of \(target) seconds. \(goal.completed ? "Completed" : "Incomplete")")
+                } else {
                     HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
                         title
                         Spacer(minLength: AppSpacing.small)
-                        progressLabel
+                        Text("Set a daily goal")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColors.secondaryText)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        title
-                        progressLabel
-                    }
+                    ProgressView(value: 0)
+                        .tint(AppColors.border)
+                        .scaleEffect(x: 1, y: 1.8, anchor: .center)
                 }
-                ProgressView(value: min(Double(goal.activeSeconds) / Double(target), 1))
-                    .tint(AppColors.brand)
-                    .scaleEffect(x: 1, y: 1.8, anchor: .center)
-                    .accessibilityLabel("\(goal.dogName)'s walking goal")
-                    .accessibilityValue("\(goal.activeSeconds) of \(target) seconds. \(goal.completed ? "Completed" : "Incomplete")")
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: AppSpacing.small) {
-                    title
-                    Spacer(minLength: AppSpacing.small)
-                    Text("Set a daily goal")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppColors.secondaryText)
-                }
-                ProgressView(value: 0)
-                    .tint(AppColors.border)
-                    .scaleEffect(x: 1, y: 1.8, anchor: .center)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -611,14 +529,11 @@ struct DailyWalkingGoalCard: View {
     }
 
     private var title: some View {
-        HStack(spacing: AppSpacing.small) {
-            Image(systemName: goal.completed ? "checkmark.circle.fill" : "figure.walk")
-                .foregroundStyle(goal.completed ? AppColors.success : AppColors.brand)
-                .accessibilityHidden(true)
-            Text("\(goal.dogName)'s daily goal")
-                .font(.headline)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : nil)
-                .truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(goal.dogName).font(.headline)
+            Text("Daily walking goal")
+                .font(.subheadline)
+                .foregroundStyle(AppColors.secondaryText)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
