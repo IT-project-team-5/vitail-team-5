@@ -26,7 +26,7 @@ extension WalkRecord {
 
     var syncDescription: String {
         if let summary = serverSummary {
-            return String(format: "Synced · +%d pts · %.2f km accepted", summary.pointsAwarded, summary.distanceM / 1000)
+            return String(format: "Synced · +%d pts · %.2f km accepted", summary.settledTotalPoints, summary.distanceM / 1000)
         }
         if dogs.isEmpty { return "Saved on this device · 0 points · no dogs selected" }
         if let uploadFailure { return "Saved locally · \(uploadFailure)" }
@@ -42,6 +42,7 @@ final class WalkSyncStore: ObservableObject {
     @Published private(set) var summaries: [WalkSummary] = []
     @Published private(set) var errorMessage: String?
     var onWalletChanged: (@MainActor () async -> Void)?
+    var beforeSubmit: (@MainActor (WalkRequest) async -> Bool)?
     private let history: WalkHistoryStore
     private let service: (any WalkServing)?
     private var isEnabled = true
@@ -101,6 +102,10 @@ final class WalkSyncStore: ObservableObject {
                 guard history.containsSavedRecord(id: record.id), record.serverSummary == nil,
                       record.uploadFailure == nil, let request = record.uploadRequest else { continue }
                 do {
+                    if let beforeSubmit, !(await beforeSubmit(request)) {
+                        errorMessage = "Venue settlement is not confirmed. Your walk is saved. Tap Retry when online."
+                        break
+                    }
                     let receipt = try await service.submit(request)
                     guard isEnabled, !Task.isCancelled else { return }
                     guard receipt.requestID == record.id else {

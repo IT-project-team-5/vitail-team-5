@@ -2,8 +2,10 @@
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models.functions import Greatest
 
-from checkins.models import CheckIn
+from checkins.models import CheckIn, CheckInWalk
+from django.utils import timezone
 from evidence.models import DocumentEntitlement, DocumentSubmission, EvidenceFingerprint
 from evidence.storage import private_storage
 from rewards.services import get_balance
@@ -55,10 +57,11 @@ def reset_quest_test_state(*, owner):
     entitlements.filter(pk__in=collected_entitlement_ids).update(
         point_entry=None, collected_at=None,
     )
-    check_ins.filter(pk__in=collected_check_in_ids).update(
-        point_entry=None, collected_at=None, ready_at=None, started_at=None,
-        verified_seconds=0, last_recorded_at=None, last_latitude=None,
-        last_longitude=None, last_verified_at=None,
+    # Venue receipts are immutable Walk settlement evidence. Unlike a standalone
+    # Quest claim, clearing them would reopen the daily quota while keeping the
+    # wallet credit. Keep receipts and cancel only unfinished venue contexts.
+    CheckInWalk.objects.filter(owner=owner, state__in=("RECORDING", "PAUSED")).update(
+        state="CANCELLED", ended_at=Greatest("started_at", timezone.now()),
     )
 
     # Remove upload dependants before deleting never-collected reservations. An

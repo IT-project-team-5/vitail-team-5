@@ -27,6 +27,7 @@ final class WalkLocationManagerTests: XCTestCase {
 
         driver.setMode(.recording)
         XCTAssertEqual(client.startCount, 1, "Switching modes must not restart an already active location stream.")
+        XCTAssertEqual(client.distanceFilter, kCLDistanceFilterNone, "Stationary venue stays need fresh fixes from the existing stream.")
         XCTAssertTrue(client.allowsBackgroundLocationUpdates)
         XCTAssertTrue(client.showsBackgroundLocationIndicator)
         XCTAssertFalse(client.pausesLocationUpdatesAutomatically)
@@ -34,6 +35,7 @@ final class WalkLocationManagerTests: XCTestCase {
         driver.setMode(.recording)
         XCTAssertEqual(client.startCount, 1)
         driver.setMode(.preview)
+        XCTAssertEqual(client.distanceFilter, 5)
         XCTAssertFalse(client.allowsBackgroundLocationUpdates)
         XCTAssertFalse(client.showsBackgroundLocationIndicator)
         XCTAssertFalse(client.pausesLocationUpdatesAutomatically)

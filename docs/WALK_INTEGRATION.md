@@ -3,7 +3,8 @@
 The active map flow shares authentication, dogs, the canonical wallet, redemption
 and café services. Walk is the walk/social map and owns the sole walk/social
 location stream: friend, nearby-partner and active-partner pins use each owner's
-selected profile/map avatar. Venues has a separate check-in discovery map.
+selected profile/map avatar. Venue discovery and verified check-in progress now
+use this same Walk map/location stream. See [venue acceptance](VENUE_CHECKIN_TESTING.md).
 OwnerHome owns one WalkSessionCoordinator. The unreachable
 legacy WalkView/WalkViewModel/WalkRecorder stack has been removed; recording and
 recovery use the coordinator, tracker, location, draft, history and sync stores.

@@ -73,11 +73,15 @@ struct CheckInProgressCard: View {
                         Text("Walking and check-in rewards share a 72-point daily limit.")
                             .font(.footnote).foregroundStyle(AppColors.secondaryText)
                     }
-                    if item.status == .ready {
+                    if item.status == .ready, item.walkRequestID == nil {
                         PrimaryButton(title: "Collect · \(availablePoints) pts", isLoading: store.collectingIDs.contains(item.id),
                                       isDisabled: store.collectingIDs.contains(item.id)) {
                             Task { await store.collect(id: item.id) }
                         }
+                    }
+                    if item.status == .ready, item.walkRequestID != nil {
+                        Text("Check-in complete. Finish your walk.")
+                            .font(.headline).foregroundStyle(AppColors.brand)
                     }
                     if let message = store.errorMessage {
                         Text(message).font(.footnote).foregroundStyle(AppColors.error)
@@ -95,7 +99,7 @@ struct CheckInProgressCard: View {
 
     private func statusText(_ item: VenueCheckInProgress) -> String {
         switch item.status {
-        case .ready: return "Ready to collect"
+        case .ready: return item.walkRequestID == nil ? "Ready to collect" : "Completed · finish your walk"
         case .collected: return "Collected"
         case .cancelled: return "Unavailable"
         case .inProgress: return "In progress"

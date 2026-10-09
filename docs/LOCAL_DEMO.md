@@ -25,7 +25,7 @@ directory. No fixed demo password is included in this repository.
 ## Reset procedure
 
 This deletes existing users, dog profiles, walks, orders, products, point entries,
-venues, friendships, blocks, check-ins, live walk sessions/samples, goal snapshots,
+venues, friendships, blocks, check-ins and their walk contexts, live walk sessions/samples, goal snapshots,
 Quest qualifications, evidence versions and entitlements, feed cursors, admin logs
 and sessions. Breed reference data and
 schema migrations remain. Account ID sequences are preserved so old tokens and

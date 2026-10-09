@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Vitail connected MVP API
-  version: '2026-10-08'
+  version: '2026-10-09'
   description: >-
     Implemented routes only. JWT authentication is required except register,
     login and refresh. Owner/café roles come from the authenticated account.
@@ -243,7 +243,7 @@ paths:
               schema: {type: array, items: {$ref: '#/components/schemas/Walk'}}
         default: {$ref: '#/components/responses/Error'}
     post:
-      summary: Validate one manual walk and credit distance points once (OWNER only)
+      summary: Validate a manual walk and atomically settle walking and completed venue points
       description: >-
         Submit within 12 hours of starting; duration is at most 12 hours and
         future timestamps have at most 30 seconds of clock skew. All dogs must
@@ -255,7 +255,13 @@ paths:
         daily cumulative floor policy (8 points/km, maximum 40 walking points),
         pending confirmation of decision O7. Awards also respect the shared
         72-point walking/check-in cap. Day is the Melbourne local end date.
-        No goal/check-in/streak points are awarded by this endpoint; uploaded
+        A matching owner/request UUID and started_at venue context settles its
+        completed check-ins in this same transaction, after walking and existing
+        Net-Walking awards. One full 12-point reward per café, restaurant, park or vet
+        kind per Melbourne end date; PARTNER is only a display label.
+        Blocked and incomplete visits do not produce successful receipt rows.
+        points_awarded remains walking-only; total_points_awarded includes the
+        committed venue and Net-Walking credits. No goal/streak points are awarded; uploaded
         walks with validated movement can qualify a streak day, whose milestone
         reward is collected separately from Quest. Samples do not populate the
         live-location foundation tables. Repeating the
@@ -949,10 +955,12 @@ paths:
         default: {$ref: '#/components/responses/Error'}
   /api/venues:
     get:
-      summary: Owner Venues map with every active, check-in-enabled, geocoded place
+      summary: Owner Venues map with active eligible geocoded vets, parks and partner businesses
+      parameters:
+        - {$ref: '#/components/parameters/VenueWalkRequestID'}
       responses:
         '200':
-          description: Configured places; same-category alternatives and places blocked by feature or daily-cap policy remain visible as UNAVAILABLE
+          description: Active check-in-enabled geocoded vets and parks plus partnered cafes and restaurants. Configured places include scoped walk progress; already awarded kinds are COLLECTED at every same-kind venue. Feature/cap-blocked places remain visible as UNAVAILABLE.
           content:
             application/json:
               schema: {type: array, items: {$ref: '#/components/schemas/CheckInVenue'}}
@@ -961,9 +969,19 @@ paths:
     parameters:
       - {name: venue_id, in: path, required: true, schema: {type: integer, minimum: 1}}
     post:
-      summary: Start or resume today's owned venue attempt
-      description: Requires an accurate non-simulated fix within 20 metres. One opportunity per category per Melbourne day. Existing same-venue attempts replay; no client duration is trusted. Start has its own per-user rate-limit bucket.
-      requestBody: {$ref: '#/components/requestBodies/CheckInLocation'}
+      summary: Start or resume an owned venue attempt in a recording walk
+      description: Requires a current RECORDING venue walk context and accurate non-simulated fix within 20 metres of an eligible venue. Cafes and restaurants require an active partnership; vets and parks do not. Eligibility is rechecked at settlement. Progress is unique per walk/venue; only settlement reserves the daily category reward. No client duration is trusted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/CheckInLocationSample'}
+                - type: object
+                  required: [walk_request_id]
+                  properties:
+                    walk_request_id: {type: string, format: uuid}
       responses:
         '201':
           description: Started or existing attempt; id is a UUID, not the venue ID
@@ -974,10 +992,12 @@ paths:
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins:
     get:
-      summary: Owner's visible attempts and collected receipts for today
+      summary: Scoped current-walk progress plus today's earned receipts
+      parameters:
+        - {$ref: '#/components/parameters/VenueWalkRequestID'}
       responses:
         '200':
-          description: Server time and ledger daily activity total; collected rows survive disabled offers until midnight
+          description: Server time and ledger daily activity total. Unfinished progress never carries into another walk; earned receipts survive disabled offers until midnight.
           content:
             application/json:
               schema:
@@ -989,12 +1009,56 @@ paths:
                   earned_points_today: {type: integer, minimum: 0}
                   items: {type: array, items: {$ref: '#/components/schemas/VenueCheckIn'}}
         default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/walk-context:
+    post:
+      summary: Synchronize the manual venue-walk lifecycle independently of social consent
+      description: >-
+        First state must be RECORDING, with the UUID/start timestamp later used by
+        Walk upload. Active states may transition to RECORDING, PAUSED, FINISHED
+        or CANCELLED. Terminal states cannot reopen. Pauses clear the interval
+        anchor but preserve progress; FINISHED preserves ready visits for upload.
+        Starting a new context finishes any previous recording/paused context,
+        preserving ready visits for that old walk's pending upload.
+        Walk upload also finalizes a matching context when the finish call was lost.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [walk_request_id, started_at, state]
+              properties:
+                walk_request_id: {type: string, format: uuid}
+                started_at: {type: string, format: date-time}
+                state: {type: string, enum: [RECORDING, PAUSED, FINISHED, CANCELLED]}
+      responses:
+        '200':
+          description: Current immutable identity and lifecycle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  walk_request_id: {type: string, format: uuid}
+                  started_at: {type: string, format: date-time}
+                  state: {type: string, enum: [RECORDING, PAUSED, FINISHED, CANCELLED]}
+                  ended_at: {type: string, format: date-time, nullable: true}
+                  settled: {type: boolean}
+        default: {$ref: '#/components/responses/Error'}
   /api/check-ins/{attempt_id}/locations:
     parameters:
       - {$ref: '#/components/parameters/AttemptID'}
     post:
       summary: Report an accurate fix for an owned attempt
-      description: Server receipt times determine dwell. Each report replaces the latest fix and current progress; check-in does not retain raw per-fix rows. Outside-radius fixes and gaps over 90 seconds reset unqualified progress. No walk record or walking credit is created. Location reports have an independent per-user bucket sized above the app's 25-second cadence.
+      description: >-
+        Adjacent reliable in-radius reports accumulate the smaller of capture and
+        receipt elapsed time, with both gaps at most 90 seconds. captured recorded_at
+        must be inside the walk, no more than 30 seconds old and no more than 5 seconds
+        ahead. Monotonic sequence identifies GPS updates; duplicates/out-of-order
+        updates cannot add time, and conflicting duplicates pause the anchor.
+        Leaving, unreliable/stale locations, gaps and pauses preserve verified time;
+        returning resumes from a fresh anchor. READY survives departure until walk
+        settlement. Only the latest fix/fingerprint is stored, not raw per-fix rows.
       requestBody: {$ref: '#/components/requestBodies/CheckInLocation'}
       responses:
         '200':
@@ -1008,24 +1072,34 @@ paths:
     parameters:
       - {$ref: '#/components/parameters/AttemptID'}
     post:
-      summary: Cancel an unqualified owned attempt
+      summary: Compatibility alias for pausing an owned venue attempt
       responses:
         '200':
-          description: Unqualified attempt deleted; ready or collected attempts remain unchanged
+          description: Preserved progress with the accumulation anchor cleared
           content:
             application/json:
               schema:
-                oneOf:
-                  - {type: object, required: [cancelled], properties: {cancelled: {type: boolean, enum: [true]}}}
-                  - {$ref: '#/components/schemas/VenueCheckIn'}
+                $ref: '#/components/schemas/VenueCheckIn'
         '429': {description: Per-user check-in cancellation rate limit reached}
+        default: {$ref: '#/components/responses/Error'}
+  /api/check-ins/{attempt_id}/pause:
+    parameters:
+      - {$ref: '#/components/parameters/AttemptID'}
+    post:
+      summary: Pause accumulation without deleting current-walk progress
+      responses:
+        '200':
+          description: Preserved progress; READY/earned receipts remain intact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VenueCheckIn'}
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins/{attempt_id}/collect:
     parameters:
       - {$ref: '#/components/parameters/AttemptID'}
     post:
-      summary: Collect or replay the single ledger credit for an owned qualified attempt
-      description: Requires enough full-reward daily allowance. One credit per attempt across all callers; request_id is accepted but does not replace attempt identity. No partial credits.
+      summary: Replay an already settled owned venue receipt
+      description: This route never creates credits. Unsettled attempts return 400 FINISH_WALK_REQUIRED; finish and save the matching walk to settle. Legacy standalone attempts cannot earn via this route.
       requestBody:
         content:
           application/json:
@@ -1330,17 +1404,16 @@ components:
       content:
         application/json:
           schema:
-            type: object
-            required: [latitude, longitude, accuracy_m]
-            properties:
-              latitude: {type: number, minimum: -90, maximum: 90}
-              longitude: {type: number, minimum: -180, maximum: 180}
-              accuracy_m: {type: number, minimum: 0, maximum: 30}
-              is_simulated: {type: boolean, default: false}
+            $ref: '#/components/schemas/CheckInLocationSample'
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
     sessionCookie: {type: apiKey, in: cookie, name: sessionid, description: Django session accepted only for protected document downloads}
   parameters:
+    VenueWalkRequestID:
+      name: walk_request_id
+      in: query
+      description: Manual walk UUID. Omitted selects the latest recording/paused context; another owner's UUID never reveals progress.
+      schema: {type: string, format: uuid}
     AttemptID:
       name: attempt_id
       in: path
@@ -1361,6 +1434,16 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    CheckInLocationSample:
+      type: object
+      required: [sequence, recorded_at, latitude, longitude, accuracy_m]
+      properties:
+        sequence: {type: integer, format: int64, minimum: 0, description: Stable monotonic GPS update identity; iOS uses capture epoch milliseconds}
+        recorded_at: {type: string, format: date-time, description: GPS capture timestamp; freshness is server validated}
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        accuracy_m: {type: number, minimum: 0, description: Above 30 m pauses progress}
+        is_simulated: {type: boolean, default: false}
     CheckInVenue:
       type: object
       required: [id, name, kind, description, address, opening_hours, latitude, longitude, checkin_radius_m, required_seconds, checkin_status]
@@ -1377,6 +1460,10 @@ components:
         checkin_radius_m: {type: integer, enum: [20]}
         required_seconds: {type: integer, minimum: 1}
         checkin_status: {type: string, enum: [AVAILABLE, IN_PROGRESS, READY, COLLECTED, UNAVAILABLE]}
+        reward_category: {type: string, enum: [VET, PARK, PARTNER]}
+        check_in:
+          allOf: [{$ref: '#/components/schemas/VenueCheckIn'}]
+          nullable: true
     VenueCheckIn:
       type: object
       required: [id, venue_id, venue_name, required_seconds, verified_seconds, status, updated_at, reward_points, collected_at]
@@ -1384,6 +1471,10 @@ components:
         id: {type: string, format: uuid}
         venue_id: {type: integer, nullable: true}
         venue_name: {type: string}
+        walk_request_id: {type: string, format: uuid, nullable: true}
+        kind: {type: string, enum: [CAFE, RESTAURANT, PARK, VET]}
+        reward_category: {type: string, enum: [VET, PARK, PARTNER]}
+        is_accumulating: {type: boolean}
         photo: {type: string, format: uri, nullable: true}
         required_seconds: {type: integer, minimum: 1}
         verified_seconds: {type: integer, minimum: 0}
@@ -1972,6 +2063,23 @@ components:
         ended_at: {type: string, format: date-time}
         distance_m: {type: number, minimum: 0}
         points_awarded: {type: integer, minimum: 0, maximum: 40}
+        check_in_points_awarded: {type: integer, minimum: 0}
+        net_points_awarded: {type: integer, minimum: 0}
+        total_points_awarded: {type: integer, minimum: 0}
+        wallet_balance: {type: integer, minimum: 0, description: Current authoritative balance; receipt totals are immutable}
+        check_in_awards:
+          type: array
+          description: Successfully committed venue rewards only; no incomplete, duplicate-category or cap-blocked rows
+          items:
+            type: object
+            required: [id, venue_id, venue_name, kind, reward_category, awarded_points]
+            properties:
+              id: {type: string, format: uuid}
+              venue_id: {type: integer, nullable: true}
+              venue_name: {type: string}
+              kind: {type: string, enum: [CAFE, RESTAURANT, PARK, VET]}
+              reward_category: {type: string, enum: [VET, PARK, PARTNER]}
+              awarded_points: {type: integer, enum: [12]}
         point_date: {type: string, format: date}
         dog_ids: {type: array, items: {type: integer}}
     PointEntry:

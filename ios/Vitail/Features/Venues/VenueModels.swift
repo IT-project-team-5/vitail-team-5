@@ -27,6 +27,15 @@ enum CheckInVenueKind: String, Sendable {
         case .other: return "mappin"
         }
     }
+
+    var rewardCategoryTitle: String {
+        switch self {
+        case .vet: return "Vet"
+        case .dogPark: return "Park"
+        case .cafe, .restaurant: return "Partner"
+        case .other: return "Venue"
+        }
+    }
 }
 
 enum CheckInVenueAvailability: String, Sendable {
@@ -77,6 +86,7 @@ struct CheckInVenue: Decodable, Identifiable, Equatable, Sendable {
     let checkinRadiusM: Int
     let requiredSeconds: Int
     let checkInStatus: String
+    var checkIn: VenueCheckInSession? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, address, latitude, longitude
@@ -85,6 +95,7 @@ struct CheckInVenue: Decodable, Identifiable, Equatable, Sendable {
         case checkinRadiusM = "checkin_radius_m"
         case requiredSeconds = "required_seconds"
         case checkInStatus = "checkin_status"
+        case checkIn = "check_in"
     }
 
     var venueType: CheckInVenueKind { CheckInVenueKind(rawValue: kindRaw) ?? .other }
@@ -109,6 +120,8 @@ struct VenueCheckInSession: Decodable, Identifiable, Equatable, Sendable {
     let requiredSeconds: Int
     let verifiedSeconds: Int
     let rewardPoints: Int
+    var walkRequestID: UUID? = nil
+    var isAccumulating: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, status
@@ -117,6 +130,8 @@ struct VenueCheckInSession: Decodable, Identifiable, Equatable, Sendable {
         case requiredSeconds = "required_seconds"
         case verifiedSeconds = "verified_seconds"
         case rewardPoints = "reward_points"
+        case walkRequestID = "walk_request_id"
+        case isAccumulating = "is_accumulating"
     }
 
 }

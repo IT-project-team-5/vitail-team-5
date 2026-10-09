@@ -65,7 +65,7 @@ class QuestDebugResetTests(APITestCase):
 
     def check_in(self, owner, suffix):
         venue = Venue.objects.create(name=f"Venue {suffix}", kind=Venue.Kind.CAFE,
-            latitude=-37.8, longitude=144.9, checkin_enabled=True)
+            latitude=-37.8, longitude=144.9, checkin_enabled=True, is_partner=True)
         row = CheckIn.objects.create(
             owner=owner, venue=venue, venue_name_snapshot=venue.name, local_date=local_date(self.now),
             category_slot=Venue.Kind.CAFE, required_seconds=600, verified_seconds=600,
@@ -141,8 +141,8 @@ class QuestDebugResetTests(APITestCase):
         self.assertIsNone(DocumentEntitlement.objects.get(pk=entitlement.pk).point_entry_id)
         self.assertIsNone(QuestAward.objects.get(pk=award.pk).point_entry_id)
         reset_check_in = CheckIn.objects.get(pk=check_in.pk)
-        self.assertIsNone(reset_check_in.point_entry_id)
-        self.assertIsNone(reset_check_in.started_at)
+        self.assertEqual(reset_check_in.point_entry_id, check_in_entry.pk)
+        self.assertIsNotNone(reset_check_in.started_at)
         self.assertTrue(DocumentEntitlement.objects.filter(pk=other_entitlement.pk, point_entry__isnull=False).exists())
         self.assertTrue(QuestAward.objects.filter(pk=other_award.pk, point_entry__isnull=False).exists())
         self.assertTrue(CheckIn.objects.filter(pk=other_check_in.pk, point_entry__isnull=False).exists())
@@ -150,9 +150,9 @@ class QuestDebugResetTests(APITestCase):
 
         with patch("checkins.views.local_date", return_value=local_date(self.now)), \
                 patch("checkins.services.timezone.now", return_value=self.now):
-            self.assertEqual(self.client.get("/api/check-ins").data["items"], [])
+            self.assertEqual(self.client.get("/api/check-ins").data["items"][0]["status"], "COLLECTED")
             venue_rows = self.client.get("/api/venues").data
-        self.assertEqual(next(row for row in venue_rows if row["id"] == venue.pk)["checkin_status"], "AVAILABLE")
+        self.assertEqual(next(row for row in venue_rows if row["id"] == venue.pk)["checkin_status"], "COLLECTED")
 
         submitted = self.client.post("/api/quests/documents", {
             "request_id": str(uuid4()), "dog_id": self.dog.pk,
@@ -160,8 +160,9 @@ class QuestDebugResetTests(APITestCase):
         }, format="json")
         self.assertEqual(submitted.status_code, 201)
         self.assertEqual(submitted.data["entitlement_id"], entitlement.pk)
-        collected_document = self.client.post(
-            f"/api/quests/documents/entitlements/{entitlement.pk}/collect", {}, format="json")
+        with patch("evidence.services.timezone.now", return_value=self.now):
+            collected_document = self.client.post(
+                f"/api/quests/documents/entitlements/{entitlement.pk}/collect", {}, format="json")
         self.assertEqual(collected_document.status_code, 200)
         self.assertEqual(DocumentEntitlement.objects.get(pk=entitlement.pk).point_entry_id, document_entry.pk)
 
@@ -171,14 +172,8 @@ class QuestDebugResetTests(APITestCase):
         self.assertEqual(collected_birthday.status_code, 201)
         self.assertEqual(QuestAward.objects.get(pk=award.pk).point_entry_id, birthday_entry.pk)
 
-        sample = {"latitude": -37.8, "longitude": 144.9, "accuracy_m": 5}
+        # A Quest reset must not reopen an already committed venue kind quota.
         with patch("checkins.services.timezone.now", return_value=self.now):
-            restarted = self.client.post(f"/api/venues/{venue.pk}/check-ins", sample, format="json")
-        self.assertEqual(restarted.status_code, 201)
-        self.assertEqual(restarted.data["id"], str(check_in.attempt_id))
-        ready_at = self.now + timedelta(minutes=1)
-        CheckIn.objects.filter(pk=check_in.pk).update(verified_seconds=600, ready_at=ready_at)
-        with patch("checkins.services.timezone.now", return_value=ready_at):
             recollected_check_in = self.client.post(
                 f"/api/check-ins/{check_in.attempt_id}/collect", {}, format="json")
         self.assertEqual(recollected_check_in.status_code, 200)

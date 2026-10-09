@@ -182,6 +182,8 @@ def create_walk(*, owner, request_id, started_at, ended_at, dog_ids, samples):
             raise WalkConflictError("This request ID was already used for a different walk.")
         from social.live import link_walk_and_settle
         link_walk_and_settle(existing)
+        from checkins.services import settle_walk_checkins
+        settle_walk_checkins(existing)
         return existing
 
     dogs = list(Dog.objects.select_for_update().filter(owner=owner, pk__in=dog_ids).order_by("pk"))
@@ -220,6 +222,8 @@ def create_walk(*, owner, request_id, started_at, ended_at, dog_ids, samples):
         walk.save(update_fields=["base_point_entry"])
     from social.live import link_walk_and_settle
     link_walk_and_settle(walk)
+    from checkins.services import settle_walk_checkins
+    settle_walk_checkins(walk)
     return walk
 
 
