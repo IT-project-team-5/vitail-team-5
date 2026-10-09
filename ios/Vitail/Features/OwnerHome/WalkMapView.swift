@@ -26,6 +26,7 @@ final class WalkSessionTracker: ObservableObject {
     // These callbacks run with the location delegate, not with a SwiftUI render.
     var onChange: (() -> Void)?
     var onFinish: (WalkRecord) -> Void
+    var hasVenueActivity: ((Date) -> Bool)?
 
     private var lastTrackedLocation: CLLocation?
     private var lastRouteTimestamp: Date?
@@ -45,6 +46,10 @@ final class WalkSessionTracker: ObservableObject {
     }
 
     private func checkInactivity(at date: Date) {
+        if status == .walking && hasVenueActivity?(date) == true {
+            lastMovementAt = date
+            return
+        }
         guard enforcesRewardLimits, isInProgress,
               let last = [pausedAt, lastMovementAt].compactMap({ $0 }).min(),
               date.timeIntervalSince(last) >= 300 else { return }
@@ -385,6 +390,7 @@ struct WalkMapView: View {
     @ObservedObject private var dogSelection: WalkDogSelectionViewModel
     @ObservedObject private var walkHistory: WalkHistoryStore
     @ObservedObject private var checkIns: CheckInProgressStore
+    @ObservedObject private var venueCheckIns: WalkVenueCheckInStore
     @ObservedObject private var friends: FriendsStore
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
@@ -396,6 +402,7 @@ struct WalkMapView: View {
     @State private var drawerDetent: WalkDrawerDetent
     @State private var controlsHeight: CGFloat = 240
     @State private var selectedPeer: SocialMapPeer?
+    @State private var selectedVenueID: Int?
     @GestureState(resetTransaction: Transaction(animation: .snappy)) private var panelDrag: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
@@ -414,6 +421,7 @@ struct WalkMapView: View {
         dogSelection = coordinator.dogSelection
         walkHistory = coordinator.history
         self.checkIns = checkIns ?? CheckInProgressStore(ownerID: 0)
+        venueCheckIns = coordinator.venueCheckIns
         self.friends = friends
     }
 
@@ -441,10 +449,19 @@ struct WalkMapView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(item: Binding(
+            get: { venueCheckIns.venues.first { $0.id == selectedVenueID } },
+            set: { selectedVenueID = $0?.id }
+        )) { venue in
+            WalkVenueDetailSheet(store: venueCheckIns, venue: venue)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .onAppear {
             coordinator.setWalkPageVisible(isActive)
             if isActive { reloadDogs() }
         }
+        .task { await venueCheckIns.load() }
         .onDisappear {
             coordinator.setWalkPageVisible(false)
         }
@@ -568,7 +585,7 @@ struct WalkMapView: View {
                 Button("Your walk needs attention · Retry") { coordinator.retryStorage() }
                     .font(.caption).padding(.bottom, AppSpacing.small)
             }
-            ForEach(checkIns.visibleItems.filter { $0.status != .collected }) { item in
+            ForEach(checkIns.visibleItems.filter { $0.status != .collected && $0.walkRequestID == nil }) { item in
                 CheckInProgressCard(store: checkIns, checkInID: item.id)
                     .padding(.horizontal, AppSpacing.medium)
                     .padding(.bottom, AppSpacing.small)
@@ -589,6 +606,10 @@ struct WalkMapView: View {
                 Text(notice).font(.footnote).foregroundStyle(AppColors.secondaryText)
             }
             netWalkPanel
+            if let message = venueCheckIns.errorMessage {
+                LocationStatusCard(icon: "wifi.exclamationmark", title: "Venue check-ins", message: message,
+                    actionTitle: "Retry", action: { Task { await venueCheckIns.load() } })
+            }
             WalkHistorySection(store: walkHistory)
             WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
             Text("Walking continues with the screen locked. Pauses are excluded. After 5 minutes without activity, review your walk to finish.")
@@ -605,6 +626,20 @@ struct WalkMapView: View {
 
     private var mapCard: some View {
         Map(position: $cameraPosition, interactionModes: .all) {
+            ForEach(venueCheckIns.venues) { venue in
+                if venue.id == selectedVenueID {
+                    MapCircle(center: venue.coordinate, radius: WalkVenueCheckInStore.radiusMetres)
+                        .foregroundStyle(AppColors.brand.opacity(0.12))
+                        .stroke(AppColors.brand.opacity(0.6), lineWidth: 1)
+                }
+                Annotation(venue.name, coordinate: venue.coordinate) {
+                    TimelineView(.periodic(from: .now, by: 1)) { tick in
+                        WalkVenueMarker(venue: venue, presentation: venueCheckIns.presentation(for: venue, at: tick.date)) {
+                            selectedVenueID = venue.id
+                        }
+                    }
+                }
+            }
             ForEach(socialPeers) { peer in
                 Annotation(peerName(peer.user), coordinate: peer.coordinate) {
                     VStack(spacing: 2) {
@@ -1004,6 +1039,17 @@ struct WalkFinishSummaryView: View {
                             }
                         }
                         pointsSummary(record)
+                        if let receipt = record.serverSummary {
+                            WalkVenueAwardsSection(summary: receipt)
+                        } else if !record.dogs.isEmpty || coordinator.needsFinishConfirmation {
+                            VStack(alignment: .leading, spacing: AppSpacing.small) {
+                                Text("Venue check-ins").font(.headline)
+                                Text(coordinator.needsFinishConfirmation
+                                    ? "Complete your walk to settle verified check-ins."
+                                    : "Processing venue settlement. Rewards appear after the upload is confirmed.")
+                                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                            }
+                        }
                         if coordinator.needsFinishConfirmation {
                             dogPicker
                             PrimaryButton(
@@ -1060,15 +1106,17 @@ struct WalkFinishSummaryView: View {
     private func pointsSummary(_ record: WalkRecord) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
             if let receipt = record.serverSummary {
-                Text("+\(receipt.pointsAwarded) points").font(.largeTitle.weight(.semibold))
+                Text("+\(receipt.settledTotalPoints) points").font(.largeTitle.weight(.semibold))
                 Text("Added to your wallet · \(receipt.distanceM / 1_000, specifier: "%.2f") km accepted")
                     .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                Text("Walk \(receipt.pointsAwarded) · Venue \(receipt.checkInPointsAwarded) · Net-Walking \(receipt.netPointsAwarded)")
+                    .font(.caption).foregroundStyle(AppColors.secondaryText)
             } else if coordinator.needsFinishConfirmation {
                 let estimate = coordinator.estimatedPoints(for: record, hasSelectedDogs: !selection.selectedDogs.isEmpty)
                 Text("≈ \(estimate) points").font(.largeTitle.weight(.semibold))
                 Text(selection.selectedDogs.isEmpty
                      ? "Choose who came along. Walks without a dog are saved on this device and earn no points."
-                     : "Estimated from your route. Points are confirmed after your walk is checked, with a daily limit of 40.")
+                     : "Walk points estimated from your route, up to 40 per day. Venue rewards are confirmed at settlement; walking and check-ins share a 72-point daily limit.")
                     .font(.footnote).foregroundStyle(AppColors.secondaryText)
             } else if record.dogs.isEmpty || record.uploadRequest == nil || record.uploadFailure != nil {
                 Text("0 points").font(.largeTitle.weight(.semibold))

@@ -28,9 +28,10 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
     let updatedAt: Date
     let rewardPoints: Int
     var collectedAt: Date? = nil
+    var walkRequestID: UUID? = nil
 
     init(id: String, venueID: Int, venueName: String, photo: String?, requiredSeconds: Int,
-         verifiedSeconds: Int, status: Status, updatedAt: Date, rewardPoints: Int, collectedAt: Date? = nil) {
+         verifiedSeconds: Int, status: Status, updatedAt: Date, rewardPoints: Int, collectedAt: Date? = nil, walkRequestID: UUID? = nil) {
         self.id = id
         self.venueID = venueID
         self.venueName = venueName
@@ -41,6 +42,7 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.rewardPoints = rewardPoints
         self.collectedAt = collectedAt
+        self.walkRequestID = walkRequestID
     }
 
     enum CodingKeys: String, CodingKey {
@@ -52,6 +54,7 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
         case updatedAt = "updated_at"
         case rewardPoints = "reward_points"
         case collectedAt = "collected_at"
+        case walkRequestID = "walk_request_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -66,6 +69,7 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
         updatedAt = try Self.decodeDate(values, key: .updatedAt)
         rewardPoints = try values.decode(Int.self, forKey: .rewardPoints)
         collectedAt = try values.decodeIfPresent(String.self, forKey: .collectedAt).flatMap(Self.parseDate)
+        walkRequestID = try values.decodeIfPresent(UUID.self, forKey: .walkRequestID)
     }
 
     var progressRatio: Double {
@@ -294,7 +298,7 @@ final class CheckInProgressStore: ObservableObject {
 
     func collect(id: String) async {
         guard isCurrentOwner, let service, !collectingIDs.contains(id),
-              let item = activeItems.first(where: { $0.id == id }), item.status == .ready,
+              let item = activeItems.first(where: { $0.id == id }), item.status == .ready, item.walkRequestID == nil,
               let requestedDate = localDate else { return }
         let startedGeneration = generation
         let requestID = requests[id] ?? UUID()

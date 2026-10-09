@@ -1,11 +1,12 @@
 # Friends and Net-Walking
 
 Friends and consented live location are connected end to end. The feature lives
-under **Account → Friends and Net-Walking** so the owner navigation stays at five
-primary destinations: Account, Walk, Quest, Venues and Redeem. **Walk is the
+under **Account → Friends and Net-Walking** so the owner navigation stays at four
+primary destinations: Account, Walk, Quest and Redeem. **Walk is the
 walk/social map and owns the sole walk/social location stream**: it records the
 route, publishes allowed presence, displays friend/partner pins and hosts
-Net-Walking invitations. Venues has a separate check-in discovery map. There is
+Net-Walking invitations and venue discovery/check-ins using the same location
+stream. There is
 no duplicate social map or leaderboard page.
 
 ## Owner flow

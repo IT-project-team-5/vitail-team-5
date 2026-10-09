@@ -21,6 +21,9 @@ class Venue(models.Model):
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     opening_hours = models.CharField(max_length=500, blank=True)
     google_maps_url = models.URLField(max_length=2048, blank=True)
+    # Optional stable provenance for explicitly imported public place data.
+    import_source = models.CharField(max_length=128, null=True, blank=True, unique=True)
+    source_url = models.URLField(max_length=2048, blank=True)
     is_partner = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     checkin_enabled = models.BooleanField(default=False)

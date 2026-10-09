@@ -4,241 +4,315 @@ from uuid import uuid4
 
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError
-from rest_framework.test import APIClient, APIRequestFactory
+from rest_framework.test import APIClient
 
-from checkins.models import CheckIn
-from checkins.services import cancel_checkin, collect_checkin, report_checkin_location, start_checkin
+from checkins.models import CheckIn, CheckInWalk
+from checkins.services import cancel_checkin, collect_checkin, report_checkin_location, start_checkin, update_walk_context
 from checkins.tests.test_checkins import CheckInFixture
-from checkins.views import (
-    CheckInCancelThrottle,
-    CheckInCollectThrottle,
-    CheckInLocationThrottle,
-    CheckInStartThrottle,
-)
+from dogs.models import Breed, Dog
 from quests.models import QuestDefinition
 from rewards.models import PointEntry
 from rewards.policy import CHECKIN_SECONDS, local_date
 from venues.models import Venue
+from walks.models import Walk
+from walks.services import WalkConflictError
 
 
 class LocationCheckInTests(CheckInFixture, TestCase):
-    sample = {"latitude": -37.8, "longitude": 144.9, "accuracy_m": 5, "is_simulated": False}
+    sample = {"sequence": 0, "latitude": -37.8, "longitude": 144.9, "accuracy_m": 5, "is_simulated": False}
 
-    def test_action_throttles_are_per_user_and_use_independent_buckets(self):
-        request = APIRequestFactory().post("/api/check-ins/example/locations")
-        request.user = self.owner
-        throttles = (
-            CheckInStartThrottle, CheckInLocationThrottle,
-            CheckInCollectThrottle, CheckInCancelThrottle,
-        )
-        owner_keys = {throttle().get_cache_key(request, None) for throttle in throttles}
-        self.assertEqual(len(owner_keys), 4)
-        request.user = self.other
-        other_keys = {throttle().get_cache_key(request, None) for throttle in throttles}
-        self.assertTrue(owner_keys.isdisjoint(other_keys))
-        self.assertEqual(CheckInLocationThrottle.rate, "12/min")
+    def start(self, kind="CAFE", *, context=None):
+        return start_checkin(owner=self.owner, venue_id=self.venues[kind].pk,
+                             walk_request_id=(context or self.context).request_id, sample={**self.sample, "recorded_at": self.now}, now=self.now)
 
-    def test_map_does_not_restore_disabled_venue_with_missing_coordinates(self):
-        venue = self.venues["CAFE"]
-        start_checkin(owner=self.owner, venue_id=venue.pk, sample=self.sample, now=self.now)
-        venue.checkin_enabled = False
-        venue.latitude = venue.longitude = None
-        venue.save()
+    def report(self, row, seconds, **values):
+        sample = {**self.sample, "recorded_at": self.now + timedelta(seconds=seconds), "sequence": seconds, **values}
+        return report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=sample,
+                                      now=self.now + timedelta(seconds=seconds))
+
+    def api_client(self, owner=None):
         client = APIClient()
-        client.force_authenticate(self.owner)
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            response = client.get("/api/venues")
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn(venue.pk, [row["id"] for row in response.data])
+        client.force_authenticate(owner or self.owner)
+        return client
 
-    def test_map_returns_every_pin_and_marks_other_venues_in_used_category_unavailable(self):
-        second_cafe = Venue.objects.create(
-            name="Second Test CAFE", kind=Venue.Kind.CAFE,
-            latitude=-37.8, longitude=144.9, checkin_enabled=True,
-        )
-        client = APIClient()
-        client.force_authenticate(self.owner)
-
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            available = client.get("/api/venues")
-        self.assertEqual(available.status_code, 200)
-        self.assertEqual(
-            {row["id"] for row in available.data},
-            {venue.pk for venue in self.venues.values()} | {second_cafe.pk},
-        )
-        self.assertTrue(all(row["checkin_status"] == "AVAILABLE" for row in available.data))
-
-        started = start_checkin(
-            owner=self.owner, venue_id=self.venues["CAFE"].pk,
-            sample=self.sample, now=self.now,
-        )
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            in_progress = client.get("/api/venues")
-        statuses = {row["id"]: row["checkin_status"] for row in in_progress.data}
-        self.assertEqual(statuses[self.venues["CAFE"].pk], started.status)
-        self.assertEqual(statuses[second_cafe.pk], "UNAVAILABLE")
-        for kind in ("RESTAURANT", "PARK", "VET"):
-            self.assertEqual(statuses[self.venues[kind].pk], "AVAILABLE")
-
-    def test_map_marks_all_uncollected_venues_unavailable_when_checkins_are_disabled(self):
-        QuestDefinition.objects.filter(code=QuestDefinition.Code.CHECK_IN).update(is_enabled=False)
-        client = APIClient()
-        client.force_authenticate(self.owner)
-
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            response = client.get("/api/venues")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(all(row["checkin_status"] == "UNAVAILABLE" for row in response.data))
-
-    def test_ready_venue_is_unavailable_when_daily_allowance_cannot_cover_reward(self):
-        ready = self.opportunity()
-        self.credit(61)
-        client = APIClient()
-        client.force_authenticate(self.owner)
-
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            response = client.get("/api/venues")
-
-        statuses = {row["id"]: row["checkin_status"] for row in response.data}
-        self.assertEqual(statuses[ready.venue_id], "UNAVAILABLE")
-        self.assertTrue(all(status == "UNAVAILABLE" for status in statuses.values()))
-
-    def test_ready_can_fill_daily_cap_and_collected_status_survives_exhausted_allowance(self):
-        second_cafe = Venue.objects.create(
-            name="Second Test CAFE", kind=Venue.Kind.CAFE,
-            latitude=-37.8, longitude=144.9, checkin_enabled=True,
-        )
-        ready = self.opportunity()
-        self.credit(60)
-        client = APIClient()
-        client.force_authenticate(self.owner)
-
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            before = client.get("/api/venues")
-        before_statuses = {row["id"]: row["checkin_status"] for row in before.data}
-        self.assertEqual(before_statuses[ready.venue_id], "READY")
-        self.assertEqual(before_statuses[second_cafe.pk], "UNAVAILABLE")
-
-        collect_checkin(owner=self.owner, checkin_id=ready.pk, now=self.now)
-        with patch("checkins.views.local_date", return_value=local_date(self.now)):
-            after = client.get("/api/venues")
-        after_statuses = {row["id"]: row["checkin_status"] for row in after.data}
-        self.assertEqual(after_statuses[ready.venue_id], "COLLECTED")
-        self.assertEqual(after_statuses[second_cafe.pk], "UNAVAILABLE")
-        self.assertTrue(all(
-            status == "UNAVAILABLE"
-            for venue_id, status in after_statuses.items()
-            if venue_id != ready.venue_id
-        ))
-
-
-    def test_server_times_continuous_dwell_then_requires_collection(self):
-        row = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        self.assertEqual((row.verified_seconds, row.status), (0, "IN_PROGRESS"))
-        for seconds in range(60, CHECKIN_SECONDS["CAFE"] + 1, 60):
-            row = report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=self.sample,
-                                          now=self.now + timedelta(seconds=seconds))
-        self.assertEqual(row.status, "READY")
-        self.assertEqual(row.verified_seconds, CHECKIN_SECONDS["CAFE"])
-        self.assertFalse(PointEntry.objects.exists(), "Location verification never credits directly.")
-        receipt = collect_checkin(owner=self.owner, checkin_id=row.pk, now=self.now + timedelta(seconds=601))
-        self.assertEqual(receipt["awarded_points"], 12)
-        self.assertEqual(PointEntry.objects.get().earn_category, "CHECK_IN")
-
-    def test_outside_or_missed_report_resets_continuous_dwell(self):
-        row = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        row = report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=self.sample,
-                                      now=self.now + timedelta(seconds=60))
+    def test_outside_then_reentry_accumulates_without_counting_outside_time(self):
+        row = self.start()
+        row = self.report(row, 60)
         self.assertEqual(row.verified_seconds, 60)
-        outside = dict(self.sample, latitude=-37.7)
-        row = report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=outside,
-                                      now=self.now + timedelta(seconds=90))
-        self.assertEqual(row.verified_seconds, 0)
-        row = report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=self.sample,
-                                      now=self.now + timedelta(seconds=200))
-        self.assertEqual(row.verified_seconds, 0)
+        row = self.report(row, 90, latitude=-37.7)
+        self.assertEqual(row.verified_seconds, 60)
+        self.assertFalse(row.is_accumulating)
+        row = self.report(row, 120, latitude=-37.7)
+        row = self.report(row, 180)
+        self.assertEqual(row.verified_seconds, 60)
+        row = self.report(row, 210)
+        self.assertEqual(row.verified_seconds, 90)
 
-    def test_cancel_removes_only_unready_attempt_and_reopens_slot(self):
-        row = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        self.assertIsNone(cancel_checkin(owner=self.owner, checkin_id=row.pk))
-        self.assertFalse(CheckIn.objects.filter(pk=row.pk).exists())
-        restarted = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        self.assertTrue(CheckIn.objects.filter(pk=restarted.pk).exists())
+    def test_missing_unreliable_and_simulated_samples_pause_without_reset(self):
+        for invalid in ({"accuracy_m": 31}, {"is_simulated": True}):
+            row = self.start("VET")
+            row = self.report(row, 60)
+            row = self.report(row, 90, **invalid)
+            self.assertEqual(row.verified_seconds, 60)
+            self.assertIsNone(row.last_verified_at)
+            row = self.report(row, 120)
+            self.assertEqual(row.verified_seconds, 60)
+            row = self.report(row, 150)
+            self.assertEqual(row.verified_seconds, 90)
+            row.delete()
+        row = self.start()
+        row = self.report(row, 60)
+        row = self.report(row, 200)
+        self.assertEqual(row.verified_seconds, 60)
+        row = self.report(row, 230)
+        self.assertEqual(row.verified_seconds, 90)
 
-    def test_reentry_starts_a_fresh_dwell_window(self):
-        row = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        outside = dict(self.sample, latitude=-37.7)
-        report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=outside,
-                                now=self.now + timedelta(seconds=30))
-        row = report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=self.sample,
-                                      now=self.now + timedelta(seconds=60))
-        self.assertEqual(row.verified_seconds, 0)
-        row = report_checkin_location(owner=self.owner, checkin_id=row.pk, sample=self.sample,
-                                      now=self.now + timedelta(seconds=90))
-        self.assertEqual(row.verified_seconds, 30)
+    def test_duplicate_and_out_of_order_sequences_or_receipt_times_never_add_time(self):
+        row = self.start()
+        row = self.report(row, 60)
+        row = self.report(row, 120, sequence=60, recorded_at=self.now + timedelta(seconds=60))
+        self.assertEqual(row.verified_seconds, 60)
+        self.assertEqual(row.last_recorded_at, self.now + timedelta(seconds=60))
+        row = self.report(row, 90, sequence=59)
+        self.assertEqual(row.verified_seconds, 60)
+        row = self.report(row, 30, sequence=200)
+        self.assertEqual(row.verified_seconds, 60)
+        row = self.report(row, 120)
+        self.assertEqual(row.verified_seconds, 60)
 
-    def test_start_respects_goal_points_in_shared_daily_cap(self):
-        self.credit(61, category="DAILY_GOAL")
+    def test_stale_or_conflicting_capture_pauses_the_interval(self):
+        row = self.start()
+        row = self.report(row, 60)
+        row = self.report(row, 120, recorded_at=self.now + timedelta(seconds=60))
+        self.assertEqual(row.verified_seconds, 60)
+        self.assertIsNone(row.last_verified_at)
+        row = self.report(row, 150)
+        row = self.report(row, 180)
+        self.assertEqual(row.verified_seconds, 90)
+        row = self.report(row, 190, sequence=180, latitude=-37.7,
+                          recorded_at=self.now + timedelta(seconds=180))
+        self.assertIsNone(row.last_verified_at)
+        self.assertEqual(row.verified_seconds, 90)
+
+    def test_higher_sequences_cannot_replay_older_capture_intervals(self):
+        row = self.start()
+        row = self.report(row, 60)
+        row = self.report(row, 75, sequence=100, recorded_at=self.now + timedelta(seconds=59))
+        self.assertEqual(row.verified_seconds, 60)
+        self.assertEqual(row.last_captured_at, self.now + timedelta(seconds=60))
+        row = self.report(row, 80, sequence=101, recorded_at=self.now + timedelta(seconds=60))
+        self.assertEqual(row.verified_seconds, 60)
+        self.assertIsNone(row.last_verified_at)
+        row = self.report(row, 90, sequence=110)
+        self.assertEqual(row.verified_seconds, 60)
+        row = self.report(row, 120)
+        self.assertEqual(row.verified_seconds, 90)
+
+    def test_queued_final_fix_ready_time_uses_capture_before_client_finish(self):
+        row = self.start("VET")
+        row = self.report(row, 60)
+        row = self.report(row, 120)
+        # Receipt is late, but the final GPS fix was captured before Finish.
+        row = self.report(row, 195, recorded_at=self.now + timedelta(seconds=180))
+        self.assertEqual(row.ready_at, self.now + timedelta(seconds=180))
+        walk = self.completed_walk(ended_at=self.now + timedelta(seconds=185))
+        from checkins.services import settle_walk_checkins
+        settle_walk_checkins(walk, now=self.now + timedelta(seconds=200))
+        row.refresh_from_db()
+        self.assertEqual(row.point_entry.amount, 12)
+
+    def test_ready_survives_departure_pause_finish_and_has_no_early_reward(self):
+        row = self.start("VET")
+        for seconds in (60, 120, 180):
+            row = self.report(row, seconds)
+        self.assertEqual((row.status, row.verified_seconds), ("READY", 180))
+        row = self.report(row, 210, latitude=-37.7)
+        cancel_checkin(owner=self.owner, checkin_id=row.pk)
+        update_walk_context(owner=self.owner, walk_request_id=self.context.request_id,
+                            started_at=self.context.started_at, state="FINISHED", now=self.now + timedelta(seconds=220))
+        row.refresh_from_db()
+        self.assertEqual(row.status, "READY")
+        self.assertFalse(PointEntry.objects.exists())
         with self.assertRaises(ValidationError):
-            start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        self.assertFalse(CheckIn.objects.exists())
+            collect_checkin(owner=self.owner, checkin_id=row.pk)
+        walk = self.completed_walk(ended_at=self.now + timedelta(seconds=220))
+        from checkins.services import settle_walk_checkins
+        settle_walk_checkins(walk, now=self.now + timedelta(seconds=230))
+        row.refresh_from_db()
+        self.assertEqual(row.point_entry.amount, 12)
 
-    def test_api_uuid_lifecycle_and_cross_surface_collection_are_idempotent(self):
-        client = APIClient()
-        client.force_authenticate(self.owner)
+    def test_context_pause_clears_anchor_and_terminal_reports_cannot_resume(self):
+        row = self.start()
+        self.report(row, 60)
+        update_walk_context(owner=self.owner, walk_request_id=self.context.request_id,
+                            started_at=self.context.started_at, state="PAUSED", now=self.now + timedelta(seconds=70))
+        row = self.report(row, 100)
+        self.assertEqual(row.verified_seconds, 60)
+        update_walk_context(owner=self.owner, walk_request_id=self.context.request_id,
+                            started_at=self.context.started_at, state="RECORDING", now=self.now + timedelta(seconds=110))
+        row = self.report(row, 120)
+        self.assertEqual(row.verified_seconds, 60)
+        row = self.report(row, 150)
+        self.assertEqual(row.verified_seconds, 90)
+        update_walk_context(owner=self.owner, walk_request_id=self.context.request_id,
+                            started_at=self.context.started_at, state="FINISHED", now=self.now + timedelta(seconds=155))
+        row = self.report(row, 180)
+        self.assertEqual(row.verified_seconds, 90)
+        with self.assertRaises(WalkConflictError):
+            update_walk_context(owner=self.owner, walk_request_id=self.context.request_id,
+                                started_at=self.context.started_at, state="RECORDING", now=self.now + timedelta(seconds=190))
+
+    def test_new_walk_never_inherits_partial_progress(self):
+        row = self.start()
+        self.report(row, 60)
+        new_id = uuid4()
+        context = update_walk_context(owner=self.owner, walk_request_id=new_id, started_at=self.now,
+                                      state="RECORDING", now=self.now)
+        row = self.start(context=context)
+        self.assertEqual(row.verified_seconds, 0)
+        self.assertEqual(CheckIn.objects.count(), 2)
+        self.context.refresh_from_db()
+        self.assertEqual(self.context.state, "FINISHED")
+
+    def test_new_walk_preserves_old_ready_visit_for_pending_upload(self):
+        row = self.opportunity("VET")
+        update_walk_context(owner=self.owner, walk_request_id=uuid4(), started_at=self.now,
+                            state="RECORDING", now=self.now)
+        self.context.refresh_from_db()
+        self.assertEqual(self.context.state, "FINISHED")
+        self.settle()
+        row.refresh_from_db()
+        self.assertEqual(row.point_entry.amount, 12)
+
+    def test_superseding_context_accepts_allowed_client_clock_skew(self):
+        future = update_walk_context(owner=self.owner, walk_request_id=uuid4(),
+                                     started_at=self.now + timedelta(seconds=10),
+                                     state="RECORDING", now=self.now)
+        update_walk_context(owner=self.owner, walk_request_id=uuid4(), started_at=self.now,
+                            state="RECORDING", now=self.now)
+        future.refresh_from_db()
+        self.assertEqual(future.state, "FINISHED")
+        self.assertEqual(future.ended_at, future.started_at)
+
+    def test_context_api_requires_initial_recording_and_immutable_identity(self):
+        client = self.api_client()
+        identity = uuid4()
+        body = {"walk_request_id": str(identity), "started_at": self.now.isoformat(), "state": "FINISHED"}
         with patch("checkins.services.timezone.now", return_value=self.now):
-            started = client.post(f"/api/venues/{self.venues['CAFE'].pk}/check-ins", self.sample, format="json")
-        self.assertEqual(started.status_code, 201)
-        attempt_id = started.data["id"]
-        for seconds in range(60, CHECKIN_SECONDS["CAFE"] + 1, 60):
-            with patch("checkins.services.timezone.now", return_value=self.now + timedelta(seconds=seconds)):
-                reported = client.post(f"/api/check-ins/{attempt_id}/locations", self.sample, format="json")
-            self.assertEqual(reported.status_code, 200)
-        self.assertEqual(reported.data["status"], "READY")
-        with patch("checkins.services.timezone.now", return_value=self.now + timedelta(seconds=601)):
-            first = client.post(f"/api/check-ins/{attempt_id}/collect", {}, format="json")
-            replay = client.post(f"/api/check-ins/{attempt_id}/collect/", {"request_id": str(uuid4())}, format="json")
-            cancelled = client.post(f"/api/check-ins/{attempt_id}/cancel", {}, format="json")
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(replay.status_code, 200)
-        self.assertEqual(first.data, replay.data)
-        self.assertEqual(cancelled.data["status"], "COLLECTED")
-        self.assertEqual(PointEntry.objects.filter(earn_category="CHECK_IN").count(), 1)
-        self.assertFalse(PointEntry.objects.filter(earn_category="DAILY_GOAL").exists())
+            self.assertEqual(client.post("/api/check-ins/walk-context", body, format="json").status_code, 400)
+            body["state"] = "RECORDING"
+            self.assertEqual(client.post("/api/check-ins/walk-context", body, format="json").status_code, 200)
+            body["started_at"] = (self.now - timedelta(seconds=1)).isoformat()
+            self.assertEqual(client.post("/api/check-ins/walk-context", body, format="json").status_code, 409)
 
-    def test_api_uuid_location_and_cancel_are_owner_scoped(self):
-        row = start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=self.sample, now=self.now)
-        client = APIClient()
-        client.force_authenticate(self.other)
-        for action in ("locations", "cancel", "collect"):
-            response = client.post(f"/api/check-ins/{row.attempt_id}/{action}", self.sample if action == "locations" else {}, format="json")
-            self.assertEqual(response.status_code, 404)
-        self.assertTrue(CheckIn.objects.filter(pk=row.pk).exists())
-        client.force_authenticate(self.owner)
-        response = client.post(f"/api/check-ins/{row.attempt_id}/cancel/", {}, format="json")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(CheckIn.objects.filter(pk=row.pk).exists())
-
-    def test_start_rejects_forged_or_imprecise_locations(self):
-        for sample in (dict(self.sample, is_simulated=True), dict(self.sample, accuracy_m=31), dict(self.sample, latitude=-37.7)):
-            with self.subTest(sample=sample), self.assertRaises(ValidationError):
-                start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk, sample=sample, now=self.now)
+    def test_start_requires_recording_walk_and_reliable_in_radius_gps(self):
+        for request_id, sample in ((uuid4(), self.sample), (self.context.request_id, {**self.sample, "accuracy_m": 31}),
+                                   (self.context.request_id, {**self.sample, "is_simulated": True}),
+                                   (self.context.request_id, {**self.sample, "latitude": -37.7})):
+            with self.assertRaises(ValidationError):
+                start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk,
+                              walk_request_id=request_id, sample={**sample, "recorded_at": self.now}, now=self.now)
         self.assertFalse(CheckIn.objects.exists())
 
-    def test_progress_and_venue_api_are_owner_scoped(self):
-        client = APIClient()
-        client.force_authenticate(self.owner)
-        response = client.get("/api/venues")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 4)
-        for venue in response.json():
-            self.assertIsInstance(venue["latitude"], (int, float))
-            self.assertIsInstance(venue["longitude"], (int, float))
-        started = client.post(f"/api/venues/{self.venues['CAFE'].pk}/check-ins", self.sample, format="json")
-        self.assertEqual(started.status_code, 201)
-        self.assertEqual(started.data["status"], "IN_PROGRESS")
-        progress = client.get("/api/check-ins")
-        self.assertEqual(progress.status_code, 200)
-        self.assertEqual(progress.data["items"][0]["id"], started.data["id"])
-        self.assertEqual(progress.data["local_date"], local_date())
+    def test_scope_map_returns_independent_venue_progress_and_all_partner_receipts(self):
+        second = Venue.objects.create(name="Second Cafe", kind="CAFE", latitude=-37.8, longitude=144.9,
+                                      checkin_enabled=True, is_partner=True)
+        row = self.start()
+        query = f"?walk_request_id={self.context.request_id}"
+        with patch("checkins.services.timezone.now", return_value=self.now):
+            response = self.api_client().get("/api/venues" + query)
+        records = {record["id"]: record for record in response.data}
+        self.assertEqual(records[row.venue_id]["check_in"]["verified_seconds"], 0)
+        self.assertEqual(records[second.pk]["checkin_status"], "AVAILABLE")
+        self.assertIsNone(records[second.pk]["check_in"])
+        CheckIn.objects.filter(pk=row.pk).update(verified_seconds=600, ready_at=self.now)
+        self.settle()
+        with patch("checkins.views.local_date", return_value=local_date(self.now)), patch("checkins.services.timezone.now", return_value=self.now):
+            response = self.api_client().get("/api/venues" + query)
+        for record in response.data:
+            if record["kind"] == "CAFE":
+                self.assertEqual(record["checkin_status"], "COLLECTED")
+
+    def test_non_partner_businesses_are_excluded_and_cannot_start(self):
+        client = self.api_client()
+        Venue.objects.filter(kind__in=("CAFE", "RESTAURANT")).update(is_partner=False)
+        with patch("checkins.services.timezone.now", return_value=self.now):
+            self.assertEqual({row["kind"] for row in client.get("/api/venues").data}, {"VET", "PARK"})
+            body = {**self.sample, "recorded_at": self.now.isoformat(), "walk_request_id": str(self.context.request_id)}
+            for kind in ("CAFE", "RESTAURANT"):
+                response = client.post(f"/api/venues/{self.venues[kind].pk}/check-ins", body, format="json")
+                self.assertEqual(response.status_code, 404)
+        self.assertFalse(CheckIn.objects.exists())
+
+    def test_withdrawn_partnership_pauses_pending_venue_progress(self):
+        row = self.start()
+        row = self.report(row, 60)
+        self.venues["CAFE"].is_partner = False
+        self.venues["CAFE"].save(update_fields=("is_partner",))
+        row = self.report(row, 90)
+        self.assertEqual(row.verified_seconds, 60)
+        self.assertIsNone(row.last_verified_at)
+
+    def test_map_does_not_carry_yesterdays_collection_into_todays_status(self):
+        row = self.opportunity("VET")
+        self.settle()
+        tomorrow = self.now + timedelta(days=1)
+        with patch("checkins.views.local_date", return_value=local_date(tomorrow)), patch("checkins.services.timezone.now", return_value=tomorrow):
+            client = self.api_client()
+            response = client.get(f"/api/venues?walk_request_id={self.context.request_id}")
+            venue = next(item for item in response.data if item["id"] == row.venue_id)
+            self.assertEqual(venue["checkin_status"], "AVAILABLE")
+            self.assertIsNone(venue["check_in"])
+            self.assertEqual(client.get(f"/api/check-ins?walk_request_id={self.context.request_id}").data["items"], [])
+        row.refresh_from_db()
+        self.assertEqual(row.point_entry.amount, 12)
+
+    def test_api_sequence_context_and_owner_scope(self):
+        client = self.api_client()
+        data = {**self.sample, "recorded_at": self.now.isoformat(), "walk_request_id": str(self.context.request_id)}
+        with patch("checkins.services.timezone.now", return_value=self.now):
+            response = client.post(f"/api/venues/{self.venues['VET'].pk}/check-ins", data, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["walk_request_id"], str(self.context.request_id))
+        attempt = response.data["id"]
+        with patch("checkins.services.timezone.now", return_value=self.now + timedelta(seconds=60)):
+            response = client.post(f"/api/check-ins/{attempt}/locations", {**self.sample, "sequence": 60, "recorded_at": (self.now + timedelta(seconds=60)).isoformat()}, format="json")
+        self.assertEqual(response.data["verified_seconds"], 60)
+        self.assertEqual(client.post(f"/api/check-ins/{attempt}/collect", {}).status_code, 400)
+        other = self.api_client(self.other)
+        for action in ("locations", "pause", "collect"):
+            self.assertEqual(other.post(f"/api/check-ins/{attempt}/{action}", {**self.sample, "recorded_at": self.now.isoformat()}, format="json").status_code, 404)
+        scoped = other.get(f"/api/check-ins?walk_request_id={self.context.request_id}")
+        self.assertEqual(scoped.data["items"], [])
+        self.assertEqual(client.get("/api/venues?walk_request_id=not-a-uuid").status_code, 400)
+
+    def test_walk_post_settles_atomic_receipt_and_response_loss_retries(self):
+        row = self.opportunity("VET")
+        breed = Breed.objects.create(name="Test breed", energy_level="LOW", default_size="SMALL")
+        dog = Dog.objects.create(owner=self.owner, name="Dog", breed=breed, age_months=12,
+                                 size="SMALL", is_brachycephalic=False)
+        data = {"request_id": str(self.context.request_id), "started_at": self.context.started_at.isoformat(),
+                "ended_at": self.now.isoformat(), "dog_ids": [dog.pk], "samples": [
+                    {"latitude": -37.8, "longitude": 144.9, "accuracy_m": 5,
+                     "recorded_at": stamp.isoformat()} for stamp in (self.context.started_at, self.now)]}
+        client = self.api_client()
+        with patch("walks.services.timezone.now", return_value=self.now), patch("checkins.services.credit_points", side_effect=RuntimeError("simulated write failure")):
+            with self.assertRaises(RuntimeError):
+                client.post("/api/walks", data, format="json")
+        self.assertFalse(Walk.objects.exists())
+        self.assertFalse(PointEntry.objects.exists())
+        with patch("walks.services.timezone.now", return_value=self.now):
+            first = client.post("/api/walks", data, format="json")
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(first.data["points_awarded"], 0)
+        self.assertEqual(first.data["check_in_points_awarded"], 12)
+        self.assertEqual(first.data["total_points_awarded"], first.data["wallet_balance"])
+        self.assertEqual(first.data["check_in_awards"][0]["venue_id"], row.venue_id)
+        QuestDefinition.objects.filter(code="CHECK_IN").update(is_enabled=False)
+        self.venues["VET"].is_active = False
+        self.venues["VET"].save()
+        replay = client.post("/api/walks", data, format="json")
+        self.assertEqual(replay.data["check_in_awards"], first.data["check_in_awards"])
+        self.assertEqual(PointEntry.objects.count(), 1)
+        changed = {**data, "ended_at": (self.now + timedelta(seconds=1)).isoformat()}
+        self.assertEqual(client.post("/api/walks", changed, format="json").status_code, 409)
