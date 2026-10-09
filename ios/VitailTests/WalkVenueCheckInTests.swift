@@ -398,13 +398,13 @@ final class WalkVenueCheckInTests: XCTestCase {
             let presentation = WalkVenuePresentation(state: state, verifiedSeconds: 90, requiredSeconds: 180, category: "Vet")
             let content = VStack(spacing: 20) {
                 Text("Venue check-in").font(.title)
-                WalkVenueMarker(venue: WalkVenueFixture.venue(), presentation: presentation, action: {})
+                WalkVenueMarker(venue: WalkVenueFixture.venue(), presentation: presentation,
+                    reduceMotionOverride: true, action: {})
                 Text(presentation.message)
                 Text("Veterinary clinic · 1 Test Street · stay 3 min within 20 metres")
             }
             .padding(24)
             .frame(width: 393, height: 500)
-            .environment(\.accessibilityReduceMotion, true)
             .environment(\.dynamicTypeSize, .accessibility1)
             .vitailAppearance()
             let renderer = ImageRenderer(content: content)

@@ -4,10 +4,22 @@ struct WalkVenueMarker: View {
     let venue: CheckInVenue
     let presentation: WalkVenuePresentation
     let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let reduceMotionOverride: Bool?
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var completionFlash = false
     @State private var completionEvent: UUID?
 
+    // SwiftUI's accessibility preference is read-only. An explicit override
+    // lets render tests exercise reduced motion without changing device settings.
+    init(venue: CheckInVenue, presentation: WalkVenuePresentation,
+         reduceMotionOverride: Bool? = nil, action: @escaping () -> Void) {
+        self.venue = venue
+        self.presentation = presentation
+        self.reduceMotionOverride = reduceMotionOverride
+        self.action = action
+    }
+
+    private var reduceMotion: Bool { reduceMotionOverride ?? systemReduceMotion }
     private var completed: Bool { presentation.state == .ready || presentation.state == .collected }
     private var glowing: Bool { presentation.state == .accumulating || completionFlash }
 
