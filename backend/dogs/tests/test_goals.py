@@ -499,7 +499,7 @@ class DailyGoalTests(GoalFixture, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["timezone"], "Australia/Melbourne")
         self.assertEqual(response.data["daily_goals"][0]["days"][-1]["state"], "NOT_ELIGIBLE")
-        self.assertEqual(response.data["goal_rewards_status"], "PENDING_MULTI_DOG_POLICY")
+        self.assertEqual(response.data["goal_rewards_status"], "AVAILABLE")
         self.assertEqual(PointEntry.objects.count(), 0)
 
     def test_read_api_exposes_each_dog_photo_with_its_daily_goal(self):

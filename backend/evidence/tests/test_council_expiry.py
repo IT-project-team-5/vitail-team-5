@@ -46,7 +46,7 @@ class CouncilExpiryTests(APITestCase):
 
     def payload(self, **changes):
         data = {"request_id": str(uuid4()), "dog_id": self.dog.pk, "kind": "COUNCIL_REGISTRATION",
-                "registration_number": "00042", "council_name": "City of Melbourne", "valid_to": "2027-06-15"}
+                "registration_number": "00042", "council_name": "Melbourne City Council", "valid_to": "2027-06-15"}
         data.update(changes)
         return data
 
@@ -255,7 +255,7 @@ class CouncilExpiryConcurrencyTests(TransactionTestCase):
                 barrier.wait(timeout=10)
                 submitted = client.post("/api/quests/documents", {
                     "request_id": str(uuid4()), "dog_id": dog.pk, "kind": "COUNCIL_REGISTRATION",
-                    "registration_number": "00042", "council_name": "City of Melbourne", "valid_to": "2028-06-15",
+                    "registration_number": "00042", "council_name": "Melbourne City Council", "valid_to": "2028-06-15",
                 }, format="json")
                 self.assertEqual(submitted.status_code, 201)
                 return client.post(f"/api/quests/documents/entitlements/{submitted.data['entitlement_id']}/collect", {}, format="json")

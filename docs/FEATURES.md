@@ -1,6 +1,6 @@
 # Feature Status
 
-Updated 8 October 2026. **Connected** means a real client/API
+Updated 10 October 2026. **Connected** means a real client/API
 flow exists; it does not certify every physical-device acceptance case.
 **Foundation** means data/services are prepared but the end-user feature is not
 complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
@@ -9,7 +9,7 @@ complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 |---|---|---|
 | Email authentication | Connected | Owner registration; admin-created café login; authoritative role routing; shared Keychain refresh and logout |
 | Login and appearance | Connected | Same-page role accordions; Debug-only backend override below the fold; persisted System/Light/Dark |
-| Owner/dog profiles | Connected | Profile photos, name editing and logout; selectable social map avatar; up to 10 owner-scoped dogs; birthday-derived age with safe legacy unknown birthdays; new-owner Add Dog modal |
+| Owner/dog profiles | Connected | Profile photos, name editing and logout; selectable social map avatar; up to two owner-scoped dogs; required new-profile weight and derived internal size; guided resumable onboarding; birthday-derived age with legacy preservation; new iOS flow awaiting build/device verification |
 | Owner navigation | Connected | Account / Walk / Quest / Venues / Redeem; Friends opens from Account; Walk owns the walk/social map and location stream, while Venues has a separate check-in discovery map; wallet/coffee estimate only in Redeem |
 | Walk tracking/history | Connected; physical acceptance pending | Full map, draggable/scrollable drawer, Start/Pause/Resume/Finish, protected drafts/history and paused recovery; no tracking while terminated |
 | Walking points | Connected | Explicit finish/dog confirmation, measured segmented GPS, durable retries and server receipts; no-dog records remain local with zero points |
@@ -22,7 +22,7 @@ complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
 | Expiry/refunds/admin | Connected | Automatic due expiry/refunds; positive admin grants and repeat-safe pending-order cancellation; these controls do not constitute a full audit/dispute system |
 | Venue normalization | Connected | Canonical Venue and Reward relationship; café APIs preserved; the authenticated Venues map exposes every active, check-in-enabled, geocoded place while rewards remain limited to one venue per category each day |
 | Check-in progress/collection | Connected; physical acceptance pending | Live Core Location and authenticated start/resume/location/cancel/collect APIs; Walk, Quest and Venues share progress. Server-verified dwell, attempt UUIDs, daily category uniqueness and ledger cap; no partial awards |
-| Daily goals | Personalised targets and progress connected; payouts disabled | Server recommendations with owner 50–200% adjustment share Admin's effective-dated target history. Frozen daily results and seven-day goal streaks remain in Quest. Reward scope and any/all-dog qualification remain open; see [daily goals](DAILY_GOALS.md) |
+| Daily goals | Implemented; iOS/device verification pending | Backend-authoritative 50–200% slider previews; immutable targets, independent progress and 20-point collection per dog/day; one 72-point account activity cap. See [daily goals](DAILY_GOALS.md) |
 | Streak rewards | Connected | Verified walking days per Melbourne date; missed-day reset; one x / milestone bar and explicit collection; each run earns 7-day then 30/60/90… rewards; earned claims survive a break |
 | Friends and blocks | Connected | Search by display name/public ID, requests, removal, directional blocks, selectable map avatar and privacy controls; login email is never exposed |
 | Live sessions/location/Net-Walking | Connected; physical acceptance pending; wallet rewards disabled | Walk publishes through authenticated session APIs from its existing Core Location stream. Friend and nearby-partner visibility are independent and default off; invitations grant exact partner position; server shows verified together-distance. Raw GPS has a 15-minute rolling retention worker. No reward estimate or credit is shown while policy is disabled |
@@ -36,3 +36,7 @@ The 24-table core foundation includes a Walk–Dog relation and explicit
 proof that its feature is enabled.
 See [database coverage](database-design-2026-09-25/README.md),
 [Walk device acceptance](WALK_TESTING.md) and [open decisions](DECISIONS.md).
+
+New onboarding, council selection and registration-gated redemption are implemented.
+See [current verification](OWNER_JOURNEY_REPORT.md) and the
+[mandatory physical checklist](OWNER_JOURNEY_ACCEPTANCE.md); no PR is authorised yet.

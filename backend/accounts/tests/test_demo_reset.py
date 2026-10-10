@@ -49,6 +49,8 @@ class DemoResetTests(TestCase):
         cls.walk.dogs.add(cls.dog)
         cls.reward = Reward.objects.create(venue=venue_for(cls.cafe), name="Old Coffee", point_cost=40)
         credit_points(user=cls.owner, amount=100)
+        from evidence.tests import register_microchip
+        register_microchip(cls.owner, cls.dog)
         cls.order = create_redemption(owner=cls.owner, reward_id=cls.reward.pk)
         cls.session = Session.objects.create(
             session_key="old-session", session_data="old-session-data", expire_date=now + timedelta(days=1),

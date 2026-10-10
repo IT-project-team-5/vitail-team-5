@@ -118,7 +118,8 @@ struct Dog: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-struct DogWriteRequest: Encodable, Sendable {
+struct DogWriteRequest: Codable, Sendable {
+    var requestID: UUID? = nil
     let name: String
     let breedID: Int
     let ageMonths: Int
@@ -141,6 +142,7 @@ struct DogWriteRequest: Encodable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(requestID, forKey: .requestID)
         try container.encode(breedID, forKey: .breedID)
         try container.encode(ageMonths, forKey: .ageMonths)
         try container.encode(size, forKey: .size)
@@ -151,6 +153,7 @@ struct DogWriteRequest: Encodable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case name, size
+        case requestID = "request_id"
         case breedID = "breed_id"
         case ageMonths = "age_months"
         case dateOfBirth = "date_of_birth"
@@ -159,11 +162,13 @@ struct DogWriteRequest: Encodable, Sendable {
     }
 }
 
-struct DogGoalRequest: Encodable, Sendable {
+struct DogGoalRequest: Codable, Sendable {
+    var requestID: UUID? = nil
     let ownerAdjustment: String
     let effectiveFrom: String
     enum CodingKeys: String, CodingKey {
         case ownerAdjustment = "owner_adjustment", effectiveFrom = "effective_from"
+        case requestID = "request_id"
     }
 }
 

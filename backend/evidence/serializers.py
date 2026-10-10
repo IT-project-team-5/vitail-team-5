@@ -119,6 +119,12 @@ class DocumentRequestSerializer(serializers.Serializer):
                     raise serializers.ValidationError({"registration_number": "Use letters, numbers, spaces and hyphens from your Animal ID or registration number."})
                 if not attrs.get("council_name"):
                     raise serializers.ValidationError({"council_name": "Confirm the Council named on your registration."})
+                from .councils import council_data
+                # Already accepted requests replay above; historical corrections can
+                # retain their original name, but new submissions require a selection.
+                if (not correction or attrs["council_name"] != correction.council_name) and not any(
+                        row["name"] == attrs["council_name"] for row in council_data()):
+                    raise serializers.ValidationError({"council_name": "Select a Council from the search results."})
                 if not attrs.get("valid_to"):
                     raise serializers.ValidationError({"valid_to": "Confirm the expiry date printed on the registration."})
                 if attrs.get("registry_name"):

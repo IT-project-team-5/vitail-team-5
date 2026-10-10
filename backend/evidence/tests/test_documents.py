@@ -68,7 +68,7 @@ class DocumentApiTests(APITestCase):
         if "registration_number" not in changes and data["kind"] == "MICROCHIP_REGISTRATION":
             data["registration_number"] = "012345678901234"
         if data["kind"] == "COUNCIL_REGISTRATION":
-            data.setdefault("council_name", "City of Melbourne")
+            data.setdefault("council_name", "Melbourne City Council")
             data.setdefault("valid_to", "2027-04-09")
         return data
 
@@ -148,7 +148,7 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         submission = response.data["submission"]
         self.assertEqual(submission["registration_number"], "00042-AB")
-        self.assertEqual(submission["council_name"], "City of Melbourne")
+        self.assertEqual(submission["council_name"], "Melbourne City Council")
         self.assertIsNone(submission["registration_year"])
         self.assertEqual(submission["valid_to"], "2027-04-09")
         for changes in ({"council_name": ""}, {"valid_to": None}, {"registration_year": 2027},
@@ -164,7 +164,7 @@ class DocumentApiTests(APITestCase):
         response = self.post(self.payload(registration_number="ABC/42", file_base64=proof))
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["submission"]["registration_number"], "ABC/42")
-        self.assertEqual(response.data["submission"]["council_name"], "City of Melbourne")
+        self.assertEqual(response.data["submission"]["council_name"], "Melbourne City Council")
         self.assertIsNone(response.data["submission"]["registration_year"])
 
     def test_registration_photo_bytes_remain_private_and_filename_follows_actual_format(self, _today):
@@ -785,7 +785,7 @@ class DocumentConcurrencyTests(TransactionTestCase):
                 submitted = client.post("/api/quests/documents", {
                     "request_id": str(uuid4()), "dog_id": dog.pk,
                     "kind": kind, "registration_number": "012345678901234",
-                    **({"council_name": "City of Melbourne", "valid_to": "2027-04-09"} if kind == "COUNCIL_REGISTRATION" else {}),
+                    **({"council_name": "Melbourne City Council", "valid_to": "2027-04-09"} if kind == "COUNCIL_REGISTRATION" else {}),
                 }, format="json")
                 return client.post(f"/api/quests/documents/entitlements/{submitted.data['entitlement_id']}/collect", {}, format="json")
             finally:

@@ -154,3 +154,24 @@ remove only the new file and roll back database work.
 (JWT or Django admin session), with private/no-store, nosniff and sandbox headers.
 The admin evidence view is read-only. Dog deletion preserves evidence, identity
 snapshots, entitlements and points.
+
+## Council lookup and purchase eligibility (10 October 2026)
+
+`GET /api/councils?q=...` (OWNER) searches canonical Council names or exactly
+four ASCII postcode digits. Empty search returns []; invalid numeric postcodes
+return 400; postcodes can match several councils. New submissions must use an
+explicit canonical selection. OCR remains a suggestion. Corrections may retain
+an original historical name; accepted UUID replays retain their original receipt.
+The [dataset provenance and limitations](COUNCIL_DATA.md) describe Victoria-only
+coverage from the VEC source, not a guarantee of the property's legal boundary.
+
+Accepted microchip registration permits purchases without collecting its reward.
+Every current dog's latest microchip submission must be unrejected with an
+eligible entitlement. Council registration is separate. Purchases recheck under
+the owner lock; no mandatory admin approval is introduced.
+
+Django Admin filters by dog/type/audit status and searches owner email/name,
+current/historical dog name and reference. The existing protected file endpoint
+accepts `?preview=1` for inline original evidence; its default downloads the
+original. Both require the existing owner/admin authentication and keep the same
+private/no-store, nosniff and sandbox response headers.

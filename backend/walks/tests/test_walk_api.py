@@ -347,6 +347,9 @@ class WalkApiTests(APITestCase):
         self.assert_wallet(0)
 
     def test_earned_walk_points_can_buy_the_cafes_canonical_reward(self):
+        from evidence.tests import register_microchip
+        register_microchip(self.owner, self.dog)
+        register_microchip(self.owner, self.second_dog)
         reward = Reward.objects.create(venue=venue_for(self.cafe), name="Walk coffee", point_cost=8)
         walked = self.submit(self.payload())
         self.assertEqual(walked.status_code, status.HTTP_201_CREATED)

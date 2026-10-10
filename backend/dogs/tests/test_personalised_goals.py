@@ -151,7 +151,7 @@ class PersonalisedAPITests(PersonalisedFixture, TestCase):
         self.assertEqual(goal.inputs_snapshot["calculation_inputs"], target.calculation_inputs)
         self.assertEqual(goal.inputs_snapshot["calculation_policy"], POLICY)
         self.assertFalse(PointEntry.objects.exists())
-        self.assertEqual(self.client.get("/api/quests").data["goal_rewards_status"], "PENDING_MULTI_DOG_POLICY")
+        self.assertEqual(self.client.get("/api/quests").data["goal_rewards_status"], "AVAILABLE")
 
     def test_limits_types_and_client_supplied_calculation_rejected(self):
         for value in (".49", "2.01", "NaN", "Infinity", True, None, ".505", "junk"):
@@ -198,8 +198,10 @@ class PersonalisedAPITests(PersonalisedFixture, TestCase):
         response = self.client.patch(f"/api/dogs/{self.dog.pk}", {"weight_kg": "9.99"}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["weight_kg"], "9.99")
-        self.assertEqual(self.client.patch(f"/api/dogs/{self.dog.pk}", {"weight_kg": None}, format="json").status_code, 200)
-        self.assertFalse(self.client.get(self.url).data["eligible"])
+        self.assertEqual(self.client.patch(f"/api/dogs/{self.dog.pk}", {"weight_kg": None}, format="json").status_code, 400)
+        self.assertTrue(self.client.get(self.url).data["eligible"])
+        self.dog.refresh_from_db()
+        self.assertEqual(self.dog.weight_kg, Decimal("9.99"))
 
     def test_changes_duplicate_dates_and_backdating_rejected(self):
         self.assertEqual(self.post(effective_from=(self.day - timedelta(days=1)).isoformat()).status_code, 400)

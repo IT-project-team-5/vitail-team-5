@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 8 October 2026. The latest confirmed conversation and
+Current as of 10 October 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -18,14 +18,14 @@ below are retained where other project documents cite them.
 | R6–R10 | Walks start manually, require accurate GPS, use basic speed/accuracy checks, and stop after the inactivity limit; this is not advanced anti-cheat |
 | R12 / R15 / R16 / R33 | Expiring point credits; order creation deducts once and issues a reference; uncollected orders expire at Melbourne midnight and refund |
 | R26 | Personal-data deployment must use an Australian region; provider remains undecided |
-| R31 | Per-dog goal progress. The 20-point baseline includes goals in the 72-point combined cap. Per-dog/account reward and cap scope, and any/all participant qualification remain open (clarified 4 October); earlier once-per-account wording is not definitive |
-| R32 | Current app limit: 10 dogs per owner; the relational model supports multiple dogs |
+| R31 | Confirmed 10 October: each dog explicitly collects 20 points per Melbourne day after completing its own goal. Walking, both dogs' goals and check-ins share one 72-point account cap. Full awards only; no partial goal points |
+| R32 | Maximum two dogs per owner, enforced in API, model/Admin and SwiftUI. Existing accounts with more dogs retain their records and edit access; new creation/transfer into a full account is rejected |
 | R35 / R41 | Native SwiftUI app for iOS 17+; feature-first structure, shared services and a small design system |
 | R37 / R38 | Explicit venue check-in start/resume is connected through live GPS and authenticated APIs; physical acceptance remains pending. OWNER and CAFE use one iOS app; ADMIN uses Django Admin |
 | R39 | Order collection has no location gate in this delivery |
 | R36 / R40 | Current auth is email/password, owner self-registration and admin-created café accounts. Apple sign-in follows project-owned developer-account setup; password reset and in-app deletion remain later requirements |
 | R42 / R43 | Admin onboards cafés; cafés edit their own venue and menu. Product unlisting preserves existing order snapshots |
-| R44 / R45 | Minimal owner UI, first-dog modal, avatar-based profile editing/logout, photo picker/crop, café Maps links and role-specific photo placeholders |
+| R44 / R45 | Minimal owner UI, guided account → dog → goal onboarding, avatar-based profile editing/logout, photo picker/crop, café Maps links and role-specific photo placeholders |
 | R46 | Start before selecting dogs; Finish saves an unconfirmed summary. Explicit dog confirmation enables upload. No-dog completion saves locally for zero points; automatic stops/logout do not choose participants |
 | R47 | Café-first menus; purchase confirmation opens the receipt; collection uses an owner slide gesture |
 | R48 | Latest policy replaces the temporary coffee estimate. It is display guidance only and does not reprice products or old orders |
@@ -42,6 +42,11 @@ below are retained where other project documents cite them.
 | R62 | Owners may create a local image card for a completed walk and choose its date, dog names and confirmed points. Routes, coordinates and place details are excluded; the system share sheet is the only distribution path. |
 | R63 | Friends and Net-Walking open from Account; Walk is the walk/social map and supplies the sole walk/social location stream. Venues remains a separate check-in discovery map. Friend sharing and nearby matching are independent, default-off choices. A selectable virtual avatar may replace the profile photo on the social map. Explicit invitation acceptance reveals the exact partner position and enables verified together-distance. Net-Walk wallet points remain disabled and unapproved estimates are absent from UI/API. |
 | R64 | Social presence expires after 30 seconds. Raw session samples form a rolling 15-minute verification buffer and are purged by a once-per-minute worker; interval summaries retain distance/time without exposing a route. Leaderboard is outside this team's delivery. |
+
+| R65 | New owners resume dog/goal setup until explicit completion. Existing accounts default complete. Weight replaces manual size selection; established breed defaults supply internal size. Request UUIDs protect dog and goal retries |
+| R66 | New purchases require accepted microchip registration for every current dog. Collecting document points and mandatory admin approval are not prerequisites. The selected product remains available after completing registration |
+| R67 | Council selection uses real VEC locality/postcode data, supports overlapping postcodes and validates canonical names. Originals remain private; Django Admin supports secure preview/download |
+| R68 | No PR until iOS automated verification and physical-iPhone scenarios A–E are complete, recorded and sent to Chien. Current acceptance is recorded separately from backend results |
 
 The database normalizes Venue, keeps one PointEntry ledger and adds specific
 daily-goal, check-in, live-location, Net-Walk invitation/interval and friendship
@@ -83,8 +88,8 @@ from its clock or fabricate venue opportunities.
 
 | Reference | Decision still needed | Current safe behavior |
 |---|---|---|
-| O5 | Does the cap include net-walk rewards? What are the per-dog/account goal reward and cap scope, any/all participant rule and partial-award rules? | Goal membership confirmed: 40 walking + 20 goal + 12 check-in within 72. Goal payouts remain disabled pending multi-dog scope/eligibility; net and partial rewards remain disabled |
-| O6 | Daily-goal duration formula confirmed 6 October 2026 | Weight baseline × breed energy × calendar age × brachycephalic factor; owner exercise adjustment 50–200% once, default 100%. Owner and Admin share one immutable target history. No additional heat factor is invented. Reward scope and any/all-dog qualification remain unresolved; payouts stay disabled. See DAILY_GOALS.md |
+| O5 | Does the cap include net-walk rewards? | Net earning stays disabled. Daily goals are resolved in R31; partial goal/check-in awards remain disabled |
+| O6 (resolved) | Daily-goal duration formula confirmed 6 October 2026 | Weight baseline × breed energy × calendar age × brachycephalic factor, then owner adjustment 50–200% exactly once. Immutable owner/Admin history; no invented heat factor. Reward scope resolved in R31. See DAILY_GOALS.md |
 | O7 | Final rounding/minimum-walk policy | Current walking implementation rounds cumulative daily distance down; it invents no minimum-duration reward requirement |
 | O8 | Weather source and heat-adjustment inputs | No weather-based goal calculation or provider claim |
 | O9 | Broader retention, access and account-erasure policy for routes, evidence and history | Social raw GPS has a working rolling 15-minute purge and stale-read rejection. Check-in keeps only current server-timed progress and its latest fix, not raw sample rows; local completed routes and private originals retain their documented behavior. Account-wide erasure/anonymisation remains unresolved |

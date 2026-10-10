@@ -25,6 +25,9 @@ User = get_user_model()
 class QuestDebugResetTests(APITestCase):
     def setUp(self):
         self.now = datetime(2026, 10, 8, 12, tzinfo=ZoneInfo("Australia/Melbourne"))
+        clock = patch("django.utils.timezone.now", side_effect=lambda: self.now)
+        clock.start()
+        self.addCleanup(clock.stop)
         self.owner = User.objects.create_user(email="reset-owner@example.com", display_name="Owner")
         self.other = User.objects.create_user(email="reset-other@example.com", display_name="Other")
         self.cafe = User.objects.create_user(email="reset-cafe@example.com", display_name="Cafe", role=User.Role.CAFE)

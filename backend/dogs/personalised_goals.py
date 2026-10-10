@@ -104,7 +104,7 @@ def target_data(target):
 
 
 @transaction.atomic
-def owner_goal(*, dog, owner, effective_from=None, owner_adjustment=Decimal("1.00"), save=False):
+def owner_goal(*, dog, owner, effective_from=None, owner_adjustment=Decimal("1.00"), save=False, request_id=None):
     if dog.owner_id != owner.pk:
         raise ValidationError("This dog does not belong to you.")
     dog = lock_goal_dog(dog)
@@ -113,11 +113,22 @@ def owner_goal(*, dog, owner, effective_from=None, owner_adjustment=Decimal("1.0
     effective_from = effective_from or next_effective_date(dog)
     result = recommend(dog=dog, effective_from=effective_from, owner_adjustment=owner_adjustment)
     if save:
+        previous = DogGoalTarget.objects.filter(dog=dog, owner=owner,
+            owner_version=dog.goal_owner_version, request_id=request_id).first() if request_id else None
+        if previous:
+            if (previous.effective_from != effective_from or
+                    Decimal(previous.calculation_inputs["owner_adjustment"]) != owner_adjustment):
+                raise ValidationError({"request_id": "This request was already used for different goal settings."})
+            result.update(eligible=True, missing_inputs=[], reason=None,
+                target_seconds=previous.target_active_seconds,
+                suggested_minutes=previous.calculation_inputs["suggested_minutes"],
+                target_minutes=previous.calculation_inputs["target_minutes"],
+                calculation_inputs=previous.calculation_inputs)
         if not result["eligible"]:
             raise ValidationError({"profile": result["reason"], "missing_inputs": result["missing_inputs"]})
-        target = configure_target(dog=dog, effective_from=effective_from,
+        target = previous or configure_target(dog=dog, effective_from=effective_from,
             target_active_seconds=result["target_seconds"], calculation_policy=POLICY,
-            calculation_inputs=result["calculation_inputs"])
+            calculation_inputs=result["calculation_inputs"], request_id=request_id)
         result["saved_target"] = target_data(target)
     targets = DogGoalTarget.objects.filter(dog=dog, owner=owner, owner_version=dog.goal_owner_version)
     result["current_target"] = target_data(targets.filter(effective_from__lte=local_date()).last())

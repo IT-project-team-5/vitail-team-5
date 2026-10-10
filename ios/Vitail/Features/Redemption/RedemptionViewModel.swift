@@ -13,6 +13,22 @@ final class RedemptionViewModel: ObservableObject {
     @Published private(set) var retryReward: Reward?
     @Published var errorMessage: String?
     @Published private(set) var purchasedReceipt: Redemption?
+    @Published private(set) var eligibility: RedemptionEligibility?
+    @Published private(set) var registrationRewardID: Int?
+    private var eligibilityGeneration = 0
+
+    func refreshEligibility() async {
+        eligibilityGeneration += 1
+        let generation = eligibilityGeneration
+        do {
+            let result = try await service.fetchEligibility()
+            guard !Task.isCancelled, generation == eligibilityGeneration else { return }
+            eligibility = result
+        } catch {
+            guard !Task.isCancelled, generation == eligibilityGeneration else { return }
+            eligibility = nil; errorMessage = error.localizedDescription
+        }
+    }
 
     private let service: any RedemptionServing
     private var pendingRequestID: UUID?
@@ -60,11 +76,17 @@ final class RedemptionViewModel: ObservableObject {
         redemptions = orders
         balance = fetchedWallet.balance
         rewards = fetchedOffers
+        eligibilityGeneration += 1
+        let generation = eligibilityGeneration
+        let fetchedEligibility = try await service.fetchEligibility()
+        try Task.checkCancellation()
+        if generation == eligibilityGeneration { eligibility = fetchedEligibility }
     }
 
     func redeem(rewardID: Int) async {
         guard !isMutating, !isLoading,
               retryRewardID == nil || retryRewardID == rewardID else { return }
+        let isRetry = pendingRequestID != nil
         let requestID = pendingRequestID ?? UUID()
         pendingRequestID = requestID
         if retryRewardID == nil { retryReward = rewards.first { $0.id == rewardID } }
@@ -73,6 +95,18 @@ final class RedemptionViewModel: ObservableObject {
         errorMessage = nil
         defer { redeemingRewardID = nil; drainRequestedRefresh() }
         do {
+            // Recheck at purchase time; the backend also checks under the owner lock.
+            if !isRetry {
+                eligibilityGeneration += 1
+                let eligibility = try await service.fetchEligibility()
+                self.eligibility = eligibility
+                if !eligibility.eligible {
+                    registrationRewardID = rewardID
+                    pendingRequestID = nil; retryRewardID = nil; retryReward = nil
+                    errorMessage = "Register every dog's microchip to continue. You can collect registration points separately."
+                    return
+                }
+            }
             let order = try await service.createRedemption(rewardID: rewardID, requestID: requestID)
             try Task.checkCancellation()
             redemptions.removeAll { $0.id == order.id }
@@ -83,10 +117,15 @@ final class RedemptionViewModel: ObservableObject {
             // Open the server-confirmed receipt immediately, even if refreshing
             // the balance or catalogue is slow or fails after a successful order.
             purchasedReceipt = order
+            registrationRewardID = nil
             // Always use the server balance; never subtract twice on an idempotent retry.
             try await reload()
         } catch {
             guard !Task.isCancelled else { return }
+            if case let APIError.http(status, _) = error, status == 403 {
+                registrationRewardID = rewardID
+                await refreshEligibility()
+            }
             if case let APIError.http(status, _) = error,
                [400, 403, 404, 409, 422].contains(status) {
                 pendingRequestID = nil

@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import User
+from rewards.permissions import IsOwnerRole
+from rest_framework.exceptions import ValidationError
 from .photos import ImageUploadSerializer, PhotoJSONParser, replace_photo
 from .serializers import (
     LoginSerializer,
@@ -47,6 +49,19 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(UserSerializer(serializer.instance, context={"request": request}).data)
+
+
+class CompleteOnboardingView(APIView):
+    permission_classes = [IsOwnerRole]
+
+    @transaction.atomic
+    def post(self, request):
+        owner = User.objects.select_for_update().get(pk=request.user.pk)
+        if not owner.dogs.exists():
+            raise ValidationError("Add your first dog before finishing setup.")
+        owner.onboarding_complete = True
+        owner.save(update_fields=["onboarding_complete"])
+        return Response(UserSerializer(owner, context={"request": request}).data)
 
 
 class MePhotoView(APIView):

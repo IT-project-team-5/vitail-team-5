@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Vitail connected MVP API
-  version: '2026-10-08'
+  version: '2026-10-10'
   description: >-
     Implemented routes only. JWT authentication is required except register,
     login and refresh. Owner/café roles come from the authenticated account.
@@ -19,6 +19,93 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /api/auth/onboarding/complete:
+    post:
+      summary: Complete owner onboarding after at least one dog exists
+      description: Idempotently persists onboarding_complete=true; active goals are optional.
+      responses:
+        '200':
+          description: Updated owner
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/User'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/councils:
+    get:
+      summary: Search official Victorian Council options (OWNER)
+      description: VEC locality/postcode dataset. Empty query returns []; overlapping postcodes return multiple councils. This is not a property-boundary lookup.
+      parameters:
+        - name: q
+          in: query
+          schema: {type: string, maxLength: 100}
+          description: Council name substring or exactly four ASCII postcode digits
+      responses:
+        '200':
+          description: Matching canonical names and their covered postcodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, postcodes]
+                  properties:
+                    id: {type: string}
+                    name: {type: string}
+                    postcodes: {type: array, items: {type: string}}
+        '400': {description: Invalid numeric postcode}
+        default: {$ref: '#/components/responses/Error'}
+  /api/redemptions/eligibility:
+    get:
+      summary: List dogs still needing microchip registration (OWNER)
+      description: Accepted self-reported registration counts without collecting its reward. Purchase rechecks this result under the owner lock.
+      responses:
+        '200':
+          description: Current eligibility
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [eligible, incomplete_dogs]
+                properties:
+                  eligible: {type: boolean}
+                  incomplete_dogs:
+                    type: array
+                    items: {$ref: '#/components/schemas/IncompleteDog'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/quests/goals/{dog_id}/collect:
+    parameters:
+      - name: dog_id
+        in: path
+        required: true
+        schema: {type: integer, minimum: 1}
+    post:
+      summary: Explicitly collect one dog's completed daily goal (OWNER)
+      description: Server validates today's Melbourne date, current ownership, actual eligible progress and full 20-point allowance within the shared 72-point account cap. Successful receipt replays remain available to their recipient after midnight. No partial credits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [local_date]
+              properties:
+                local_date: {type: string, format: date}
+      responses:
+        '201':
+          description: Newly credited reward
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DailyGoalReceipt'}
+        '200':
+          description: Original award, current balance, created=false
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DailyGoalReceipt'}
+        '400': {description: Invalid day, ownership, incomplete goal, disabled quest or insufficient full allowance}
+        default: {$ref: '#/components/responses/Error'}
   /api/auth/register:
     post:
       summary: Register an OWNER account (client roles are ignored)
@@ -122,12 +209,15 @@ paths:
               schema: {type: array, items: {$ref: '#/components/schemas/Dog'}}
         default: {$ref: '#/components/responses/Error'}
     post:
-      summary: Add an owned dog (maximum 10 per account)
+      summary: Add an owned dog (maximum two per account)
       description: >-
         Supply a non-null date_of_birth, or age_months for a legacy client.
         A supplied birthday determines the returned age in completed calendar
         months; a conflicting age_months is ignored. An age-only request leaves
-        the birthday unknown and does not invent a birth date.
+        the birthday unknown and does not invent a birth date. Positive weight is
+        required. Size is derived from the breed default. Optional request_id
+        replays identical creation requests, even at the two-dog limit; changed
+        payloads under the same UUID return 400.
       requestBody:
         required: true
         content:
@@ -135,7 +225,7 @@ paths:
             schema:
               allOf:
                 - $ref: '#/components/schemas/DogInput'
-                - required: [name, breed_id, size]
+                - required: [name, breed_id, weight_kg]
                   anyOf:
                     - required: [age_months]
                     - required: [date_of_birth]
@@ -208,7 +298,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     post:
       summary: Append an owner-configured daily target to the shared target history
-      description: Recalculates from the current profile under owner/dog locks. First target may start today; revisions start tomorrow or later. Duplicate dog/date, invalid adjustment or missing inputs return 400; foreign dog returns 404. Does not enable goal payouts. Unknown request fields are rejected.
+      description: Recalculates from the current profile under owner/dog locks. First target may start today; revisions start tomorrow or later. Duplicate dog/date, invalid adjustment or missing inputs return 400; foreign dog returns 404. Does not itself award points. Optional request_id replays the original revision even after profile changes or midnight; changed settings under that UUID return 400. Unknown request fields are rejected.
       requestBody:
         required: true
         content:
@@ -219,6 +309,7 @@ paths:
               required: [effective_from]
               properties:
                 effective_from: {type: string, format: date}
+                request_id: {type: string, format: uuid}
                 owner_adjustment:
                   description: The exercise-level adjustment applied once. Omitted means 100%. Whole percentage points; decimal text or JSON number accepted.
                   default: '1.00'
@@ -349,6 +440,9 @@ paths:
         The same owner/UUID/reward returns the original order even if that offer
         is later disabled. A different reward with the same UUID is a conflict.
         Omitting request_id is supported for older clients but is not retry-safe.
+        New purchases require accepted microchip registration for every current
+        dog, checked under the owner lock. Collecting document rewards is optional.
+        Existing successful UUIDs replay before rechecking the registration gate.
       requestBody:
         required: true
         content:
@@ -370,6 +464,18 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+        '403':
+          description: MICROCHIP_REGISTRATION_REQUIRED with message and incomplete_dogs (id/name); no debit
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Error'
+                  - type: object
+                    properties:
+                      incomplete_dogs:
+                        type: array
+                        items: {$ref: '#/components/schemas/IncompleteDog'}
         '409':
           description: IDEMPOTENCY_CONFLICT
           content:
@@ -921,7 +1027,12 @@ paths:
         required: true
         schema: {type: integer, minimum: 1}
     get:
-      summary: Download an authenticated document file
+      summary: Download or securely preview original evidence
+      parameters:
+        - name: preview
+          in: query
+          description: Set to 1 for an inline preview; otherwise attachment download
+          schema: {type: string, enum: ['1']}
       description: >-
         The submitting owner can read their file; ADMIN and superuser accounts
         can read files for later audits. Other accounts and submissions without
@@ -934,7 +1045,7 @@ paths:
         '200':
           description: Original evidence as a download with a sanitized display filename
           headers:
-            Content-Disposition: {schema: {type: string}, description: Attachment with the saved display filename}
+            Content-Disposition: {schema: {type: string}, description: Inline when preview=1 otherwise attachment, with the saved display filename}
             Cache-Control: {schema: {type: string, enum: ['private, no-store']}}
             X-Content-Type-Options: {schema: {type: string, enum: [nosniff]}}
             Content-Security-Policy: {schema: {type: string, enum: ["sandbox; default-src 'none'"]}}
@@ -1361,6 +1472,29 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    IncompleteDog:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+    DailyGoalReceipt:
+      type: object
+      required: [award, balance, created]
+      properties:
+        balance: {type: integer}
+        created: {type: boolean}
+        award:
+          type: object
+          required: [id, kind, dog_id, local_date, points, point_entry_id, awarded_at]
+          properties:
+            id: {type: integer}
+            kind: {type: string, enum: [DAILY_GOAL]}
+            dog_id: {type: integer}
+            local_date: {type: string, format: date}
+            points: {type: integer, enum: [20]}
+            point_entry_id: {type: integer}
+            awarded_at: {type: string, format: date-time}
     CheckInVenue:
       type: object
       required: [id, name, kind, description, address, opening_hours, latitude, longitude, checkin_radius_m, required_seconds, checkin_status]
@@ -1535,12 +1669,13 @@ components:
         password: {type: string, format: password, writeOnly: true}
     User:
       type: object
-      required: [id, email, display_name, role, photo]
+      required: [id, email, display_name, role, photo, onboarding_complete]
       properties:
         id: {type: integer}
         email: {type: string, format: email}
         display_name: {type: string}
         role: {type: string, enum: [OWNER, CAFE, ADMIN]}
+        onboarding_complete: {type: boolean, description: False for new owners until setup completion; legacy accounts default true}
         photo: {type: string, format: uri, nullable: true}
     AuthSession:
       type: object
@@ -1561,7 +1696,9 @@ components:
         is_brachycephalic: {type: boolean}
     DogInput:
       type: object
+      description: Size input is retained for legacy clients but internal size comes from the breed default on creation or breed changes.
       properties:
+        request_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 100}
         photo: {type: string, nullable: true, description: Legacy external URL or blank/null. A separately uploaded avatar takes precedence in responses}
         breed_id: {type: integer, minimum: 1}
@@ -1569,7 +1706,7 @@ components:
         date_of_birth: {type: string, format: date, nullable: true, description: Optional real birthday no later than the current server-local date; null means unknown}
         size: {$ref: '#/components/schemas/DogSize'}
         is_brachycephalic: {type: boolean, description: Defaults from breed when omitted on creation}
-        weight_kg: {type: string, nullable: true, example: '15.00', description: Positive decimal kilograms with up to two decimal places (0.01–9999.99); JSON numbers also accepted. Omitted on PATCH leaves weight unchanged; null clears it. No inferred weight for legacy dogs}
+        weight_kg: {type: string, nullable: true, example: '15.00', description: Positive decimal kilograms with up to two decimal places (0.01–9999.99); JSON numbers also accepted. Omitted on PATCH leaves weight unchanged; null allowed only for already-unknown legacy weight. Creation requires non-null weight}
     Dog:
       type: object
       required: [id, name, photo, breed, age_months, date_of_birth, size, is_brachycephalic, weight_kg, created_at]
@@ -1625,7 +1762,7 @@ components:
         STREAK has no dog or document entitlement; its current_days,
         milestone_days and run_start_date identify the single progress bar.
         Clamp its displayed numerator to the milestone while READY. Idle state
-        is zero of seven with a null run start. DAILY_GOAL remains reserved and omitted.
+        is zero of seven with a null run start. DAILY_GOAL has a dog/day ID, 20 reward points and independent completion/collection status.
       properties:
         valid_to: {type: string, format: date, nullable: true, description: Confirmed Council expiry; inclusive in Australia/Melbourne}
         needs_expiry: {type: boolean, description: Current legacy Council qualification requires its actual expiry before collecting or renewing}
@@ -1655,7 +1792,7 @@ components:
         timezone: {type: string, enum: [Australia/Melbourne]}
         local_date: {type: string, format: date}
         next_reset_at: {type: string, format: date-time, description: Next Melbourne midnight; not a fixed 24-hour offset}
-        goal_rewards_status: {type: string, enum: [PENDING_MULTI_DOG_POLICY]}
+        goal_rewards_status: {type: string, enum: [AVAILABLE, DISABLED]}
         daily_goals:
           type: array
           items: {$ref: '#/components/schemas/DogDailyGoalProgress'}
@@ -1778,7 +1915,7 @@ components:
         kind: {$ref: '#/components/schemas/DocumentKind'}
         status: {type: string, enum: [SELF_REPORTED], description: Self-reported evidence; later audit possible and no prior approval implied}
         registration_number: {type: string, maxLength: 100}
-        council_name: {type: string, maxLength: 100, description: 'Confirmed issuing council; required for new Council submissions, including uploads'}
+        council_name: {type: string, maxLength: 100, description: 'Canonical Council name selected from /api/councils; required for new Council submissions including uploads'}
         registration_year: {type: integer, nullable: true, description: 'Historical submitted year; no longer accepted for new submissions'}
         reward_registration_year: {type: integer, nullable: true, description: 'Historical reward year; no longer controls eligibility; legacy receipts may omit it'}
         registry_name: {type: string, maxLength: 100, description: Optional confirmed microchip registry}
@@ -1894,7 +2031,7 @@ components:
         dog_id: {type: integer, minimum: 1}
         kind: {$ref: '#/components/schemas/DocumentKind'}
         registration_number: {type: string, maxLength: 100, description: Confirmed registration/chip number required for both registration methods}
-        council_name: {type: string, maxLength: 100, description: Required for Council with or without an upload}
+        council_name: {type: string, maxLength: 100, description: Canonical selection from /api/councils; historical corrections may retain their original name}
         registry_name: {type: string, maxLength: 100, description: Optional microchip registry}
         document_dog_name: {type: string, maxLength: 100, description: Optional confirmed printed dog name}
         document_reading: {$ref: '#/components/schemas/DocumentReading'}

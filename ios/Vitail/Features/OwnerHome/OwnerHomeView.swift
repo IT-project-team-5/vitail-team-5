@@ -117,7 +117,7 @@ struct OwnerHomeView: View {
                         .tag(Page.quest)
                     VenuesView(viewModel: venueCheckIns, progressStore: checkIns)
                         .tag(Page.venues)
-                    RedemptionView(viewModel: redemptionViewModel)
+                    RedemptionView(viewModel: redemptionViewModel, documentService: documentService ?? DocumentService(), session: session)
                     .tag(Page.redeem)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -137,7 +137,7 @@ struct OwnerHomeView: View {
                     await questStore.refresh()
                 }
             }) {
-                DogFormView(viewModel: onboardingDogs)
+                DogOnboardingView(dogs: onboardingDogs, session: session, onFinished: { isAddingFirstDog = false })
             }
             .sheet(item: $documentSelection, onDismiss: {
                 Task { await questStore.refresh() }
@@ -166,7 +166,7 @@ struct OwnerHomeView: View {
                 await onboardingDogs.load()
                 guard !Task.isCancelled else { return }
                 hasCheckedOnboarding = true
-                isAddingFirstDog = onboardingDogs.errorMessage == nil && onboardingDogs.dogs.isEmpty
+                isAddingFirstDog = user.onboardingComplete == false
             }
             .onAppear { friends.setForeground(scenePhase == .active) }
             .task(id: "\(selection.rawValue)-\(scenePhase == .active)") {

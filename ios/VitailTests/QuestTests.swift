@@ -7,6 +7,36 @@ import XCTest
 
 @MainActor
 final class QuestTests: XCTestCase {
+    func testDailyGoalRewardsCollectIndependentlyAndRefreshAuthoritativeBalance() async throws {
+        let session = await makeSession()
+        let service = QuestFixture(tasks: [QuestFixture.goalTask(dogID: 7), QuestFixture.goalTask(dogID: 8)])
+        let store = QuestStore(ownerID: 1, session: session, service: service)
+        var balances: [Int] = []
+        store.onAward = { balances.append($0.balance) }
+        await store.refresh()
+        await store.collect(taskID: "daily-goal:7:2026-09-25")
+        XCTAssertEqual(store.task(id: "daily-goal:7:2026-09-25")?.status, .collected)
+        XCTAssertEqual(store.task(id: "daily-goal:8:2026-09-25")?.status, .ready)
+        await store.collect(taskID: "daily-goal:7:2026-09-25")
+        await store.collect(taskID: "daily-goal:8:2026-09-25")
+        XCTAssertEqual(balances, [20, 40])
+        let calls = await service.calls
+        XCTAssertEqual(calls, ["goal:7:2026-09-25", "goal:8:2026-09-25"])
+    }
+
+    func testUncollectedDailyGoalHidesAtMelbourneMidnight() async {
+        let session = await makeSession()
+        let service = QuestFixture(tasks: [QuestFixture.goalTask(dogID: 7)], serverTime: "2026-09-25T13:59:50Z")
+        var now = QuestCalendar.parse("2026-09-25T13:59:50Z")!
+        let store = QuestStore(ownerID: 1, session: session, service: service, now: { now })
+        await store.refresh()
+        XCTAssertEqual(store.readyTasks.count, 1)
+        now = now.addingTimeInterval(11)
+        XCTAssertTrue(store.visibleTasks.isEmpty)
+        await store.collect(taskID: "daily-goal:7:2026-09-25")
+        let calls = await service.calls
+        XCTAssertTrue(calls.isEmpty)
+    }
     private var goalSample: DogDailyGoalProgress {
         DogDailyGoalProgress(dogID: 7, dogName: "Milo", activeSeconds: 120, targetSeconds: 180,
             completed: false, currentStreak: 2, days: (19...25).map { day in
@@ -947,6 +977,20 @@ private actor QuestAuthFixture: AuthServing {
 }
 
 private actor QuestFixture: QuestServing {
+    func collectDailyGoal(dogID: Int, localDate: String) async throws -> DailyGoalCollectResponse {
+        calls.append("goal:\(dogID):\(localDate)")
+        try await claimGate()
+        return DailyGoalCollectResponse(award: .init(id: dogID, kind: "DAILY_GOAL", dogID: dogID,
+            localDate: localDate, points: 20, pointEntryID: dogID, awardedAt: Self.timestamp),
+            balance: calls.count * 20, created: true)
+    }
+
+    nonisolated static func goalTask(dogID: Int) -> QuestTask {
+        QuestTask(id: "daily-goal:\(dogID):2026-09-25", kind: "DAILY_GOAL", status: .ready,
+            title: "Daily walking goal", subjectName: "Dog \(dogID)", photo: nil, icon: "figure.walk",
+            detail: "Collect 20 points.", rewardPoints: 20, progress: 1, dogID: dogID,
+            entitlementID: nil, collectedAt: nil)
+    }
     private(set) var fetchCount = 0
     private(set) var maxConcurrentFetches = 0
     private var concurrentFetches = 0

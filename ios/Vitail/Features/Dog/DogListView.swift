@@ -57,7 +57,7 @@ struct DogListView: View {
                 }
                 .foregroundStyle(AppColors.brand)
             } else {
-                Text("You have reached the maximum of 10 dogs.")
+                Text("Your account supports up to two dogs.")
                     .font(.footnote)
                     .foregroundStyle(AppColors.secondaryText)
             }

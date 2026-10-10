@@ -6,6 +6,22 @@ import XCTest
 
 @MainActor
 final class BrandAppearanceTests: XCTestCase {
+    func testOwnerSetupFormsAtSmallSizeAndLargeText() async throws {
+        let service = BrandDogSetupFixture()
+        let model = DogViewModel(service: service)
+        await model.load()
+        let dog = try XCTUnwrap(model.dogs.first)
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            try await snapshot(DogFormView(viewModel: model, dog: dog)
+                .environment(\.dynamicTypeSize, .accessibility2),
+                name: "Weight-Form-Small-LargeText-\(mode)", dark: dark, size: CGSize(width: 320, height: 568))
+            try await snapshot(DogOnboardingView(dogs: model, session: SessionStore(), onFinished: {})
+                .environment(\.dynamicTypeSize, .accessibility2),
+                name: "Onboarding-Goal-Small-LargeText-\(mode)", dark: dark, size: CGSize(width: 320, height: 568))
+        }
+    }
+
     func testBrandArtworkAndPrimaryAppIconAreBundled() throws {
         let artwork = try XCTUnwrap(UIImage(named: "BrandMark"))
         XCTAssertGreaterThanOrEqual(artwork.size.width * artwork.scale, 1024)
@@ -189,14 +205,15 @@ final class BrandAppearanceTests: XCTestCase {
 
     private func snapshot<Content: View>(
         _ content: Content, name: String, dark: Bool,
-        beforeCapture: (() async -> Void)? = nil, expectsSheet: Bool = false
+        beforeCapture: (() async -> Void)? = nil, expectsSheet: Bool = false,
+        size: CGSize = CGSize(width: 393, height: 852)
     ) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let page = content.vitailAppearance().preferredColorScheme(dark ? .dark : .light)
         let host = UIHostingController(rootView: page)
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
+        window.frame = CGRect(origin: .zero, size: size)
         window.overrideUserInterfaceStyle = dark ? .dark : .light
         window.rootViewController = host
         window.makeKeyAndVisible()
@@ -226,7 +243,26 @@ final class BrandAppearanceTests: XCTestCase {
     }
 }
 
+private actor BrandDogSetupFixture: DogServicing {
+    private let breed = Breed(id: 7654321, name: "Mixed", energyLevel: .moderate,
+                              defaultSize: .medium, isBrachycephalic: false)
+    func getDogs() async throws -> [Dog] {
+        [Dog(id: 7654321, name: "Milo", breed: breed, ageMonths: 24, size: .medium,
+             isBrachycephalic: false, createdAt: "2026-10-01T00:00:00Z", dateOfBirth: "2024-01-01", weightKg: "12.50")]
+    }
+    func getBreeds() async throws -> [Breed] { [breed] }
+    func createDog(_ request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
+    func updateDog(id: Int, request: DogWriteRequest) async throws -> Dog { throw APIError.invalidResponse }
+    func deleteDog(id: Int) async throws { throw APIError.invalidResponse }
+    func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview {
+        DogGoalPreview(eligible: true, missingInputs: [], reason: nil, effectiveFrom: "2026-10-10",
+            ownerAdjustment: "1.00", suggestedMinutes: "50", targetSeconds: 3000,
+            currentTarget: nil, scheduledTargets: [])
+    }
+}
+
 private actor BrandReceiptFixture: RedemptionServing {
+    func fetchEligibility() async throws -> RedemptionEligibility { .init(eligible: true, incompleteDogs: []) }
     private var order: Redemption?
     func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: order == nil ? 120 : 60) }
     func fetchRewards() async throws -> [Reward] {
@@ -245,6 +281,7 @@ private actor BrandReceiptFixture: RedemptionServing {
 }
 
 private actor BrandRedemptionFixture: RedemptionServing {
+    func fetchEligibility() async throws -> RedemptionEligibility { .init(eligible: true, incompleteDogs: []) }
     func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: 120) }
     func fetchRewards() async throws -> [Reward] {
         [Reward(id: 1, name: "Flat White", description: "Double espresso with silky steamed milk. Oat milk available.",

@@ -41,7 +41,7 @@ class BirthdayApiTests(APITestCase):
         self.client.force_authenticate(self.owner)
 
     def payload(self, **changes):
-        data = {"name": "Coco", "breed_id": self.breed.pk, "size": "SMALL", "date_of_birth": "2024-09-25"}
+        data = {"name": "Coco", "breed_id": self.breed.pk, "size": "SMALL", "weight_kg": "8.00", "date_of_birth": "2024-09-25"}
         data.update(changes)
         return data
 

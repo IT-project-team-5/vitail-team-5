@@ -1,8 +1,10 @@
 # Daily walking goals
 
-Implemented 4 October 2026. Per-dog progress is available in Quest. **Daily-goal
-payouts remain disabled pending the multi-dog decisions below.** Existing
-walking-day streak bonuses remain separate and unchanged.
+Updated 10 October 2026. Each dog can explicitly collect **20 points per Melbourne
+day** after completing its own goal. Walking, goals and check-ins share the
+owner account's **72-point cap**. Walking-day streak bonuses stay separate.
+Backend verification and outstanding iPhone acceptance are recorded in
+[the implementation report](OWNER_JOURNEY_REPORT.md).
 
 ## Configuration and history
 
@@ -84,18 +86,23 @@ Authenticated OWNER API:
   is no following day: preview falls back to the first free permitted date.
   This leaves that far-future revision and every existing snapshot unchanged.
 - `POST /api/dogs/{id}/goal`: `{ "effective_from": "2026-10-07",
-  "owner_adjustment": "1.00" }`. Date is required; omitted adjustment means
+  "owner_adjustment": "1.00", "request_id": "UUID" }`. Date is required; omitted adjustment means
   100%. Returns 201 with the recomputed recommendation and saved revision.
   Invalid profile, adjustment, past/same-day changes or duplicate dates return
   400; another owner's dog returns 404. Unknown request fields, including
   client-calculated seconds and a second exercise factor, are rejected.
 - `PATCH /api/dogs/{id}` accepts `weight_kg` as decimal text or null through the
-  existing profile service. Profile saves do not configure targets.
+  existing profile service. Null is accepted only for already-unknown legacy
+  weight; a known weight cannot be cleared. New dogs require positive weight.
+  Profile saves do not configure targets.
 
 Saving revalidates current ownership, profile inputs and date under the same
 owner/dog locks used by Admin and uploads. If a preview became stale, the server
 recalculates from the current profile; the saved response shows the actual
-target. Duplicate submissions cannot create a second target on that date.
+target. Duplicate submissions cannot create a second target on that date. An optional
+request UUID replays the original saved revision after network failure, profile
+changes or midnight; changing its adjustment/date is rejected. iOS persists the
+original request until confirmed, and uses debounced read-only slider previews.
 
 `DogGoalTarget` records effective-dated configuration and the owner at approval.
 The existing `DogDailyGoal` stores each eligible day's frozen target, inputs and
@@ -152,41 +159,33 @@ result can therefore be corrected by a valid late upload. Daily results freeze
 across DST). A missed label before that deadline can become completed upon a
 valid upload. Reads freeze progress only; they never credit points.
 
-## Reward accounting and remaining decisions
+## Daily reward qualification and accounting
 
-The user confirmed the documented baseline: **40 walking + 20 daily goal + 12
-check-in within the 72-point combined cap**. `daily_activity_points` now counts
-WALK, DAILY_GOAL and CHECK_IN ledger credits. Goal membership in the cap is no
-longer an open decision. Existing balances and reward history are untouched;
-earlier awards are never reduced. Full rewards require enough remaining
-allowance; no partial goal reward has been invented.
+`POST /api/quests/goals/{dog_id}/collect` accepts only
+`{"local_date":"YYYY-MM-DD"}`. The backend checks the current owner, enabled
+quest, current Melbourne date and actual eligible progress. It reserves a
+versioned dog/day qualification and calls the existing `settle_reserved_goal`
+service, which rechecks frozen target inputs and ownership before crediting.
+The response contains the award ID, dog/day, 20 points, canonical PointEntry ID,
+collection timestamp, current wallet balance and whether this was a new credit.
+New credits return 201; successful retries return 200, including after midnight.
+A new claim for a previous day is rejected. Late valid uploads can still correct
+historical goal progress under the existing deadline, without opening past rewards.
 
-Client confirmation still required:
+Dog A and Dog B collect separately, potentially earning 40 goal points. Neither
+completion, preview, profile save nor Quest reads issue points. The shared
+activity total includes WALK, DAILY_GOAL and CHECK_IN credits. At 52 earned
+points one full 20-point goal can bring the account to 72; at 53 the reward is
+unavailable because only 19 remain. No partial credits or displacement of earlier
+credits occurs. Each task explains insufficient allowance.
 
-- Are goal rewards and the combined cap per dog or per account? Client
-  Requirements allows two dogs with separate points; older once-per-account
-  wording is not definitive.
-- Must any dog or all participating dogs qualify? How is that participant set
-  frozen, especially if another dog joins a later walk that day?
-
-The existing account-based walking/check-in accounting continues while goal
-payouts are disabled. Do not enable goal payments merely by switching on a
-QuestDefinition. `quests.goals.settle_reserved_goal` is an **internal settlement
-foundation with no production caller or qualification producer**. A future
-approved backend qualifier must supply an immutable reward scope, policy
-version, required daily goal IDs and expiry. Settlement rechecks ownership,
-active account, day, progress and cap under the same owner lock as other rewards.
-It also locks the participating dogs, requires their current ownership revision
-and approved target inputs, and rejects missing/deleted/transferred dogs and
-malformed qualification snapshots. Already credited qualifications remain
-replayable by their original recipient without creating another credit.
-The existing unique QuestAward qualification key, one-to-one credit and unique
-PointEntry source reference make repeated/concurrent settlement return one
-credit. No HTTP route or frontend can supply a qualification or grant points.
-Tests use explicitly synthetic qualifications to exercise this dormant path.
-The approved qualifier must define scope-specific daily uniqueness before launch;
-this change deliberately does not impose account/day uniqueness on an unresolved
-per-dog policy. Historical days will not automatically receive future awards.
+The owner lock serializes competing dog collections, walking and check-ins.
+The dog/day uniqueness constraint, unique qualification key, one-to-one credit
+and unique ledger source prevent duplicate collection. Original paid receipts
+remain replayable only by their recipient. Ownership transfers require the new
+ownership revision's target; they do not reopen a dog's already collected day.
+The server creates qualification snapshots; no client can supply an award amount,
+completion flag or qualification inputs. No historical payout backfill occurs.
 
 Wallet balance remains `get_balance` over unexpired remaining PointEntry credits.
 Walk receipts show base walking awards, Quest receipts show their own rewards,
@@ -205,8 +204,9 @@ Foregrounding, polling, retry and account teardown reuse the existing stores.
 
 ## Migration and verification
 
-The implementation is verified in the normal backend and iOS suites before
-merge. The commands below remain the reproducible source of truth; historical
+The implementation must be verified in the backend and iOS suites before
+merge. iOS build, simulator and physical-device acceptance are still unverified
+on this Windows implementation host. The commands below remain the reproducible source of truth; historical
 test counts are not used as a current result.
 
 `dogs.0005_doggoaltarget` adds only the target revision table, foreign keys and
@@ -234,3 +234,10 @@ tests require disposable MySQL. iOS Quest tests cover calendar presentation,
 midnight invalidation, refresh after an in-flight read and appearance at large
 text sizes. Test source alone is not evidence of a successful build; record only
 results produced by the current checkout.
+
+`accounts.0006` defaults existing accounts to completed onboarding. Newly registered
+owners explicitly start incomplete. `dogs.0008` adds nullable request UUIDs and
+the dog creation fingerprint; it does not change historical profiles or targets.
+`quests.0004` allows per-dog daily qualifications and adds kind/dog/day uniqueness.
+Existing legacy qualifications with null dog IDs remain valid. None of these
+migrations deletes records or creates points.

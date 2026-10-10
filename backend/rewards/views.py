@@ -22,7 +22,15 @@ from .services import (
     IdempotencyConflictError, InsufficientPointsError, RedemptionNotCollectibleError,
     RewardUnavailableError, collect_redemption, create_redemption,
     expire_points, expire_redemptions, get_balance, lock_feed_state,
+    redemption_eligibility, MicrochipRegistrationRequired,
 )
+
+
+class RedemptionEligibilityView(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def get(self, request):
+        return Response(redemption_eligibility(request.user))
 
 
 class WalletView(APIView):
@@ -106,6 +114,9 @@ class RedemptionListCreateView(APIView):
         expire_redemptions(owner=request.user)
         try:
             redemption = create_redemption(owner=request.user, **serializer.validated_data)
+        except MicrochipRegistrationRequired as exc:
+            return Response({"code": "MICROCHIP_REGISTRATION_REQUIRED", "message": str(exc),
+                "incomplete_dogs": exc.dogs}, status=403)
         except InsufficientPointsError as exc:
             return Response({"code": "INSUFFICIENT_POINTS", "message": str(exc)}, status=400)
         except RewardUnavailableError as exc:

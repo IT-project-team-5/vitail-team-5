@@ -43,6 +43,7 @@ final class WalletRefreshTests: XCTestCase {
 }
 
 private actor DelayedWalletFixture: RedemptionServing {
+    func fetchEligibility() async throws -> RedemptionEligibility { .init(eligible: true, incompleteDogs: []) }
     private(set) var balanceRequests = 0
     private var balance = 0
     private var pending: CheckedContinuation<Void, Never>?

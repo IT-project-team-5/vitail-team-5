@@ -65,11 +65,12 @@ class QuestAward(models.Model):
         indexes = [models.Index(fields=("owner", "awarded_at"), name="quest_owner_collection")]
         constraints = [
             models.UniqueConstraint(fields=("kind", "dog_id_snapshot", "year"), name="quest_award_dog_year_unique"),
+            models.UniqueConstraint(fields=("kind", "dog_id_snapshot", "qualified_on"), name="quest_award_dog_day_unique"),
             models.CheckConstraint(condition=~models.Q(qualification_key="") & models.Q(promised_points__gt=0), name="quest_qualification_required"),
             models.CheckConstraint(condition=models.Q(point_entry__isnull=True, awarded_at__isnull=True) | models.Q(point_entry__isnull=False, awarded_at__isnull=False), name="quest_collection_shape"),
             models.CheckConstraint(condition=(
                 models.Q(kind="BIRTHDAY", dog_id_snapshot__isnull=False, year__isnull=False, run_start_date__isnull=True, milestone_days__isnull=True)
-                | models.Q(kind="DAILY_GOAL", dog_id_snapshot__isnull=True, year__isnull=True, run_start_date__isnull=True, milestone_days__isnull=True)
+                | models.Q(kind="DAILY_GOAL", year__isnull=True, run_start_date__isnull=True, milestone_days__isnull=True)
                 | models.Q(kind="STREAK", dog_id_snapshot__isnull=True, year__isnull=True, run_start_date__isnull=False, milestone_days__isnull=False, milestone_days__gt=0)
             ), name="quest_kind_shape"),
         ]

@@ -32,7 +32,7 @@ class PrivateDocumentSessionTests(APITestCase):
         self.client.force_authenticate(self.owner)
         response = self.client.post("/api/quests/documents", {
             "request_id": str(uuid4()), "dog_id": dog.pk, "kind": "COUNCIL_REGISTRATION",
-            "registration_number": "00042", "council_name": "City of Melbourne",
+            "registration_number": "00042", "council_name": "Melbourne City Council",
             "valid_to": (timezone.localdate() + timedelta(days=365)).isoformat(),
             "filename": "registration.pdf", "file_base64": base64.b64encode(self.original).decode(),
         }, format="json")
@@ -44,6 +44,18 @@ class PrivateDocumentSessionTests(APITestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), self.original)
+
+    def test_admin_preview_is_private_and_original_download_is_unchanged(self):
+        self.assertEqual(self.client.get(self.url + "?preview=1").status_code, 401)
+        self.client.force_login(self.admin)
+        response = self.client.get(self.url + "?preview=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response["Content-Disposition"].startswith("inline"))
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+        self.assertIn("sandbox", response["Content-Security-Policy"])
+        self.assertEqual(b"".join(response.streaming_content), self.original)
+        self.assert_download()
 
     def test_revoked_jwt_cannot_download_private_evidence_and_new_version_can(self):
         tokens = token_response(self.owner)

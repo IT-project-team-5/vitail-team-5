@@ -8,12 +8,17 @@ replayable by their recipient after a capability is disabled.
 ## Daily goals
 
 The envelope also includes `daily_goals`, with one duration target/progress and
-seven-day goal calendar per active owned dog, and `goal_rewards_status` set to
-`PENDING_MULTI_DOG_POLICY`. Reads may freeze daily snapshots but never create
-reward qualifications or points. See [daily goals](../../docs/DAILY_GOALS.md)
-for configuration, midnight/late-upload rules and the unexposed settlement
-foundation. Goal credits belong in the combined activity cap; per-dog/account
-reward and cap scope and any/all participant qualification still need approval.
+seven-day goal calendar per active owned dog. `goal_rewards_status` is `AVAILABLE`
+when the quest is enabled, otherwise `DISABLED`. Reads may freeze daily snapshots
+but never create reward qualifications or points.
+
+`POST /api/quests/goals/{dog_id}/collect` accepts only the Melbourne `local_date`.
+The backend qualifies the dog's actual progress and explicitly credits 20 points,
+once per dog/day. Both dogs share the owner's 72-point activity cap with walking
+and check-ins. Insufficient allowance rejects the entire award. Successful
+receipts remain replayable by their recipient after midnight without new points.
+See [daily goals](../../docs/DAILY_GOALS.md) for locking, receipts, history and
+late-upload rules, and [verification](../../docs/OWNER_JOURNEY_REPORT.md).
 
 ## Walking streak
 

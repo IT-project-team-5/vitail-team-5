@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RedemptionView: View {
     @ObservedObject var viewModel: RedemptionViewModel
+    var documentService: any DocumentServing = DocumentService()
+    var session: SessionStore? = nil
     @State private var selectedCafe: CafeRewardGroup?
     @State private var isMenuPresented = false
     @State private var selectedOrder: Redemption?
@@ -90,7 +92,7 @@ struct RedemptionView: View {
                 receiptAfterMenu = nil
                 selectedOrder = receipt
             }
-        }) { cafe in CafeMenuView(cafe: cafe, viewModel: viewModel) }
+        }) { cafe in CafeMenuView(cafe: cafe, viewModel: viewModel, documentService: documentService, session: session) }
         .sheet(item: $selectedOrder) { order in RedemptionDetailView(order: order, viewModel: viewModel) }
     }
 
@@ -141,6 +143,8 @@ struct CafeCoverPhoto: View {
 struct CafeMenuView: View {
     let cafe: CafeRewardGroup
     @ObservedObject var viewModel: RedemptionViewModel
+    var documentService: any DocumentServing = DocumentService()
+    var session: SessionStore? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var selectedReward: Reward?
     private var currentCafe: CafeRewardGroup { viewModel.cafes.first { $0.id == cafe.id } ?? cafe }
@@ -169,6 +173,7 @@ struct CafeMenuView: View {
                         Text(message).font(.subheadline).foregroundStyle(AppColors.error)
                     }
                     PendingPurchaseNotice(viewModel: viewModel)
+                    RegistrationGate(viewModel: viewModel, documentService: documentService, session: session)
                     Text("Menu").font(.headline)
                     if menu.isEmpty { Text("No items available right now.").foregroundStyle(AppColors.secondaryText) }
                     ForEach(menu) { reward in
@@ -210,6 +215,37 @@ struct CafeMenuView: View {
             }
         }
         .vitailAppearance()
+    }
+}
+
+private struct RegistrationGate: View {
+    @ObservedObject var viewModel: RedemptionViewModel
+    let documentService: any DocumentServing
+    let session: SessionStore?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            if let eligibility = viewModel.eligibility, !eligibility.eligible {
+                Text("Microchip registration needed").font(.headline)
+                Text("Register each dog to redeem. The 300-point registration reward can be collected separately.")
+                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                ForEach(eligibility.incompleteDogs) { dog in
+                    NavigationLink("Register \(dog.name)'s microchip") {
+                        DocumentSubmissionView(service: documentService, session: session,
+                            initialDogID: dog.id, initialKind: .microchip, manageRegistration: true,
+                            onSubmitted: { await viewModel.refreshEligibility() },
+                            onChanged: { await viewModel.refreshEligibility() })
+                    }
+                }
+            } else if viewModel.eligibility?.eligible == true, let rewardID = viewModel.registrationRewardID,
+                      let reward = viewModel.rewards.first(where: { $0.id == rewardID }) {
+                Text("All dogs registered. Continue with \(reward.name).").font(.subheadline)
+                PrimaryButton(title: "Purchase · \(reward.pointCost) pts", isDisabled: viewModel.isLoading || viewModel.isMutating) {
+                    Task { await viewModel.redeem(rewardID: rewardID) }
+                }
+            }
+        }
+        .task { await viewModel.refreshEligibility() }
     }
 }
 

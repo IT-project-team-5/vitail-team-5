@@ -71,7 +71,7 @@ class QuestApiTests(APITestCase):
         self.assertEqual(set(data), {"server_time", "timezone", "local_date", "next_reset_at", "tasks",
                                      "daily_goals", "goal_rewards_status"})
         self.assertEqual(data["daily_goals"], [])
-        self.assertEqual(data["goal_rewards_status"], "PENDING_MULTI_DOG_POLICY")
+        self.assertEqual(data["goal_rewards_status"], "AVAILABLE")
         self.assertEqual([task["kind"] for task in data["tasks"]], ["STREAK"])
         self.assertEqual(data["tasks"][0]["current_days"], 0)
         self.assertFalse(QuestAward.objects.exists())
@@ -355,7 +355,7 @@ class QuestApiTests(APITestCase):
         submitted = self.client.post("/api/quests/documents", {
             "request_id": str(uuid4()), "dog_id": self.dog.pk,
             "kind": "COUNCIL_REGISTRATION", "registration_number": "TASK-123",
-            "council_name": "City of Melbourne", "valid_to": "2027-04-09",
+            "council_name": "Melbourne City Council", "valid_to": "2027-04-09",
         }, format="json")
         self.assertEqual(submitted.status_code, 201)
         entitlement = DocumentEntitlement.objects.get(dog_id_snapshot=self.dog.pk, kind="COUNCIL_REGISTRATION")

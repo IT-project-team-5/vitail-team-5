@@ -30,12 +30,12 @@ def lock_goal_dog(dog):
 
 @transaction.atomic
 def configure_target(*, dog, target_active_seconds, effective_from,
-                     calculation_policy=GOAL_RULES_VERSION, calculation_inputs=None):
+                     calculation_policy=GOAL_RULES_VERSION, calculation_inputs=None, request_id=None):
     dog = lock_goal_dog(dog)
     target = DogGoalTarget(dog=dog, dog_id_snapshot=dog.pk, owner_id=dog.owner_id,
         owner_version=dog.goal_owner_version,
         target_active_seconds=target_active_seconds, effective_from=effective_from,
-        calculation_policy=calculation_policy, calculation_inputs=calculation_inputs or {})
+        calculation_policy=calculation_policy, calculation_inputs=calculation_inputs or {}, request_id=request_id)
     target.full_clean()
     target.save()
     return target

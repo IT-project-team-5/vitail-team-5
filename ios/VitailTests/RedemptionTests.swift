@@ -5,6 +5,44 @@ import XCTest
 
 @MainActor
 final class RedemptionTests: XCTestCase {
+    func testRegistrationBlocksPurchaseAndPreservesProductUntilBothDogsRegister() async {
+        let service = RedemptionStub()
+        await service.setIncompleteDogs([.init(id: 1, name: "Milo"), .init(id: 2, name: "Pip")])
+        let model = RedemptionViewModel(service: service)
+        await model.refresh()
+        await model.redeem(rewardID: 1)
+        XCTAssertEqual(model.registrationRewardID, 1)
+        XCTAssertEqual(model.eligibility?.incompleteDogs.count, 2)
+        var calls = await service.requestIDs
+        XCTAssertTrue(calls.isEmpty)
+        await service.setIncompleteDogs([.init(id: 2, name: "Pip")])
+        await model.refreshEligibility()
+        await model.redeem(rewardID: 1)
+        XCTAssertEqual(model.eligibility?.incompleteDogs.first?.id, 2)
+        await service.setIncompleteDogs([])
+        await model.refreshEligibility()
+        XCTAssertEqual(model.registrationRewardID, 1)
+        await model.redeem(rewardID: 1)
+        XCTAssertEqual(model.balance, 50)
+        XCTAssertNotNil(model.purchasedReceipt)
+        XCTAssertNil(model.registrationRewardID)
+        calls = await service.requestIDs
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    func testLostPurchaseResponseStillReplaysAfterAnotherDogNeedsRegistration() async {
+        let service = RedemptionStub(failFirstCreate: true)
+        let model = RedemptionViewModel(service: service)
+        await model.refresh()
+        await model.redeem(rewardID: 1)
+        await service.setIncompleteDogs([.init(id: 2, name: "Pip")])
+        await model.redeem(rewardID: 1)
+        let ids = await service.requestIDs
+        XCTAssertEqual(ids.count, 2)
+        XCTAssertEqual(ids.first, ids.last)
+        XCTAssertNotNil(model.purchasedReceipt)
+        XCTAssertEqual(model.balance, 50)
+    }
     func testCafeGroupingUsesIdentityRatherThanNameAndKeepsEachMenuSeparate() {
         let offers = [
             Reward(id: 1, name: "Coffee", description: "", pointCost: 60, cafeName: "Same Name", cafeID: 10),
@@ -204,6 +242,11 @@ final class RedemptionTests: XCTestCase {
 }
 
 private actor RedemptionStub: RedemptionServing {
+    private var incompleteDogs: [RedemptionEligibility.IncompleteDog] = []
+    func setIncompleteDogs(_ dogs: [RedemptionEligibility.IncompleteDog]) { incompleteDogs = dogs }
+    func fetchEligibility() async throws -> RedemptionEligibility {
+        RedemptionEligibility(eligible: incompleteDogs.isEmpty, incompleteDogs: incompleteDogs)
+    }
     var requestIDs: [UUID] = []
     private var balance = 60
     private var orders: [Redemption] = []

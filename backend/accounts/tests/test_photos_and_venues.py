@@ -42,6 +42,8 @@ class PhotoAndVenueApiTests(APITestCase):
         cls.other_cafe = User.objects.create_user(email="avatar-other-cafe@example.com", display_name="Other Café", role="CAFE")
         cls.breed, _ = Breed.objects.get_or_create(name="Avatar Test Breed", defaults={"energy_level": "MODERATE", "default_size": "MEDIUM"})
         cls.dog = Dog.objects.create(owner=cls.owner, name="Coco", breed=cls.breed, age_months=12, size="MEDIUM", is_brachycephalic=False, photo="https://example.com/legacy.jpg")
+        from evidence.tests import register_microchip
+        register_microchip(cls.owner, cls.dog)
         cls.profile = Venue.objects.create(manager_user=cls.cafe, name=cls.cafe.display_name, is_partner=True, address="15 Garden St, Melbourne", description="A dog-friendly garden.", opening_hours="Daily 8–4")
         cls.reward = Reward.objects.create(venue=venue_for(cls.cafe), name="Coffee", point_cost=60)
 

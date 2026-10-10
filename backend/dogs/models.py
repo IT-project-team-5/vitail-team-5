@@ -74,9 +74,12 @@ class Dog(models.Model):
     is_brachycephalic = models.BooleanField()
     created_at = models.DateTimeField(auto_now_add=True)
     goal_owner_version = models.PositiveIntegerField(default=0, editable=False)
+    creation_request_id = models.UUIDField(null=True, editable=False)
+    creation_fingerprint = models.CharField(max_length=64, blank=True, editable=False)
 
     class Meta:
         ordering = ("created_at", "id")
+        constraints = [models.UniqueConstraint(fields=("owner", "creation_request_id"), name="dog_owner_request_unique")]
 
     @property
     def current_age_months(self):
@@ -89,7 +92,15 @@ class Dog(models.Model):
 
     def save(self, *args, **kwargs):
         fields = kwargs.get("update_fields")
-        if self._state.adding or (fields is not None and not {"owner", "owner_id"}.intersection(fields)):
+        if self._state.adding:
+            from django.contrib.auth import get_user_model
+            using = kwargs.get("using") or self._state.db
+            with transaction.atomic(using=using):
+                get_user_model().objects.using(using).select_for_update().get(pk=self.owner_id)
+                if type(self).objects.using(using).filter(owner_id=self.owner_id).count() >= 2:
+                    raise ValidationError("An account can have at most two dogs.")
+                return super().save(*args, **kwargs)
+        if fields is not None and not {"owner", "owner_id"}.intersection(fields):
             return super().save(*args, **kwargs)
         # Admin is the ownership write path. Keep transfers serialized with
         # uploads/configuration and invalidate even a transfer back to an old owner.
@@ -102,6 +113,8 @@ class Dog(models.Model):
             current = type(self).objects.using(using).select_for_update().get(pk=self.pk)
             if current.owner_id != previous_owner:
                 raise ValidationError("The dog's owner changed. Reload before saving.")
+            if current.owner_id != self.owner_id and type(self).objects.using(using).filter(owner_id=self.owner_id).count() >= 2:
+                raise ValidationError("An account can have at most two dogs.")
             self.goal_owner_version = current.goal_owner_version + (current.owner_id != self.owner_id)
             if fields is not None:
                 kwargs["update_fields"] = set(fields) | {"goal_owner_version"}
@@ -155,6 +168,7 @@ class DogGoalTarget(models.Model):
         help_text="Daily walking seconds. Leave empty to pause goals.")
     calculation_policy = models.CharField(max_length=40, default="manual-duration-v1", editable=False)
     calculation_inputs = models.JSONField(default=dict, blank=True, editable=False)
+    request_id = models.UUIDField(null=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     owner_version = models.PositiveIntegerField(default=0, editable=False)
 

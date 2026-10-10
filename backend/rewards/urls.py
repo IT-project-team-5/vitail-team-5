@@ -3,11 +3,12 @@ from django.urls import re_path
 from .views import (
     CafeOrderFeedView, CafeProductListCreateView, CafeProductUpdateView,
     RedemptionCollectView, RedemptionListCreateView,
-    RewardListView, WalletLedgerView, WalletView,
+    RewardListView, WalletLedgerView, WalletView, RedemptionEligibilityView,
 )
 
 
 urlpatterns = [
+    re_path(r"^redemptions/eligibility/?$", RedemptionEligibilityView.as_view(), name="redemption-eligibility"),
     re_path(r"^wallet/?$", WalletView.as_view(), name="wallet"),
     re_path(r"^wallet/ledger/?$", WalletLedgerView.as_view(), name="wallet-ledger"),
     re_path(r"^redemptions/?$", RedemptionListCreateView.as_view(), name="redemption-list-create"),

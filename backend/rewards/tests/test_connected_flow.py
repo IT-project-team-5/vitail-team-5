@@ -202,8 +202,9 @@ class ConnectedRedemptionFlowTests(APITestCase):
     def test_order_dog_avatars_preserve_legacy_urls_and_prefer_absolute_upload_urls(self):
         self.create_order()
         breed = Breed.objects.create(name="Order avatar breed", energy_level="LOW", default_size="SMALL")
-        dogs = [
-            Dog.objects.create(owner=self.owner, breed=breed, name=name, age_months=12,
+        # Legacy accounts may already have more than two dogs; preserve their read paths.
+        dogs = Dog.objects.bulk_create([
+            Dog(owner=self.owner, breed=breed, name=name, age_months=12,
                                size="SMALL", is_brachycephalic=False, photo=photo,
                                uploaded_photo=uploaded)
             for name, photo, uploaded in (
@@ -211,7 +212,8 @@ class ConnectedRedemptionFlowTests(APITestCase):
                 ("Uploaded", "https://images.example.com/old.jpg", "avatars/dogs/current.jpg"),
                 ("No photo", None, ""),
             )
-        ]
+        ])
+        dogs = list(Dog.objects.filter(owner=self.owner).order_by("pk"))
         query = {"include_owner_dogs": "true"}
         feed = self.cafe_client.get(self.feed_url, query, HTTP_HOST="testserver:8123")
         self.assertEqual(feed.status_code, 200)
@@ -240,13 +242,13 @@ class ConnectedRedemptionFlowTests(APITestCase):
         query = {"include_owner_dogs": "true"}
         with CaptureQueriesContext(connection) as single_dog_queries:
             first = self.cafe_client.get(self.feed_url, query)
-        for name in ("Milo", "Luna", "Max"):
+        for name in ("Milo",):
             add_dog(name)
         with CaptureQueriesContext(connection) as multiple_dog_queries:
             second = self.cafe_client.get(self.feed_url, query)
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
-        self.assertEqual(len(second.data["upserts"][0]["owner_dogs"]), 4)
+        self.assertEqual(len(second.data["upserts"][0]["owner_dogs"]), 2)
         self.assertEqual(len(multiple_dog_queries), len(single_dog_queries))
 
     def test_order_dog_names_are_scoped_to_the_customer_and_order_time_cafe(self):
@@ -402,6 +404,7 @@ class ConnectedRedemptionFlowTests(APITestCase):
                 "name": "Milo",
                 "breed_id": breed.pk,
                 "age_months": 0,
+                "weight_kg": "8.00",
                 "size": Dog.Size.SMALL,
                 "is_brachycephalic": False,
             },
@@ -409,6 +412,10 @@ class ConnectedRedemptionFlowTests(APITestCase):
         )
         self.assertEqual(dog_response.status_code, status.HTTP_201_CREATED)
         dog_id = dog_response.data["id"]
+        from uuid import uuid4
+        registration = self.owner_client.post("/api/quests/documents", {"request_id": str(uuid4()),
+            "dog_id": dog_id, "kind": "MICROCHIP_REGISTRATION", "registration_number": "012345678901234"}, format="json")
+        self.assertEqual(registration.status_code, 201)
         created = self.create_order()
         self.assertEqual(created.status_code, status.HTTP_201_CREATED)
 
