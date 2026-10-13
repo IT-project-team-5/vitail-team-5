@@ -20,6 +20,27 @@ The owner can use their profile photo or choose one of the supported virtual map
 avatars: walker, paw, dog or coffee. The selected key is part of the public
 social profile and is used consistently in friend rows and Walk map pins.
 
+The Friends page starts with the owner's own map-profile card. Its Edit map
+profile page saves the appearance explicitly to the authenticated owner's
+server preferences, rather than storing it only on the phone. The dog option
+offers eight dog faces and a cat easter egg. A bandana has four choices: red
+("My dog is reactive"), yellow ("Please give space, nervous dog"), green
+("Friendly"), or no bandana (no designation). This is owner-selected handling
+guidance, not an assessment or a guarantee about the animal. Friends and map
+details show the same guidance. Older profiles without these new fields use the
+default face and no bandana; unknown colours never imply friendliness.
+
+Appearance saves do not opt into location sharing or Net-Walking. A failed or
+unconfirmed save keeps the selection available for retry and does not claim it
+was saved. As with other preference failures, this device's location sharing
+stays paused until the server confirms the retry. Apply the account migration
+before using the new appearance fields. This change includes no clothing shop,
+Demo balance, venue rewards or changes to navigation.
+The appearance editor sends only the three appearance fields. In particular it
+does not replay consent from a cached overview: another device may have changed
+privacy settings since this phone last refreshed. Appearance retries preserve
+the same partial PATCH and adopt the server's current privacy settings.
+
 Two independent controls default **off**:
 
 - **Share walk location with friends:** an accepted friend may see an exact fresh
@@ -104,7 +125,10 @@ GPS history.
   `POST /friends/{public_id}/remove {}`.
 - `POST /blocks {public_id}`; `POST /blocks/{public_id}/remove {}`.
 - `PATCH /preferences` accepts `location_visibility: OFF|FRIENDS`,
-  `net_matching_enabled` and `virtual_avatar_key`.
+  `net_matching_enabled`, `virtual_avatar_key`, `dog_avatar_breed` and
+  `bandana_color`. Omitted fields remain unchanged. Breeds are
+  `goldenRetriever|corgi|husky|dalmatian|beagle|shiba|poodle|dachshund|cat`;
+  bandanas are `none|red|yellow|green`.
 - `GET /map` returns `{friends, nearby, partner}`. Each peer has a public profile,
   coordinates, `recorded_at`, `expires_at`, `is_approximate` and
   `is_net_partner`.
@@ -121,7 +145,7 @@ GPS history.
 
 A live session returns `id`, `request_id`, `state`, `net_consent` and
 `shared_distance_m`. Public profiles return `public_id`, `display_name`,
-`photo_url` and `avatar_key`. Bonus estimates, bonus status and raw sample data
+`photo_url`, `avatar_key`, `dog_avatar_breed` and `bandana_color`. Bonus estimates, bonus status and raw sample data
 are intentionally absent.
 
 ## Release acceptance
@@ -146,6 +170,12 @@ backend to verify:
    behavior, expiry and stop controls.
 7. Finish, choose dogs and retry the completed-walk upload; verify one base walk,
    one saved together-distance result and no Net-Walk wallet credit by default.
+8. On one phone choose Dog, a face and each bandana; save, reopen and refresh the
+   other phone's Friends/Walk details. Verify the same appearance and exact
+   guidance, including no designation for no bandana. Reject unknown API values.
+   Disconnect while saving, retry after reconnecting, and verify no success is
+   claimed before confirmation. Neither appearance editing nor its retry may
+   silently enable location sharing. Physical two-phone results remain pending.
 
 Simulator and automated results do not certify locked-phone GPS, real field
 accuracy, production-scale concurrency or approval of the candidate point rule.

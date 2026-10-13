@@ -11,6 +11,7 @@
 		F61000000000000000000002 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* FriendsService.swift */; };
 		F61000000000000000000003 /* FriendsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000003 /* FriendsStore.swift */; };
 		F61000000000000000000004 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000004 /* FriendsView.swift */; };
+		F61000000000000000000006 /* DogMapAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000006 /* DogMapAvatarView.swift */; };
 		F61000000000000000000005 /* FriendsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000005 /* FriendsTests.swift */; };
 		000000000000000000000001 /* VitailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* VitailApp.swift */; };
 		000000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* RootView.swift */; };
@@ -147,6 +148,7 @@
 		F60000000000000000000002 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
 		F60000000000000000000003 /* FriendsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsStore.swift; sourceTree = "<group>"; };
 		F60000000000000000000004 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
+		F60000000000000000000006 /* DogMapAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogMapAvatarView.swift; sourceTree = "<group>"; };
 		F60000000000000000000005 /* FriendsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E212 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		00000000000000000000E213 /* BrandAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAppearanceTests.swift; sourceTree = "<group>"; };
@@ -527,6 +529,7 @@
 				F60000000000000000000002 /* FriendsService.swift */,
 				F60000000000000000000003 /* FriendsStore.swift */,
 				F60000000000000000000004 /* FriendsView.swift */,
+				F60000000000000000000006 /* DogMapAvatarView.swift */,
 			);
 			path = Friends;
 			sourceTree = "<group>";
@@ -692,6 +695,7 @@
 				F61000000000000000000002 /* FriendsService.swift in Sources */,
 				F61000000000000000000003 /* FriendsStore.swift in Sources */,
 				F61000000000000000000004 /* FriendsView.swift in Sources */,
+				F61000000000000000000006 /* DogMapAvatarView.swift in Sources */,
 				000000000000000000000080 /* ActivityShareModels.swift in Sources */,
 				000000000000000000000081 /* DogIllustration.swift in Sources */,
 				000000000000000000000082 /* ActivityShareCard.swift in Sources */,

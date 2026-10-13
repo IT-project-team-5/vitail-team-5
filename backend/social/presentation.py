@@ -10,6 +10,8 @@ def profile(user, request=None, *, preferences=False):
         "display_name": user.display_name,
         "photo_url": photo_url,
         "avatar_key": user.virtual_avatar_key,
+        "dog_avatar_breed": user.dog_avatar_breed,
+        "bandana_color": user.bandana_color,
     }
     if preferences:
         data.update(location_visibility=user.location_visibility, net_matching_enabled=user.net_matching_enabled)

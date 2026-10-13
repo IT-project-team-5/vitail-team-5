@@ -7,6 +7,34 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 
 
+class DogMapProfileMigrationTests(TransactionTestCase):
+    def test_legacy_owner_gets_defaults_without_changing_existing_preferences(self):
+        executor = MigrationExecutor(connection)
+        leaves = executor.loader.graph.leaf_nodes()
+        try:
+            executor.migrate([("accounts", "0005_user_activity_preferences")])
+            executor = MigrationExecutor(connection)
+            old = executor.loader.project_state(list(executor.loader.applied_migrations)).apps
+            User = old.get_model("accounts", "User")
+            owner = User.objects.create(
+                email="legacy-dog-profile@example.com", display_name="Legacy owner", role="OWNER",
+                virtual_avatar_key="paw", location_visibility="FRIENDS", net_matching_enabled=True,
+            )
+            public_id = owner.public_id
+            executor = MigrationExecutor(connection)
+            executor.migrate(leaves)
+            current = executor.loader.project_state(leaves).apps
+            migrated = current.get_model("accounts", "User").objects.get(pk=owner.pk)
+            self.assertEqual(migrated.dog_avatar_breed, "goldenRetriever")
+            self.assertEqual(migrated.bandana_color, "none")
+            self.assertEqual(migrated.virtual_avatar_key, "paw")
+            self.assertEqual(migrated.location_visibility, "FRIENDS")
+            self.assertTrue(migrated.net_matching_enabled)
+            self.assertEqual(migrated.public_id, public_id)
+        finally:
+            MigrationExecutor(connection).migrate(leaves)
+
+
 class InvitationShapeMigrationTests(TransactionTestCase):
     def test_every_legacy_status_timestamp_shape_is_canonicalized(self):
         executor = MigrationExecutor(connection)

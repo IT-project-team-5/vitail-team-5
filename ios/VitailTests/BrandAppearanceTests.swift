@@ -27,6 +27,120 @@ final class BrandAppearanceTests: XCTestCase {
         }
     }
 
+    func testDogMapAvatarGallerySnapshots() async throws {
+        let breeds = DogMapBreed.allCases
+        XCTAssertEqual(breeds.count, 9)
+        let groups = stride(from: 0, to: breeds.count, by: 3).map {
+            Array(breeds[$0..<min($0 + 3, breeds.count)])
+        }
+        // Render the shared profile/map avatar at actual marker and preview sizes.
+        // Fixtures do not start GPS, call a service or create account/point data.
+        for dark in [false, true] {
+            let mode = dark ? "Dark" : "Light"
+            for (index, group) in groups.enumerated() {
+                try await snapshot(dogAvatarGallery(group),
+                                   name: "Dog-Map-Avatar-Gallery-\(index + 1)-\(mode)", dark: dark)
+            }
+        }
+        try await snapshot(dogAvatarGallery([.goldenRetriever, .dachshund, .cat])
+            .environment(\.dynamicTypeSize, .accessibility2),
+                           name: "Dog-Map-Avatar-Gallery-Large-Text", dark: false)
+    }
+
+    func testDogBandanaGuidanceSnapshots() async throws {
+        let groups: [[DogBandanaColor]] = [[.red, .yellow], [.green, .none]]
+        XCTAssertEqual(DogBandanaColor.red.guidance, "My dog is reactive")
+        XCTAssertEqual(DogBandanaColor.yellow.guidance, "Please give space, nervous dog")
+        XCTAssertEqual(DogBandanaColor.green.guidance, "Friendly")
+        XCTAssertNil(DogBandanaColor.none.guidance)
+        for dark in [false, true] {
+            for largeText in [false, true] {
+                let mode = dark ? "Dark" : "Light"
+                let textSize = largeText ? "-Large-Text" : ""
+                for (index, group) in groups.enumerated() {
+                    try await snapshot(bandanaGuidanceGallery(group)
+                        .environment(\.dynamicTypeSize, largeText ? .accessibility2 : .large),
+                                       name: "Dog-Bandana-Guidance-\(index + 1)-\(mode)\(textSize)", dark: dark)
+                }
+            }
+        }
+    }
+
+    private func dogAvatarGallery(_ breeds: [DogMapBreed]) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Text("Map appearances").font(.title2.bold())
+            ForEach(breeds, id: \.self) { breed in
+                let profile = self.appearanceProfile(breed: breed, bandana: .green)
+                HStack(spacing: AppSpacing.small) {
+                    SocialAvatarView(user: profile, size: 96)
+                    VStack(alignment: .leading, spacing: AppSpacing.small) {
+                        Text(breed.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .bottom, spacing: AppSpacing.medium) {
+                            VStack(spacing: 3) {
+                                SocialAvatarView(user: profile, size: 36)
+                                Text("36 pt").font(.caption)
+                            }
+                            VStack(spacing: 3) {
+                                SocialAvatarView(user: profile, size: 44)
+                                Text("44 pt").font(.caption)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(AppSpacing.small)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(AppColors.primaryText)
+        .padding(AppSpacing.medium)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.background)
+    }
+
+    private func bandanaGuidanceGallery(_ colors: [DogBandanaColor]) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Text("What other walkers see").font(.title2.bold())
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(colors, id: \.self) { color in
+                let profile = self.appearanceProfile(breed: .corgi, bandana: color)
+                VStack(alignment: .leading, spacing: AppSpacing.small) {
+                    HStack(spacing: AppSpacing.small) {
+                        SocialAvatarView(user: profile, size: 64)
+                        Text(color.title).font(.headline)
+                    }
+                    if color == .none {
+                        Text("No bandana · no designation")
+                            .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        DogBandanaGuidanceView(user: profile)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text("Chosen by the walker. Ask before approaching their dog.")
+                        .font(.caption).foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(AppSpacing.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(AppColors.primaryText)
+        .padding(AppSpacing.medium)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.background)
+    }
+
+    private func appearanceProfile(breed: DogMapBreed, bandana: DogBandanaColor) -> SocialProfile {
+        SocialProfile(publicID: "snapshot-\(breed.rawValue)-\(bandana.rawValue)",
+                      displayName: "Milo's walker", photoURL: nil, avatarKey: "dog",
+                      dogAvatarBreed: breed, bandanaColor: bandana)
+    }
+
     func testBrandLayoutSnapshots() async throws {
         let session = SessionStore()
         for dark in [false, true] {

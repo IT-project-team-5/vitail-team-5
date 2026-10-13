@@ -1412,18 +1412,26 @@ components:
         unblocked: {type: boolean}
     SocialProfile:
       type: object
-      required: [public_id, display_name, photo_url, avatar_key]
+      required: [public_id, display_name, photo_url, avatar_key, dog_avatar_breed, bandana_color]
       properties:
         public_id: {type: string, pattern: '^[0-9a-f]{32}$'}
         display_name: {type: string}
         photo_url: {type: string, nullable: true}
         avatar_key: {type: string, enum: ['', walker, paw, dog, coffee]}
+        dog_avatar_breed: {type: string, enum: [goldenRetriever, corgi, husky, dalmatian, beagle, shiba, poodle, dachshund, cat], default: goldenRetriever}
+        bandana_color:
+          type: string
+          enum: [none, red, yellow, green]
+          default: none
+          description: 'Owner-selected guidance: red = reactive, yellow = nervous / give space, green = friendly, none = no designation.'
     SocialPreferenceUpdate:
       type: object
       properties:
         location_visibility: {type: string, enum: ['OFF', FRIENDS]}
         net_matching_enabled: {type: boolean}
         virtual_avatar_key: {type: string, enum: ['', walker, paw, dog, coffee]}
+        dog_avatar_breed: {type: string, enum: [goldenRetriever, corgi, husky, dalmatian, beagle, shiba, poodle, dachshund, cat]}
+        bandana_color: {type: string, enum: [none, red, yellow, green]}
     SocialPreferences:
       allOf:
         - {$ref: '#/components/schemas/SocialProfile'}

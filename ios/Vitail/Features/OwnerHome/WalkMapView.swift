@@ -885,6 +885,12 @@ private struct SocialPeerSheet: View {
                     if let distance = peer.distanceM {
                         LabeledContent("Distance", value: distanceText(distance))
                     }
+                    DogBandanaGuidanceView(user: peer.user)
+                    if peer.user.avatarKey == SocialAvatarOption.dog.rawValue,
+                       peer.user.bandanaColor == .none {
+                        Text("No bandana · no designation")
+                            .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                    }
                 }
                 actionSection
                 if let error = store.errorMessage {

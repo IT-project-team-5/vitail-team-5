@@ -2,6 +2,8 @@ import math
 
 from rest_framework import serializers
 
+from accounts.models import User
+
 from .models import VIRTUAL_AVATAR_KEYS
 
 
@@ -17,6 +19,8 @@ class PreferencesSerializer(serializers.Serializer):
     location_visibility = serializers.ChoiceField(choices=("OFF", "FRIENDS"), required=False)
     net_matching_enabled = serializers.BooleanField(required=False)
     virtual_avatar_key = serializers.ChoiceField(choices=VIRTUAL_AVATAR_KEYS, required=False)
+    dog_avatar_breed = serializers.ChoiceField(choices=User.DogAvatarBreed.choices, required=False)
+    bandana_color = serializers.ChoiceField(choices=User.BandanaColor.choices, required=False)
 
 
 class StartSessionSerializer(serializers.Serializer):
