@@ -38,6 +38,13 @@ jobs:
       MYSQL_PORT: 3306
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Check changed whitespace
+        run: |
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -45,7 +52,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y default-libmysqlclient-dev pkg-config
-          python -m pip install -r backend/requirements.txt
+          python -m pip install -r backend/requirements-test.txt
       - name: Check schema and run tests including database locks
         working-directory: backend
         shell: bash
@@ -54,9 +61,22 @@ jobs:
           mkdir -p ../test-results/backend
           git rev-parse HEAD > ../test-results/backend/source-sha.txt
           python --version > ../test-results/backend/runtime.txt
+          python -m pip freeze --all > ../test-results/backend/dependencies.txt
           python manage.py check 2>&1 | tee ../test-results/backend/check.log
           python manage.py makemigrations --check --dry-run 2>&1 | tee ../test-results/backend/migration-drift.log
-          python manage.py test --verbosity 2 2>&1 | tee ../test-results/backend/tests.log
+          python -m coverage run manage.py test --noinput --verbosity 2 2>&1 | tee ../test-results/backend/tests.log
+      - name: Export backend coverage
+        if: always()
+        working-directory: backend
+        run: |
+          mkdir -p ../test-results/backend
+          if [ -f .coverage ]; then
+            python -m coverage report > ../test-results/backend/coverage.txt
+            python -m coverage json -o ../test-results/backend/coverage.json
+            python -m coverage xml -o ../test-results/backend/coverage.xml
+          else
+            echo "::warning::No coverage data was created; see test/setup logs."
+          fi
       - name: Save backend verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,7 +84,7 @@ jobs:
           name: backend-test-results
           path: test-results/backend
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
 
   ios:
     runs-on: macos-15
@@ -127,4 +147,4 @@ jobs:
             TestResults.xcresult
             test-results/ios
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
