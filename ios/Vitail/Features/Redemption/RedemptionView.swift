@@ -24,6 +24,7 @@ struct RedemptionView: View {
                 }
                 .padding(.vertical, 12)
                 PendingPurchaseNotice(viewModel: viewModel)
+                RegistrationGate(viewModel: viewModel, documentService: documentService, session: session)
                 if let message = viewModel.errorMessage {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(message).font(.subheadline).foregroundStyle(AppColors.error)
@@ -40,7 +41,7 @@ struct RedemptionView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Rewards").font(.headline)
                     if viewModel.cafes.isEmpty && !viewModel.isLoading {
-                        ContentUnavailableView("No cafés yet", systemImage: "cup.and.saucer",
+                        ContentUnavailableView("No rewards available", systemImage: "cup.and.saucer",
                                                description: Text("Check back soon for local rewards."))
                     }
                     ForEach(viewModel.cafes) { cafe in
@@ -183,15 +184,14 @@ struct CafeMenuView: View {
                                 Text(reward.description).font(.subheadline).foregroundStyle(AppColors.secondaryText)
                             }
                             let isRetry = viewModel.retryRewardID == reward.id
-                            let canAfford = (viewModel.balance ?? 0) >= reward.pointCost
                             PrimaryButton(
                                 title: "\(isRetry ? "Retry purchase" : "Purchase") · \(reward.pointCost) pts",
                                 isLoading: viewModel.redeemingRewardID == reward.id,
-                                isDisabled: viewModel.isLoading || viewModel.isMutating ||
-                                    (!canAfford && !isRetry) || (viewModel.retryRewardID != nil && !isRetry)
+                                isDisabled: isRetry ? (viewModel.isLoading || viewModel.isMutating)
+                                    : !viewModel.canPurchase(rewardID: reward.id)
                             ) { selectedReward = reward }
-                            if !canAfford && !isRetry {
-                                Text("You need \(max(0, reward.pointCost - (viewModel.balance ?? 0))) more points.")
+                            if !isRetry, let reason = viewModel.purchaseBlockReason(rewardID: reward.id) {
+                                Text(reason)
                                     .font(.caption).foregroundStyle(AppColors.secondaryText)
                             }
                         }
@@ -209,6 +209,7 @@ struct CafeMenuView: View {
                 Button("Purchase · \(reward.pointCost) pts") {
                     Task { await viewModel.redeem(rewardID: reward.id) }
                 }
+                .disabled(viewModel.retryRewardID != reward.id && !viewModel.canPurchase(rewardID: reward.id))
                 Button("Cancel", role: .cancel) { selectedReward = nil }
             } message: { reward in
                 Text("\(reward.cafeName)\n\(CollectionDeadline.purchaseText())")
@@ -225,7 +226,10 @@ private struct RegistrationGate: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            if let eligibility = viewModel.eligibility, !eligibility.eligible {
+            if viewModel.eligibility == nil {
+                Text(viewModel.isLoading ? "Checking redemption eligibility…" : "Unable to confirm microchip registration. Refresh to try again.")
+                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+            } else if let eligibility = viewModel.eligibility, !eligibility.eligible {
                 Text("Microchip registration needed").font(.headline)
                 Text("Register each dog to redeem. The 300-point registration reward can be collected separately.")
                     .font(.subheadline).foregroundStyle(AppColors.secondaryText)
@@ -240,12 +244,14 @@ private struct RegistrationGate: View {
             } else if viewModel.eligibility?.eligible == true, let rewardID = viewModel.registrationRewardID,
                       let reward = viewModel.rewards.first(where: { $0.id == rewardID }) {
                 Text("All dogs registered. Continue with \(reward.name).").font(.subheadline)
-                PrimaryButton(title: "Purchase · \(reward.pointCost) pts", isDisabled: viewModel.isLoading || viewModel.isMutating) {
+                if let reason = viewModel.purchaseBlockReason(rewardID: rewardID) {
+                    Text(reason).font(.caption).foregroundStyle(AppColors.secondaryText)
+                }
+                PrimaryButton(title: "Purchase · \(reward.pointCost) pts", isDisabled: !viewModel.canPurchase(rewardID: rewardID)) {
                     Task { await viewModel.redeem(rewardID: rewardID) }
                 }
             }
         }
-        .task { await viewModel.refreshEligibility() }
     }
 }
 

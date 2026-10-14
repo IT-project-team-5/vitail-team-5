@@ -55,3 +55,57 @@ local route archives cannot become another user's data.
 Database rows and private credentials are local state; a Git pull does not copy
 them to teammates. Physical iPhone layout and network acceptance remain separate
 from automated API and view-model tests.
+
+## Five-point redemption test
+
+With the local Docker services running, add the test product without resetting
+accounts or changing wallets:
+
+```sh
+docker compose exec api python manage.py demo_reward --state available
+```
+
+The product is labelled **DUMMY reward — no real redemption value**, costs exactly
+5 points, and uses the normal registration, catalogue, wallet, and order rules.
+Its dedicated fictional café has no usable login password. The command requires
+`DEBUG=True`; both listing and purchasing this café's rewards are disabled when
+`DEBUG=False`. No registration checks are bypassed and no points are granted.
+
+To test an empty catalogue in a disposable development database:
+
+```sh
+docker compose exec api python manage.py demo_reward --state unavailable --exclusive
+```
+
+`--exclusive` also disables all other rewards in that development database. It
+does not delete orders or change balances. Re-enable those products through café
+product settings when finished. Restore just the test reward with:
+
+```sh
+docker compose exec api python manage.py demo_reward --state available
+```
+
+Refresh Redeem after each change. Check these cases using a development owner:
+
+| State | Expected result |
+| --- | --- |
+| Any current dog lacks accepted microchip registration | Purchase disabled; registration explanation and a link for each incomplete dog, even with no rewards |
+| No current reward | “No rewards available”; a stale purchase is rejected without a debit |
+| Registered, balance 0 or 4 | Purchase disabled with the points shortfall; direct requests rejected |
+| Registered, balance 5 | One order and one 5-point debit; balance 0 |
+| Registered, balance 12 | One order and one 5-point debit; balance 7 |
+| Repeated taps or retry after a lost response | Same request recovers one order; one debit only |
+| Transaction fails after debit | Order and debit both roll back; balance unchanged |
+
+Complete registration through the registration link; collecting the separate
+registration points is optional. Use existing development wallet administration
+to set up the balance cases. Backend regression tests create isolated wallets
+for all these cases, including real MySQL row-lock tests for simultaneous requests.
+
+```sh
+docker compose run --rm --no-deps -e DATABASE_ENGINE=sqlite api python manage.py test rewards.tests.test_redemption_eligibility
+```
+
+The SQLite run skips the concurrency cases; run the same test module against an
+isolated MySQL test database to exercise those. iOS regression cases live in
+`RedemptionTests.swift`; run the Vitail test scheme in Xcode for full app checks.

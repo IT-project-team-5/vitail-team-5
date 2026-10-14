@@ -5,11 +5,70 @@ import XCTest
 
 @MainActor
 final class RedemptionTests: XCTestCase {
+    func testFivePointRewardBalanceBoundariesAndHandlerGuards() async {
+        for balance in [0, 4, 5, 12] {
+            let service = RedemptionStub(initialBalance: balance, pointCost: 5)
+            let model = RedemptionViewModel(service: service)
+            await model.refresh()
+            XCTAssertEqual(model.canPurchase(rewardID: 1), balance >= 5)
+            await model.redeem(rewardID: 1)
+            let calls = await service.requestIDs.count
+            XCTAssertEqual(calls, balance >= 5 ? 1 : 0)
+            XCTAssertEqual(model.balance, balance >= 5 ? balance - 5 : balance)
+            XCTAssertEqual(model.pendingRedemptions.count, balance >= 5 ? 1 : 0)
+            if balance < 5 { XCTAssertEqual(model.errorMessage, "You need \(5 - balance) more points.") }
+        }
+    }
+
+    func testRewardRemovedAfterScreenLoadCannotBePurchased() async {
+        let service = RedemptionStub(pointCost: 5)
+        let model = RedemptionViewModel(service: service)
+        await model.refresh()
+        await service.setOffersAvailable(false)
+        await model.redeem(rewardID: 1)
+        XCTAssertFalse(model.canPurchase(rewardID: 1))
+        XCTAssertTrue(model.rewards.isEmpty)
+        XCTAssertEqual(model.errorMessage, "This reward is no longer available. Refresh to see current rewards.")
+        let calls = await service.requestIDs.count
+        XCTAssertEqual(calls, 0)
+        XCTAssertNil(model.retryRewardID)
+    }
+
+    func testRegistrationFailureClearsOldEligibilityAndNeverCreatesRetryPurchase() async {
+        let service = RedemptionStub()
+        let model = RedemptionViewModel(service: service)
+        await model.refresh()
+        XCTAssertTrue(model.canPurchase(rewardID: 1))
+        await service.setEligibilityUnavailable(true)
+        await model.refreshEligibility()
+        XCTAssertNil(model.eligibility)
+        XCTAssertFalse(model.canPurchase(rewardID: 1))
+        await model.redeem(rewardID: 1)
+        XCTAssertNil(model.retryRewardID)
+        let calls = await service.requestIDs.count
+        XCTAssertEqual(calls, 0)
+    }
+
+    func testRepeatedClicksOnlyPurchaseOnce() async {
+        let service = RedemptionStub(initialBalance: 12, pointCost: 5)
+        let model = RedemptionViewModel(service: service)
+        await model.refresh()
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<5 { group.addTask { await model.redeem(rewardID: 1) } }
+        }
+        let calls = await service.requestIDs.count
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(model.balance, 7)
+        XCTAssertEqual(model.pendingRedemptions.count, 1)
+    }
+
     func testRegistrationBlocksPurchaseAndPreservesProductUntilBothDogsRegister() async {
         let service = RedemptionStub()
         await service.setIncompleteDogs([.init(id: 1, name: "Milo"), .init(id: 2, name: "Pip")])
         let model = RedemptionViewModel(service: service)
         await model.refresh()
+        XCTAssertFalse(model.canPurchase(rewardID: 1))
+        XCTAssertEqual(model.purchaseBlockReason(rewardID: 1), "Complete microchip registration for every dog before redeeming.")
         await model.redeem(rewardID: 1)
         XCTAssertEqual(model.registrationRewardID, 1)
         XCTAssertEqual(model.eligibility?.incompleteDogs.count, 2)
@@ -244,11 +303,17 @@ final class RedemptionTests: XCTestCase {
 private actor RedemptionStub: RedemptionServing {
     private var incompleteDogs: [RedemptionEligibility.IncompleteDog] = []
     func setIncompleteDogs(_ dogs: [RedemptionEligibility.IncompleteDog]) { incompleteDogs = dogs }
+    private var eligibilityUnavailable = false
+    private var offersAvailable = true
+    func setEligibilityUnavailable(_ value: Bool) { eligibilityUnavailable = value }
+    func setOffersAvailable(_ value: Bool) { offersAvailable = value }
     func fetchEligibility() async throws -> RedemptionEligibility {
-        RedemptionEligibility(eligible: incompleteDogs.isEmpty, incompleteDogs: incompleteDogs)
+        if eligibilityUnavailable { throw APIError.network("Eligibility unavailable") }
+        return RedemptionEligibility(eligible: incompleteDogs.isEmpty, incompleteDogs: incompleteDogs)
     }
     var requestIDs: [UUID] = []
-    private var balance = 60
+    private var balance: Int
+    private let pointCost: Int
     private var orders: [Redemption] = []
     private let failFirstCreate: Bool
     private let expireOnCollect: Bool
@@ -256,7 +321,9 @@ private actor RedemptionStub: RedemptionServing {
     private let failReloadAfterCreate: Bool
 
     init(failFirstCreate: Bool = false, expireOnCollect: Bool = false, hidePurchasedReward: Bool = false,
-         failReloadAfterCreate: Bool = false) {
+         failReloadAfterCreate: Bool = false, initialBalance: Int = 60, pointCost: Int = 10) {
+        self.balance = initialBalance
+        self.pointCost = pointCost
         self.failFirstCreate = failFirstCreate
         self.expireOnCollect = expireOnCollect
         self.hidePurchasedReward = hidePurchasedReward
@@ -265,8 +332,8 @@ private actor RedemptionStub: RedemptionServing {
 
     func fetchBalance() async throws -> WalletBalance { WalletBalance(balance: balance) }
     func fetchRewards() async throws -> [Reward] {
-        if hidePurchasedReward && !orders.isEmpty { return [] }
-        return [Reward(id: 1, name: "Coffee", description: "", pointCost: 10, cafeName: "Cafe")]
+        if !offersAvailable || (hidePurchasedReward && !orders.isEmpty) { return [] }
+        return [Reward(id: 1, name: "Coffee", description: "", pointCost: pointCost, cafeName: "Cafe")]
     }
     func fetchRedemptions() async throws -> [Redemption] {
         if failReloadAfterCreate && !orders.isEmpty { throw APIError.network("Refresh unavailable") }
@@ -277,7 +344,7 @@ private actor RedemptionStub: RedemptionServing {
         requestIDs.append(requestID)
         if orders.isEmpty {
             orders = [order(status: .pending)]
-            balance -= 10
+            balance -= pointCost
         }
         if failFirstCreate && requestIDs.count == 1 { throw APIError.network("Offline") }
         return orders[0]
@@ -286,7 +353,7 @@ private actor RedemptionStub: RedemptionServing {
     func collectRedemption(id: Int) async throws -> Redemption {
         if expireOnCollect {
             orders = [order(status: .expired)]
-            balance += 10
+            balance += pointCost
             throw APIError.http(status: 409, message: "This redemption has expired.")
         }
         orders = [order(status: .collected)]
@@ -296,7 +363,7 @@ private actor RedemptionStub: RedemptionServing {
     private func order(status: RedemptionStatus) -> Redemption {
         Redemption(
             id: 1, referenceNumber: "VIT-TEST", rewardNameSnapshot: "Coffee",
-            pointCostSnapshot: 10, status: status
+            pointCostSnapshot: pointCost, status: status
         )
     }
 }

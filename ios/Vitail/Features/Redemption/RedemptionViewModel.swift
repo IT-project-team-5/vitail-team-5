@@ -20,6 +20,7 @@ final class RedemptionViewModel: ObservableObject {
     func refreshEligibility() async {
         eligibilityGeneration += 1
         let generation = eligibilityGeneration
+        eligibility = nil
         do {
             let result = try await service.fetchEligibility()
             guard !Task.isCancelled, generation == eligibilityGeneration else { return }
@@ -42,6 +43,22 @@ final class RedemptionViewModel: ObservableObject {
     var pendingRedemptions: [Redemption] { redemptions.filter { $0.status == .pending } }
     var history: [Redemption] { redemptions.filter { $0.status != .pending } }
     var cafes: [CafeRewardGroup] { CafeRewardGroup.grouped(rewards) }
+
+    // One explanation drives both disabled controls and the purchase handler.
+    func purchaseBlockReason(rewardID: Int) -> String? {
+        guard let eligibility else { return "Unable to confirm microchip registration. Refresh to try again." }
+        guard eligibility.eligible else { return "Complete microchip registration for every dog before redeeming." }
+        guard let reward = rewards.first(where: { $0.id == rewardID }) else {
+            return "This reward is no longer available. Refresh to see current rewards."
+        }
+        guard let balance else { return "Unable to confirm your points. Refresh to try again." }
+        guard balance >= reward.pointCost else { return "You need \(reward.pointCost - balance) more points." }
+        return nil
+    }
+
+    func canPurchase(rewardID: Int) -> Bool {
+        !isLoading && !isMutating && retryRewardID == nil && purchaseBlockReason(rewardID: rewardID) == nil
+    }
 
     func refresh() async {
         guard !isLoading, !isMutating else { refreshRequested = true; return }
@@ -67,6 +84,7 @@ final class RedemptionViewModel: ObservableObject {
     }
 
     private func reload() async throws {
+        eligibility = nil
         // Fetch history first so any expired orders/refunds are reflected in the balance.
         let orders = try await service.fetchRedemptions()
         async let wallet = service.fetchBalance()
@@ -86,26 +104,39 @@ final class RedemptionViewModel: ObservableObject {
     func redeem(rewardID: Int) async {
         guard !isMutating, !isLoading,
               retryRewardID == nil || retryRewardID == rewardID else { return }
+        guard purchasedReceipt == nil else { return }
         let isRetry = pendingRequestID != nil
         let requestID = pendingRequestID ?? UUID()
-        pendingRequestID = requestID
-        if retryRewardID == nil { retryReward = rewards.first { $0.id == rewardID } }
-        retryRewardID = rewardID
         redeemingRewardID = rewardID
         errorMessage = nil
         defer { redeemingRewardID = nil; drainRequestedRefresh() }
         do {
-            // Recheck at purchase time; the backend also checks under the owner lock.
+            // A retry recovers an existing purchase using its original key. The
+            // server still checks all rules if that request never committed.
             if !isRetry {
                 eligibilityGeneration += 1
-                let eligibility = try await service.fetchEligibility()
-                self.eligibility = eligibility
-                if !eligibility.eligible {
+                eligibility = nil
+                let checkedEligibility = try await service.fetchEligibility()
+                try Task.checkCancellation()
+                eligibility = checkedEligibility
+                if !checkedEligibility.eligible {
                     registrationRewardID = rewardID
-                    pendingRequestID = nil; retryRewardID = nil; retryReward = nil
-                    errorMessage = "Register every dog's microchip to continue. You can collect registration points separately."
+                    errorMessage = purchaseBlockReason(rewardID: rewardID)
                     return
                 }
+                async let offers = service.fetchRewards()
+                async let wallet = service.fetchBalance()
+                let (currentOffers, currentWallet) = try await (offers, wallet)
+                try Task.checkCancellation()
+                rewards = currentOffers
+                balance = currentWallet.balance
+                if let reason = purchaseBlockReason(rewardID: rewardID) {
+                    errorMessage = reason
+                    return
+                }
+                retryReward = rewards.first { $0.id == rewardID }
+                pendingRequestID = requestID
+                retryRewardID = rewardID
             }
             let order = try await service.createRedemption(rewardID: rewardID, requestID: requestID)
             try Task.checkCancellation()
