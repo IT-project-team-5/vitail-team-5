@@ -67,12 +67,38 @@ struct DogFormView: View {
                         .focused($focusedField, equals: .name)
                         .submitLabel(.next)
                         .onSubmit { focusedField = .weight }
-                    Picker("Breed", selection: $breedID) {
-                        Text("Select a breed").tag(Int?.none)
-                        ForEach(viewModel.breeds) { breed in
-                            Text(breed.name).tag(Optional(breed.id))
+                    Menu {
+                        Picker("Breed", selection: $breedID) {
+                            Text("Select a breed").tag(Int?.none)
+                            ForEach(viewModel.breeds) { breed in
+                                Text(breed.name).tag(Optional(breed.id))
+                            }
                         }
+                    } label: {
+                        HStack {
+                            Text("Breed")
+                                .foregroundStyle(AppColors.primaryText)
+                            Spacer(minLength: AppSpacing.small)
+                            Text(selectedBreedName)
+                                .multilineTextAlignment(.trailing)
+                                .foregroundStyle(AppColors.secondaryText)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppColors.secondaryText)
+                                .accessibilityHidden(true)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        // Include the label, spacer, arrow and row padding in the native control.
+                        .contentShape(Rectangle())
                     }
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets())
+                    .accessibilityLabel("Breed")
+                    .accessibilityValue(selectedBreedName)
+                    .accessibilityIdentifier("dog.breed")
                     Toggle("Brachycephalic", isOn: $isBrachycephalic)
                     TextField("Weight (kg)", text: $weightKg)
                         .keyboardType(.decimalPad)
@@ -122,7 +148,6 @@ struct DogFormView: View {
             }
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.interactively)
-            .onTapGesture { focusedField = nil }
             .background(AppColors.background)
             .navigationTitle(dog == nil ? "Add Dog" : "Edit Dog")
             .navigationBarTitleDisplayMode(.inline)
@@ -192,6 +217,10 @@ struct DogFormView: View {
                 Text("This dog profile will be permanently deleted.")
             }
         }
+    }
+
+    private var selectedBreedName: String {
+        viewModel.breeds.first(where: { $0.id == breedID })?.name ?? "Select a breed"
     }
 
     private func save() async {
