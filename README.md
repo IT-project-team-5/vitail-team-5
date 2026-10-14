@@ -67,7 +67,7 @@ Staging and Release.
 
 | Account | Navigation | Available flow |
 |---|---|---|
-| Owner | Account / Walk / Quest / Redeem | Email registration, profiles/photos, Friends and privacy settings, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
+| Owner | Redeem / Quest / Walk / Friends / Account | Email registration, profiles/photos, Friends and privacy settings, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
 | Café | Account / Products / Orders | Admin-created login, venue details/photo/Maps, menu prices and availability, read-only pending orders |
 | Admin | Django Admin | Onboarding, catalogue, positive test-point grants, pending-order cancellation/refunds and evidence access |
 
@@ -102,8 +102,8 @@ venue rewards: leaving the 20-metre circle or losing reliable GPS pauses dwell
 without losing time already verified in that walk. Completed check-ins remain
 pending until the confirmed walk upload settles them through the shared ledger.
 The saved summary shows only actual awards; daily category limits and the
-72-point activity cap still apply. Physical-device GPS and full video acceptance
-remain pending; see the [venue test checklist](docs/VENUE_CHECKIN_TESTING.md).
+72-point activity cap still apply. Physical acceptance and integration regression are recorded separately;
+see [integration evidence](docs/INTEGRATION.md) and the [venue test checklist](docs/VENUE_CHECKIN_TESTING.md).
 
 Redeem lists cafés, menus and actual product prices. Purchase deducts points
 once and opens a receipt; the owner slides to collect. Uncollected orders
@@ -162,5 +162,5 @@ policy question.
 
 The owner journey now includes resumable dog/goal setup (maximum two dogs),
 20-point per-dog daily collection, microchip-gated purchases and Council search.
-See [implementation and verification](docs/OWNER_JOURNEY_REPORT.md) and
-[mandatory iPhone acceptance](docs/OWNER_JOURNEY_ACCEPTANCE.md).
+See [daily-goal implementation](docs/DAILY_GOALS.md) and
+[integration and acceptance evidence](docs/INTEGRATION.md).

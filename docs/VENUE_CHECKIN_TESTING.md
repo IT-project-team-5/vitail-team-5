@@ -2,8 +2,10 @@
 
 Implementation target: [SCRUM-57](https://group5-vitail-project.atlassian.net/browse/SCRUM-57),
 [Venue-Checkin v5](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35815426/Venue-Checkin)
-(9 October 2026). **Physical GPS acceptance and recordings are pending.**
-Automated tests and simulator results do not satisfy this requirement.
+(9 October 2026). Chien confirmed physical testing of already-passed PRs on
+14 October; see [acceptance evidence](INTEGRATION.md#acceptance-evidence).
+This checklist remains the reusable case definition for future affected runs.
+Automated tests and simulator results are separate from that human attestation.
 
 ## Prepare the build and locations
 
@@ -45,7 +47,10 @@ inherited partial dwell), and the daily cap (no excess or fake full reward).
 Check Reduce Motion, large text and a paused/reopened walk. The café must remain
 recording while receiving reliable stationary fixes for more than five minutes.
 
-## Results to attach
+## Result template for a new run
+
+The empty rows below are a template, not a reversal of the existing human-attested
+acceptance. Fill them only with observations from the named new candidate.
 
 | Category | Venue | Actual date/time | Expected venue points | Actual venue points | Full original video | Result |
 |---|---|---|---|---|---|---|
@@ -55,5 +60,6 @@ recording while receiving reliable stationary fixes for more than five minutes.
 
 Add actual walking points, summary total, wallet delta and starting/ending daily
 activity totals to each result. Preserve failure recordings and document fixes,
-then rerun the affected flow. Supply original video links and the results to
-Chien; record that delivery before marking the PR ready and the Jira task done.
+then rerun the affected flow. Link any available original recordings and results
+to the test run; keep human-attested acceptance clearly identified when that is
+the evidence supplied.

@@ -1,8 +1,7 @@
 # Friends and Net-Walking
 
 Friends and consented live location are connected end to end. The feature lives
-under **Account → Friends and Net-Walking** so the owner navigation stays at four
-primary destinations: Account, Walk, Quest and Redeem. **Walk is the
+under the **Friends** tab. Owner navigation is **Redeem / Quest / Walk / Friends / Account**. **Walk is the
 walk/social map and owns the sole walk/social location stream**: it records the
 route, publishes allowed presence, displays friend/partner pins and hosts
 Net-Walking invitations and venue discovery/check-ins using the same location
@@ -107,9 +106,11 @@ Apply account migration `0007_user_public_dog` and social migration
 `0005_avatar_shop` before deploying this client. Old clients ignore the new
 profile fields; newer clients display hidden dog/plain clothing fallbacks when
 those fields are absent, but need the updated server to save/buy. These changes
-have been validated locally; physical-phone acceptance is still pending.
+have branch-local validation. Chien confirmed physical testing of already-passed
+PRs on 14 October; integrated regression remains a separate record in
+[INTEGRATION.md](INTEGRATION.md).
 
-Local validation on 14 October: the full iOS suite passed 404 tests with one
+Historical PR #15 author-reported validation on 14 October (head `fb26860`): the full iOS suite passed 404 tests with one
 existing simulator device-lock check skipped, and the additional clothing
 snapshot test passed across light/dark and large-text variants. The MySQL
 social/rewards/Demo-reset suite passed all 175 tests, including shop concurrency.
