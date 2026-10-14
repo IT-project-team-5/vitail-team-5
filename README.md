@@ -1,5 +1,7 @@
 # Vitail — Dog Walking Rewards
 
+[Project Hub — requirements, delivery, testing and handover](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/overview)
+
 Native iOS app and Django API for a Melbourne dog-walking rewards pilot.
 Owners record walks, collect eligible care rewards and spend points at cafés.
 Café accounts manage their own venue, menu and incoming orders.
