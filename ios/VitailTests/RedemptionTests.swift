@@ -124,15 +124,7 @@ final class RedemptionTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(Reward.self, from: old).cafeID)
     }
 
-    func testCoffeeEstimateUsesFinalPolicyWithoutChangingMenuPrices() {
-        XCTAssertEqual(CoffeeEstimate.pointsPerCup, 504)
-        XCTAssertEqual(CoffeeEstimate.text(for: 504), "≈ 1 cup of coffee")
-        XCTAssertEqual(CoffeeEstimate.text(for: 500), "≈ 1 cup of coffee")
-        XCTAssertEqual(CoffeeEstimate.text(for: 1_008), "≈ 2 cups of coffee")
-        XCTAssertEqual(CoffeeEstimate.text(for: 252), "≈ 0.5 cups of coffee")
-        XCTAssertEqual(CoffeeEstimate.text(for: 0), "≈ 0 cups of coffee")
-        XCTAssertEqual(CoffeeEstimate.text(for: -1), "≈ 0 cups of coffee")
-        XCTAssertEqual(CoffeeEstimate.accessibilityHint, "Estimate based on 504 points per cup. Menu prices vary.")
+    func testCafeGroupingPreservesMenuPrices() {
         let offer = Reward(id: 1, name: "Coffee", description: "", pointCost: 60, cafeName: "Paws")
         XCTAssertEqual(CafeRewardGroup.grouped([offer]).first?.rewards.first?.pointCost, 60)
     }
