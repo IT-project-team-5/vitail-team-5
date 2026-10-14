@@ -2,10 +2,10 @@
 
 Implementation target: [SCRUM-57](https://group5-vitail-project.atlassian.net/browse/SCRUM-57),
 [Venue-Checkin v5](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35815426/Venue-Checkin)
-(9 October 2026). Chien confirmed physical testing of already-passed PRs on
-14 October; see [acceptance evidence](INTEGRATION.md#acceptance-evidence).
-This checklist remains the reusable case definition for future affected runs.
-Automated tests and simulator results are separate from that human attestation.
+(9 October 2026). We completed real-phone testing for the merged PRs 13–15;
+see [acceptance evidence](INTEGRATION.md#acceptance-evidence).
+We use the cases below for later affected builds and record automated, simulator
+and phone results separately.
 
 ## Prepare the build and locations
 
@@ -17,9 +17,8 @@ the points are safely reachable and within 20 metres of the displayed marker.
 Configure an actual partner café in Admin for the café test; the public-place
 import does not invent a partner business.
 
-Do not simulate GPS or shorten dwell thresholds for the acceptance recordings.
-Keep the complete original recording for each test, including time spent outside
-and inside. Follow local access/leash rules. For clean success cases use an
+For a new phone run, use real GPS and the full dwell thresholds. If recording
+video, keep the original file, including time spent outside and inside. Follow local access/leash rules. For clean success cases use an
 account/day whose category reward has not been collected and that has at least
 12 points of activity allowance remaining **after walking settlement**.
 
@@ -49,17 +48,14 @@ recording while receiving reliable stationary fixes for more than five minutes.
 
 ## Result template for a new run
 
-The empty rows below are a template, not a reversal of the existing human-attested
-acceptance. Fill them only with observations from the named new candidate.
+For each category tested on a new build, record:
 
-| Category | Venue | Actual date/time | Expected venue points | Actual venue points | Full original video | Result |
-|---|---|---|---|---|---|---|
-| Vet | Pending physical test | Pending | 12 if eligible after walk settlement | Pending | Pending | Not run |
-| Park | Pending physical test | Pending | 12 if eligible after walk settlement | Pending | Pending | Not run |
-| Café | Pending physical test | Pending | 12 if eligible after walk settlement | Pending | Pending | Not run |
+- Venue, actual date/time, build and phone/iOS version.
+- Expected venue points: 12 if eligible after walk settlement.
+- Actual venue points, pass/fail result and issue or evidence link.
+- The original recording, if one was captured.
 
 Add actual walking points, summary total, wallet delta and starting/ending daily
 activity totals to each result. Preserve failure recordings and document fixes,
-then rerun the affected flow. Link any available original recordings and results
-to the test run; keep human-attested acceptance clearly identified when that is
-the evidence supplied.
+then rerun the affected flow. Link available original recordings and results to the test run. Keep existing
+PR-level acceptance separate from new case observations.

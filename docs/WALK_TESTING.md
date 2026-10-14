@@ -1,17 +1,18 @@
 # Walk tracking: iPhone test checklist
 
-Status: **MVP checkpoint; full device verification pending**. An initial outdoor
-iPhone test and local-history export have been reviewed. This does not complete
-the lock-screen, recovery and permission checklist below; a simulator or attached
-debugger also does not prove continued GPS tracking on a locked iPhone.
+We use this checklist for real-iPhone regression testing. Testing of the
+merged PRs 13–15 is complete at PR level; see [integration evidence](INTEGRATION.md).
+The cases below are reusable instructions, not individual execution results.
+Record affected checks for each later build. Simulator runs alone do not establish
+locked-screen GPS behavior.
 
 ## Known MVP limitation
 
 The 2026-09-09 field test exposed implausible GPS jumps. The integrated version
 now breaks distance segments at speeds over 3 m/s and lets the backend validate
 measured samples before awarding points. This is a basic sanity check, not full
-GPS smoothing or anti-cheat. Local distance is still an estimate. The integrated
-build needs another physical-device test; the old export does not verify it.
+GPS smoothing or anti-cheat. Local distance is still an estimate. The old export does not verify a later build; use the PR acceptance record
+and the checks required by subsequent changes.
 Real route exports and personal device/server settings stay outside the repository.
 
 ## Automated checks
@@ -271,9 +272,8 @@ regressions and visual checks are useful historical evidence, not completion of
 this physical-device checklist. Previous run counts remain in Git history.
 Record new results against the exact build below.
 
-| Date / build | iPhone / iOS | Test | Result | Observed issue / evidence |
-|---|---|---|---|---|
-| Pending | — | Full physical-device checklist | Not yet completed | Add results after testing |
+For each new run, record the date/build, iPhone/iOS version, case, result and
+issue/evidence link. Keep PR-level acceptance separate from these case records.
 
 Record route screenshots, expected versus observed pause/recovery behaviour,
 backend availability, power mode and battery change. Do not label the full

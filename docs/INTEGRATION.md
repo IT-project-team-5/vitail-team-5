@@ -13,18 +13,14 @@ here. Exact run results belong in the [Testing evidence index](https://group5-vi
 
 ## Acceptance evidence
 
-On 14 October 2026, Chien confirmed in the project conversation: “目前 PR 有過的，
-我都真機測試過了，可以標示完成” — the already-passed PRs had been tested on a real
-phone and their physical acceptance may be marked complete. This is a direct
-human attestation. It supersedes older blanket “physical testing pending” notes
-for that stated scope; a new video is not required to recognise it.
+We completed real-phone testing for the merged PRs 13–15. We retain that
+PR-level acceptance and test later changes according to their impact.
 
-The attestation does not supply a device model, execution date, per-case video or
-third-party client sign-off. None is invented. A new combined candidate still
-needs affected automated/integration regression at its actual SHA. The
+The existing record contains no device model, original execution date or
+individual case observations. Final client acceptance is recorded separately. The
 [venue checklist](VENUE_CHECKIN_TESTING.md), [goal verification](DAILY_GOALS.md#migration-and-verification)
-and [social acceptance cases](SOCIAL.md#release-acceptance) remain reusable case
-definitions, not a claim that a later build has already passed them.
+and [social acceptance cases](SOCIAL.md#release-acceptance) remain reusable test
+instructions, not results for a later build.
 
 ## Integration choices
 

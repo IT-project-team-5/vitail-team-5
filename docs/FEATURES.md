@@ -4,8 +4,8 @@ Updated 14 October 2026. **Connected** means a real client/API
 flow exists; it does not certify every physical-device acceptance case.
 **Foundation** means data/services are prepared but the end-user feature is not
 complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
-Physical acceptance confirmed by Chien on 14 October applies to the already-passed
-PRs; integrated verification is separate. See [acceptance evidence](INTEGRATION.md).
+We completed real-phone testing for the merged PRs 13–15. We record integrated
+checks and client acceptance separately; see [acceptance evidence](INTEGRATION.md).
 
 | Feature | Delivery | Current boundary |
 |---|---|---|
@@ -33,10 +33,9 @@ PRs; integrated verification is separate. See [acceptance evidence](INTEGRATION.
 | Chat, push, charity | Later delivery | Optional identity/chat/charity/push tables are not created; no working UI/API is claimed |
 | Social sharing | Connected | Completed walks can render a local image card with optional date, dog names and confirmed points; route and location are excluded, and sharing uses the system sheet with no public-post database |
 
-The 24-table core foundation includes a Walk–Dog relation and explicit
-`NetWalkInvitation`, and excludes Django system tables. A migrated table is not
-proof that its feature is enabled.
-See [database coverage](database-design-2026-09-25/README.md),
+The [archived database coverage](database-design-2026-09-25/README.md) describes
+the earlier 24-table foundation. Current models and migrations define the schema;
+a table alone does not establish an enabled feature. See
 [Walk device acceptance](WALK_TESTING.md) and [open decisions](DECISIONS.md).
 
 New onboarding, council selection and registration-gated redemption are implemented.

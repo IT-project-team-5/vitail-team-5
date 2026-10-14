@@ -47,7 +47,7 @@ introduced R65 entries are qualified as R65-Venue and R65-Onboarding to avoid am
 | R65-Onboarding | New owners resume dog/goal setup until explicit completion. Existing accounts default complete. Weight replaces manual size selection; established breed defaults supply internal size. Request UUIDs protect dog and goal retries |
 | R66 | New purchases require accepted microchip registration for every current dog. Collecting document points and mandatory admin approval are not prerequisites. The selected product remains available after completing registration |
 | R67 | Council selection uses real VEC locality/postcode data, supports overlapping postcodes and validates canonical names. Originals remain private; Django Admin supports secure preview/download |
-| R68 | Preserve automated and physical acceptance separately. Chien confirmed testing of already-passed PRs on 14 October; new integration behavior requires affected regression. See INTEGRATION.md |
+| R68 | We completed real-phone testing for the merged PRs 13–15. Automated results, later affected regression and final client acceptance remain separate records. See [integration evidence](INTEGRATION.md). |
 
 The database normalizes Venue, keeps one PointEntry ledger and adds specific
 daily-goal, check-in, live-location, Net-Walk invitation/interval and friendship
