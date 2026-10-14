@@ -11,7 +11,6 @@ final class QuestStore: ObservableObject {
     @Published private(set) var isResetAvailable = true
     @Published private(set) var errorMessage: String?
     @Published private(set) var confirmedCollections: [String: QuestTask] = [:]
-    @Published private(set) var confirmedBalance: Int?
     @Published private(set) var lastAwardEvent: QuestAwardEvent?
     var onAward: (@MainActor (QuestAwardReceipt) async -> Void)?
 
@@ -230,7 +229,6 @@ final class QuestStore: ObservableObject {
                           days >= milestone - 1 else { throw APIError.invalidResponse }
                 }
                 confirmedCollections[taskID] = selected.collected(at: receipt.collectedAt)
-                confirmedBalance = receipt.balance
                 lastAwardEvent = QuestAwardEvent(taskID: taskID, receipt: receipt)
                 await onAward?(receipt)
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
@@ -268,7 +266,6 @@ final class QuestStore: ObservableObject {
                 snapshotRevision += 1
                 snapshot = nil
                 confirmedCollections = [:]
-                confirmedBalance = response.walletBalance
                 lastAwardEvent = nil
                 await loadSnapshot(generation: requestGeneration, revision: snapshotRevision)
                 return response
@@ -291,7 +288,7 @@ final class QuestStore: ObservableObject {
         refreshTask = nil; collectionTask = nil; resetTask = nil
         snapshot = nil; confirmedCollections = [:]
         errorMessage = nil; isRefreshing = false; collectingTaskID = nil; isResetting = false
-        confirmedBalance = nil; lastAwardEvent = nil
+        lastAwardEvent = nil
         receivedAt = nil; serverDate = nil; onAward = nil
         sessionSubscription?.cancel(); sessionSubscription = nil
     }

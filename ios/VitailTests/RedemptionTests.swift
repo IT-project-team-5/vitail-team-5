@@ -155,6 +155,7 @@ final class RedemptionTests: XCTestCase {
         await model.redeem(rewardID: 1)
 
         XCTAssertEqual(model.purchasedReceipt?.referenceNumber, "VIT-TEST")
+        XCTAssertEqual(model.balance, 50, "History failure must not leave either page showing the pre-purchase balance.")
         XCTAssertEqual(model.pendingRedemptions.count, 1)
         XCTAssertNil(model.retryRewardID, "A confirmed order must not be purchased again after a refresh failure.")
         XCTAssertNotNil(model.errorMessage)

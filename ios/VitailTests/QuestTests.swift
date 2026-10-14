@@ -7,6 +7,49 @@ import XCTest
 
 @MainActor
 final class QuestTests: XCTestCase {
+    func testQuestCollectionAndFivePointRedemptionShareCurrentWalletAcrossReloads() async {
+        let session = await makeSession()
+        let store = QuestStore(ownerID: 1, session: session,
+            service: QuestFixture(tasks: [QuestFixture.goalTask(dogID: 7)]))
+        let service = QuestWalletFixture()
+        let wallet = RedemptionViewModel(service: service)
+        // Emulate one backend ledger and wire the same callback as OwnerHome.
+        store.onAward = { receipt in
+            await service.recordAward(balance: receipt.balance)
+            await wallet.refresh()
+        }
+        var displayedBalances: [Int?] = []
+        let subscription = wallet.$balance.sink { displayedBalances.append($0) }
+        defer { subscription.cancel() }
+        await wallet.refresh()
+        await store.refresh()
+        await store.collect(taskID: "daily-goal:7:2026-09-25")
+        XCTAssertEqual(wallet.balance, 20)
+        XCTAssertEqual(store.lastAwardEvent?.receipt.balance, 20)
+        await wallet.redeem(rewardID: 1)
+        XCTAssertEqual(wallet.balance, 15)
+        XCTAssertEqual(wallet.pendingRedemptions.count, 1)
+        // Historical quest receipt stays 20; it must never supply the live header.
+        XCTAssertEqual(store.lastAwardEvent?.receipt.balance, 20)
+        XCTAssertEqual(QuestView(store: store, checkIns: CheckInProgressStore(ownerID: 1), points: wallet.balance).points, 15)
+        XCTAssertTrue(displayedBalances.contains(20))
+        XCTAssertEqual(displayedBalances.last!, 15)
+        wallet.acknowledgePurchasedReceipt()
+        await service.setBlocked(true)
+        await wallet.redeem(rewardID: 1)
+        XCTAssertEqual(wallet.balance, 15)
+        await service.setBlocked(false)
+        await service.setFailed(true)
+        await wallet.redeem(rewardID: 1)
+        XCTAssertEqual(wallet.balance, 15)
+        let reloaded = RedemptionViewModel(service: service)
+        await reloaded.refresh()
+        XCTAssertEqual(reloaded.balance, 15)
+        XCTAssertEqual(reloaded.pendingRedemptions.count, 1)
+        let purchases = await service.purchaseCount
+        XCTAssertEqual(purchases, 1)
+    }
+
     func testDailyGoalRewardsCollectIndependentlyAndRefreshAuthoritativeBalance() async throws {
         let session = await makeSession()
         let service = QuestFixture(tasks: [QuestFixture.goalTask(dogID: 7), QuestFixture.goalTask(dogID: 8)])
@@ -1126,4 +1169,33 @@ private final class QuestURLProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+private actor QuestWalletFixture: RedemptionServing {
+    private var balance = 0
+    private var blocked = false
+    private var failed = false
+    private var orders: [Redemption] = []
+    private(set) var purchaseCount = 0
+    func recordAward(balance: Int) { self.balance = balance }
+    func setBlocked(_ value: Bool) { blocked = value }
+    func setFailed(_ value: Bool) { failed = value }
+    func fetchBalance() async throws -> WalletBalance { .init(balance: balance) }
+    func fetchEligibility() async throws -> RedemptionEligibility {
+        .init(eligible: !blocked, incompleteDogs: blocked ? [.init(id: 7, name: "Milo")] : [])
+    }
+    func fetchRewards() async throws -> [Reward] {
+        [.init(id: 1, name: "DUMMY reward", description: "No real value", pointCost: 5, cafeName: "Demo")]
+    }
+    func fetchRedemptions() async throws -> [Redemption] { orders }
+    func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption {
+        if failed { throw APIError.http(status: 400, message: "Reward unavailable") }
+        balance -= 5
+        purchaseCount += 1
+        let order = Redemption(id: purchaseCount, referenceNumber: "DEMO", rewardNameSnapshot: "DUMMY reward",
+                               pointCostSnapshot: 5, status: .pending)
+        orders.append(order)
+        return order
+    }
+    func collectRedemption(id: Int) async throws -> Redemption { throw APIError.invalidResponse }
 }

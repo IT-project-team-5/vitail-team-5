@@ -85,14 +85,17 @@ final class RedemptionViewModel: ObservableObject {
 
     private func reload() async throws {
         eligibility = nil
-        // Fetch history first so any expired orders/refunds are reflected in the balance.
-        let orders = try await service.fetchRedemptions()
-        async let wallet = service.fetchBalance()
+        // /wallet applies expiry/refunds itself. Publish its authoritative balance
+        // independently so a failed catalogue/history read cannot hide an award
+        // or leave a successful purchase showing the pre-purchase balance.
+        async let orders = service.fetchRedemptions()
         async let offers = service.fetchRewards()
-        let (fetchedWallet, fetchedOffers) = try await (wallet, offers)
+        let fetchedWallet = try await service.fetchBalance()
         try Task.checkCancellation()
-        redemptions = orders
         balance = fetchedWallet.balance
+        let (fetchedOrders, fetchedOffers) = try await (orders, offers)
+        try Task.checkCancellation()
+        redemptions = fetchedOrders
         rewards = fetchedOffers
         eligibilityGeneration += 1
         let generation = eligibilityGeneration
