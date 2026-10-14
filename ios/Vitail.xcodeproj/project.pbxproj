@@ -11,6 +11,9 @@
 		F61000000000000000000002 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* FriendsService.swift */; };
 		F61000000000000000000003 /* FriendsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000003 /* FriendsStore.swift */; };
 		F61000000000000000000004 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000004 /* FriendsView.swift */; };
+		F61000000000000000000006 /* DogMapAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000006 /* DogMapAvatarView.swift */; };
+		F61000000000000000000007 /* MapClothingShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000007 /* MapClothingShopView.swift */; };
+		F61000000000000000000008 /* AvatarShopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000008 /* AvatarShopTests.swift */; };
 		F61000000000000000000005 /* FriendsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000005 /* FriendsTests.swift */; };
 		000000000000000000000001 /* VitailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* VitailApp.swift */; };
 		000000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* RootView.swift */; };
@@ -151,6 +154,9 @@
 		F60000000000000000000002 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
 		F60000000000000000000003 /* FriendsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsStore.swift; sourceTree = "<group>"; };
 		F60000000000000000000004 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
+		F60000000000000000000006 /* DogMapAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogMapAvatarView.swift; sourceTree = "<group>"; };
+		F60000000000000000000007 /* MapClothingShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapClothingShopView.swift; sourceTree = "<group>"; };
+		F60000000000000000000008 /* AvatarShopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopTests.swift; sourceTree = "<group>"; };
 		F60000000000000000000005 /* FriendsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E212 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		00000000000000000000E213 /* BrandAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAppearanceTests.swift; sourceTree = "<group>"; };
@@ -435,6 +441,7 @@
 			isa = PBXGroup;
 			children = (
 				F60000000000000000000005 /* FriendsTests.swift */,
+				F60000000000000000000008 /* AvatarShopTests.swift */,
 				88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */,
 				1ACB97598A23B803F298053B /* QuestTests.swift */,
 				F6ECF0F73A9474B166766F7F /* DocumentTests.swift */,
@@ -536,6 +543,8 @@
 				F60000000000000000000002 /* FriendsService.swift */,
 				F60000000000000000000003 /* FriendsStore.swift */,
 				F60000000000000000000004 /* FriendsView.swift */,
+				F60000000000000000000006 /* DogMapAvatarView.swift */,
+				F60000000000000000000007 /* MapClothingShopView.swift */,
 			);
 			path = Friends;
 			sourceTree = "<group>";
@@ -704,6 +713,8 @@
 				F61000000000000000000002 /* FriendsService.swift in Sources */,
 				F61000000000000000000003 /* FriendsStore.swift in Sources */,
 				F61000000000000000000004 /* FriendsView.swift in Sources */,
+				F61000000000000000000006 /* DogMapAvatarView.swift in Sources */,
+				F61000000000000000000007 /* MapClothingShopView.swift in Sources */,
 				000000000000000000000080 /* ActivityShareModels.swift in Sources */,
 				000000000000000000000081 /* DogIllustration.swift in Sources */,
 				000000000000000000000082 /* ActivityShareCard.swift in Sources */,
@@ -790,6 +801,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F61000000000000000000005 /* FriendsTests.swift in Sources */,
+				F61000000000000000000008 /* AvatarShopTests.swift in Sources */,
 				000000000000000000000084 /* ActivityShareTests.swift in Sources */,
 				F51000000000000000000007 /* VenuesTests.swift in Sources */,
 				F53000000000000000000004 /* WalkVenueCheckInTests.swift in Sources */,

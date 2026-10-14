@@ -27,6 +27,191 @@ final class FriendsTests: XCTestCase {
             JSONSerialization.jsonObject(with: JSONEncoder().encode(update)) as? [String: Any]
         )
         XCTAssertEqual(encoded["virtual_avatar_key"] as? String, "coffee")
+        XCTAssertEqual(encoded["dog_avatar_breed"] as? String, "goldenRetriever")
+        XCTAssertEqual(encoded["bandana_color"] as? String, "none")
+    }
+
+    func testMapAppearanceDecodesNewAndOlderProfilesWithoutInventingGuidance() throws {
+        let profile = try JSONDecoder().decode(SocialProfile.self, from: Data(
+            #"{"public_id":"peer","display_name":"Sam","photo_url":null,"avatar_key":"dog","dog_avatar_breed":"husky","bandana_color":"yellow"}"#.utf8))
+        XCTAssertEqual(profile.dogAvatarBreed, .husky)
+        XCTAssertEqual(profile.bandanaColor.guidance, "Please give space, nervous dog")
+        let legacy = try JSONDecoder().decode(SocialProfile.self, from: Data(
+            #"{"public_id":"peer","display_name":"Sam","photo_url":null}"#.utf8))
+        XCTAssertEqual(legacy.dogAvatarBreed, .goldenRetriever)
+        XCTAssertEqual(legacy.bandanaColor, .none)
+        XCTAssertNil(legacy.bandanaColor.guidance)
+        let future = try JSONDecoder().decode(SocialProfile.self, from: Data(
+            #"{"public_id":"peer","display_name":"Sam","photo_url":null,"dog_avatar_breed":"unknown","bandana_color":"purple"}"#.utf8))
+        XCTAssertEqual(future.bandanaColor, .none)
+        XCTAssertNil(future.bandanaColor.guidance)
+        XCTAssertEqual(DogBandanaColor.red.guidance, "My dog is reactive")
+        XCTAssertEqual(DogBandanaColor.green.guidance, "Friendly")
+        XCTAssertEqual(Set(DogBandanaColor.allCases.map(\.rawValue)), ["none", "red", "yellow", "green"])
+    }
+
+    func testMapAppearancePersistsThroughRefreshAndPrivacyChanges() async {
+        let service = FriendsTestService()
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .corgi, bandanaColor: .red)
+        XCTAssertNil(store.preferenceSaveError)
+        XCTAssertEqual(store.overview?.me.profile.dogAvatarBreed, .corgi)
+        XCTAssertEqual(store.overview?.me.profile.bandanaColor, .red)
+        await store.updatePreferences(shareWithFriends: true, netMatching: false)
+        XCTAssertEqual(store.dogAvatarBreed, .corgi)
+        XCTAssertEqual(store.bandanaColor, .red)
+        XCTAssertTrue(store.sharesWithFriends)
+        let reopened = FriendsStore(ownerID: 1, service: service)
+        await reopened.refresh()
+        XCTAssertEqual(reopened.overview?.me.profile.bandanaColor, .red)
+        XCTAssertEqual(reopened.dogAvatarBreed, .corgi)
+        XCTAssertEqual(reopened.avatarKey, "dog")
+        store.stop(); reopened.stop()
+    }
+
+    func testPublicDogAndOutfitDecodeWithoutExposingPrivateDogFields() throws {
+        let profile = try JSONDecoder().decode(SocialProfile.self, from: Data(
+            #"{"public_id":"peer","display_name":"Sam","photo_url":null,"dog":{"name":"Milo","breed_name":"Corgi","age_months":26,"size":"SMALL"},"avatar_outfit":{"hat":"beanie","bandana_style":"striped","decoration":"starBadge"}}"#.utf8))
+        XCTAssertEqual(profile.dog?.name, "Milo")
+        XCTAssertEqual(profile.dog?.ageDescription, "2 yr 2 mo")
+        XCTAssertEqual(profile.avatarOutfit.hat, .beanie)
+        let legacy = try JSONDecoder().decode(SocialProfile.self, from: Data(
+            #"{"public_id":"peer","display_name":"Sam","photo_url":null}"#.utf8))
+        XCTAssertNil(legacy.dog)
+        XCTAssertEqual(legacy.avatarOutfit, .plain)
+    }
+
+    func testPublicDogSelectionEncodingDistinguishesOmitHideAndChoose() throws {
+        var update = SocialPreferenceUpdate(locationVisibility: nil, netMatchingEnabled: nil, avatarKey: "dog")
+        func encoded() throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(update)) as? [String: Any])
+        }
+        XCTAssertNil(try encoded()["public_dog_id"])
+        update.publicDogSelection = .hidden
+        XCTAssertTrue(try encoded()["public_dog_id"] is NSNull)
+        update.publicDogSelection = .selected(7)
+        XCTAssertEqual(try encoded()["public_dog_id"] as? Int, 7)
+        XCTAssertNil(try encoded()["location_visibility"])
+        XCTAssertNil(try encoded()["net_matching_enabled"])
+    }
+
+    func testPublicDogSaveRetryAndClearPreserveIndependentConsent() async {
+        let service = FriendsTestService()
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        await service.setPreferenceFailure(true)
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .corgi, bandanaColor: .red,
+                                     publicDogSelection: .selected(7))
+        XCTAssertNotNil(store.preferenceSaveError)
+        XCTAssertEqual(store.publicDogSelection, .selected(7))
+        await service.setPreferenceFailure(false)
+        await store.retryPreferences()
+        XCTAssertNil(store.preferenceSaveError)
+        XCTAssertEqual(store.overview?.me.publicDogID, 7)
+        let updates = await service.preferenceUpdates
+        XCTAssertEqual(updates.first, updates.last)
+        XCTAssertTrue(updates.allSatisfy { $0.locationVisibility == nil && $0.netMatchingEnabled == nil })
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .corgi, bandanaColor: .red,
+                                     publicDogSelection: .hidden)
+        XCTAssertNil(store.overview?.me.publicDogID)
+        XCTAssertFalse(store.sharesWithFriends)
+        XCTAssertFalse(store.netMatchingEnabled)
+        store.stop()
+    }
+
+    func testUnconfirmedPublicDogSelectionDoesNotClaimSaveSucceeded() async {
+        let service = FriendsTestService()
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        await service.setIgnoredAppearance(true)
+        await store.updateAppearance(avatarKey: "", dogAvatarBreed: .goldenRetriever, bandanaColor: .none,
+                                     publicDogSelection: .selected(7))
+        XCTAssertNotNil(store.preferenceSaveError)
+        XCTAssertNil(store.notice)
+        store.stop()
+    }
+
+    func testFailedMapAppearanceRetainsExactSelectionForRetry() async {
+        let service = FriendsTestService()
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        await service.setPreferenceFailure(true)
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .cat, bandanaColor: .yellow)
+        XCTAssertNotNil(store.preferenceSaveError)
+        XCTAssertTrue(store.hasPendingPreferenceRetry)
+        XCTAssertEqual(store.dogAvatarBreed, .cat)
+        XCTAssertEqual(store.bandanaColor, .yellow)
+        XCTAssertFalse(store.sharesWithFriends)
+        await service.setPreferenceFailure(false)
+        await store.retryPreferences()
+        XCTAssertNil(store.preferenceSaveError)
+        XCTAssertEqual(store.overview?.me.profile.dogAvatarBreed, .cat)
+        XCTAssertEqual(store.overview?.me.profile.bandanaColor, .yellow)
+        let updates = await service.preferenceUpdates
+        XCTAssertEqual(updates.count, 2)
+        XCTAssertEqual(updates.first, updates.last)
+        store.stop()
+    }
+
+    func testUnconfirmedMapAppearanceIsNotReportedAsSaved() async {
+        let service = FriendsTestService()
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        await service.setIgnoredAppearance(true)
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .beagle, bandanaColor: .green)
+        XCTAssertNotNil(store.preferenceSaveError)
+        XCTAssertTrue(store.hasPendingPreferenceRetry)
+        XCTAssertNil(store.notice)
+        XCTAssertFalse(store.sharesWithFriends)
+        XCTAssertFalse(store.netMatchingEnabled)
+        XCTAssertEqual(store.overview?.me.bandanaColor, DogBandanaColor.none)
+        store.stop()
+    }
+
+    func testAppearanceOnlySaveAndRetryCannotReenableConsentClosedOnAnotherDevice() async throws {
+        let service = FriendsTestService()
+        await service.setSocialEnabled(true)
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        XCTAssertTrue(store.sharesWithFriends)
+        XCTAssertTrue(store.netMatchingEnabled)
+        // Another device closes both channels after this phone cached its overview.
+        await service.setSocialEnabled(false)
+        await service.setPreferenceFailure(true)
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .shiba, bandanaColor: .yellow)
+        await service.setPreferenceFailure(false)
+        await store.retryPreferences()
+        XCTAssertNil(store.preferenceSaveError)
+        XCTAssertFalse(store.sharesWithFriends)
+        XCTAssertFalse(store.netMatchingEnabled)
+        XCTAssertEqual(store.bandanaColor, .yellow)
+        let updates = await service.preferenceUpdates
+        XCTAssertEqual(updates.count, 2)
+        for update in updates {
+            XCTAssertNil(update.locationVisibility)
+            XCTAssertNil(update.netMatchingEnabled)
+            let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(update)) as? [String: Any])
+            XCTAssertEqual(Set(encoded.keys), ["virtual_avatar_key", "dog_avatar_breed", "bandana_color"])
+        }
+        let stillOff = await service.serverSharesWithFriends
+        XCTAssertFalse(stillOff)
+        store.stop()
+    }
+
+    func testAppearanceOnlySuccessPreservesCurrentServerConsentInsteadOfCachedConsent() async {
+        let service = FriendsTestService()
+        let store = FriendsStore(ownerID: 1, service: service)
+        await store.refresh()
+        await service.setSocialEnabled(true)
+        await store.updateAppearance(avatarKey: "dog", dogAvatarBreed: .husky, bandanaColor: .none)
+        XCTAssertNil(store.preferenceSaveError)
+        XCTAssertTrue(store.sharesWithFriends)
+        XCTAssertTrue(store.netMatchingEnabled)
+        let updates = await service.preferenceUpdates
+        XCTAssertNil(updates.first?.locationVisibility)
+        XCTAssertNil(updates.first?.netMatchingEnabled)
+        store.stop()
     }
 
     func testFreshLocationRequiresAccuracyAndRejectsOldFutureAndSimulatedFixes() throws {
@@ -348,6 +533,11 @@ private actor FriendsTestService: FriendsServing {
     private(set) var preferenceUpdates: [SocialPreferenceUpdate] = []
     private var sharing = false
     private var netMatching = false
+    private var avatarKey = ""
+    private var dogAvatarBreed = DogMapBreed.goldenRetriever
+    private var bandanaColor = DogBandanaColor.none
+    private var publicDogID: Int?
+    private var ignoresAppearance = false
     private var preferenceFailure = false
     private var mapFailure = false
     private var mapValue = SocialMapSnapshot.empty
@@ -377,6 +567,7 @@ private actor FriendsTestService: FriendsServing {
             isIncoming: true)], outgoing: [], active: nil)
     }
     func setPreferenceFailure(_ value: Bool) { preferenceFailure = value }
+    func setIgnoredAppearance(_ value: Bool) { ignoresAppearance = value }
     func setDelayedPreference(_ value: Bool) { delayedPreference = value }
     func releasePreference() {
         delayedPreference = false
@@ -398,8 +589,9 @@ private actor FriendsTestService: FriendsServing {
         mapValue = .init(friends: [peer], nearby: [], partner: nil)
     }
     private var me: SocialPreferences {
-        .init(publicID: "me", displayName: "Me", photoURL: nil, avatarKey: "",
-              locationVisibility: sharing ? "FRIENDS" : "OFF", netMatchingEnabled: netMatching)
+        .init(publicID: "me", displayName: "Me", photoURL: nil, avatarKey: avatarKey,
+              locationVisibility: sharing ? "FRIENDS" : "OFF", netMatchingEnabled: netMatching,
+              dogAvatarBreed: dogAvatarBreed, bandanaColor: bandanaColor, publicDogID: publicDogID)
     }
     func overview() async throws -> SocialOverview {
         if delayedOverview { await withCheckedContinuation { continuation = $0 } }
@@ -415,8 +607,14 @@ private actor FriendsTestService: FriendsServing {
         preferenceUpdates.append(preferences)
         if delayedPreference { await withCheckedContinuation { preferenceContinuation = $0 } }
         if preferenceFailure { throw APIError.network("Offline") }
-        sharing = preferences.locationVisibility == "FRIENDS"
-        netMatching = preferences.netMatchingEnabled
+        if let visibility = preferences.locationVisibility { sharing = visibility == "FRIENDS" }
+        if let matching = preferences.netMatchingEnabled { netMatching = matching }
+        if !ignoresAppearance {
+            avatarKey = preferences.avatarKey
+            dogAvatarBreed = preferences.dogAvatarBreed
+            bandanaColor = preferences.bandanaColor
+            if let selection = preferences.publicDogSelection { publicDogID = selection.dogID }
+        }
         return me
     }
     var serverSharesWithFriends: Bool { sharing }

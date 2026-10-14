@@ -1,10 +1,72 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
 
 
 # Stable API values. The empty key means “use my uploaded profile photo”.
 VIRTUAL_AVATAR_KEYS = ("", "walker", "paw", "dog", "coffee")
+
+AVATAR_HAT_CODES = ("baseballCap", "beanie", "sunHat")
+AVATAR_BANDANA_CODES = ("stripedBandana", "polkaDotBandana")
+AVATAR_EXTRA_CODES = ("roundGlasses", "starBadge")
+AVATAR_PRODUCT_CODES = (*AVATAR_HAT_CODES, *AVATAR_BANDANA_CODES, *AVATAR_EXTRA_CODES)
+
+
+class AvatarPurchase(models.Model):
+    """Permanent item ownership and the original wallet charge snapshot."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar_purchases")
+    product_code = models.CharField(max_length=40)
+    request_id = models.UUIDField(editable=False)
+    point_cost_snapshot = models.PositiveIntegerField(editable=False)
+    spend_entry = models.OneToOneField("rewards.PointEntry", on_delete=models.PROTECT, related_name="avatar_purchase", editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("owner", "product_code"), name="avatar_purchase_owner_product"),
+            models.UniqueConstraint(fields=("owner", "request_id"), name="avatar_purchase_owner_request"),
+            models.CheckConstraint(condition=Q(point_cost_snapshot__gt=0), name="avatar_purchase_cost_positive"),
+            models.CheckConstraint(condition=Q(product_code__in=AVATAR_PRODUCT_CODES), name="avatar_purchase_product_known"),
+        ]
+
+    def save(self, *args, **kwargs):
+        # Purchase snapshots cannot be rewritten through ordinary model saves.
+        if not self._state.adding:
+            fields = ("owner_id", "product_code", "request_id", "point_cost_snapshot", "spend_entry_id", "created_at")
+            original = type(self).objects.filter(pk=self.pk).values(*fields).first()
+            if original and any(original[field] != getattr(self, field) for field in fields):
+                raise ValidationError("Avatar purchase records are immutable.")
+        super().save(*args, **kwargs)
+
+
+class AvatarPurchaseRequest(models.Model):
+    """Tracks every UUID, including no-charge requests for an owned item."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar_purchase_requests")
+    request_id = models.UUIDField(editable=False)
+    purchase = models.ForeignKey(AvatarPurchase, on_delete=models.PROTECT, related_name="requests", editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("owner", "request_id"), name="avatar_request_owner_uuid"),
+        ]
+
+
+class AvatarWardrobe(models.Model):
+    owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="avatar_wardrobe")
+    hat_product_code = models.CharField(max_length=40, null=True, blank=True)
+    bandana_product_code = models.CharField(max_length=40, null=True, blank=True)
+    extra_product_code = models.CharField(max_length=40, null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(hat_product_code__isnull=True) | Q(hat_product_code__in=AVATAR_HAT_CODES), name="avatar_wardrobe_hat_known"),
+            models.CheckConstraint(condition=Q(bandana_product_code__isnull=True) | Q(bandana_product_code__in=AVATAR_BANDANA_CODES), name="avatar_wardrobe_bandana_known"),
+            models.CheckConstraint(condition=Q(extra_product_code__isnull=True) | Q(extra_product_code__in=AVATAR_EXTRA_CODES), name="avatar_wardrobe_extra_known"),
+        ]
 
 
 class Friendship(models.Model):

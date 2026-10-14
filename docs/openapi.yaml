@@ -1364,6 +1364,63 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/SocialAcknowledgement'}
         default: {$ref: '#/components/responses/Error'}
+  /api/social/avatar-shop:
+    get:
+      summary: Server catalogue, real wallet balance and owned avatar clothing
+      tags: [Social]
+      responses:
+        '200':
+          description: Active owner-only wardrobe with private no-store caching
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AvatarShopState'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/avatar-shop/purchases:
+    post:
+      summary: Buy avatar clothing once using the shared points wallet
+      description: Same owner/request UUID/product replays do not debit again; a UUID reused for another product returns 409. Buying an already-owned product is free and does not change the worn outfit. Server catalogue controls the price. Insufficient unexpired points returns 400 INSUFFICIENT_POINTS without a purchase or debit.
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [product_code, request_id]
+              properties:
+                product_code: {type: string, maxLength: 40}
+                request_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Current owner-scoped wardrobe and wallet after atomic purchase or replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AvatarShopState'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/social/avatar-shop/outfit:
+    patch:
+      summary: Wear an owned item or clear one clothing category
+      description: Does not change dog bandana colour, public dog selection, avatar face or location consent.
+      tags: [Social]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [category, product_code]
+              properties:
+                category: {type: string, enum: [hats, bandanas, extras]}
+                product_code: {type: string, nullable: true, maxLength: 40, description: Null removes the item or restores the free classic bandana pattern.}
+      responses:
+        '200':
+          description: Current owner-scoped wardrobe
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AvatarShopState'}
+        default: {$ref: '#/components/responses/Error'}
   /api/social/preferences:
     patch:
       summary: Independent opt-in location privacy preferences
@@ -1649,26 +1706,76 @@ components:
         unblocked: {type: boolean}
     SocialProfile:
       type: object
-      required: [public_id, display_name, photo_url, avatar_key]
+      required: [public_id, display_name, photo_url, avatar_key, dog_avatar_breed, bandana_color, dog, avatar_outfit]
       properties:
         public_id: {type: string, pattern: '^[0-9a-f]{32}$'}
         display_name: {type: string}
         photo_url: {type: string, nullable: true}
         avatar_key: {type: string, enum: ['', walker, paw, dog, coffee]}
+        dog_avatar_breed: {type: string, enum: [goldenRetriever, corgi, husky, dalmatian, beagle, shiba, poodle, dachshund, cat], default: goldenRetriever}
+        bandana_color:
+          type: string
+          enum: [none, red, yellow, green]
+          default: none
+          description: 'Owner-selected guidance: red = reactive, yellow = nervous / give space, green = friendly, none = no designation.'
+        dog:
+          type: object
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/PublicDogProfile'}]
+          description: Optional explicitly public dog, not proof of participation in the current walk. Defaults null and is suppressed after archive, ownership transfer or deletion.
+        avatar_outfit: {$ref: '#/components/schemas/DogAvatarOutfit'}
+    PublicDogProfile:
+      type: object
+      additionalProperties: false
+      required: [name, breed_name, age_months, size]
+      properties:
+        name: {type: string}
+        breed_name: {type: string}
+        age_months: {type: integer, minimum: 0}
+        size: {type: string, enum: [SMALL, MEDIUM, LARGE]}
+    DogAvatarOutfit:
+      type: object
+      required: [hat, bandana_style, decoration]
+      properties:
+        hat: {type: string, enum: [none, baseballCap, beanie, sunHat], default: none}
+        bandana_style: {type: string, enum: [classic, striped, polkaDot], default: classic}
+        decoration: {type: string, enum: [none, roundGlasses, starBadge], default: none}
+    AvatarShopState:
+      type: object
+      required: [balance, products, owned, outfit]
+      properties:
+        balance: {type: integer, minimum: 0}
+        products:
+          type: array
+          items:
+            type: object
+            required: [code, title, description, category, price]
+            properties:
+              code: {type: string}
+              title: {type: string}
+              description: {type: string}
+              category: {type: string, enum: [hats, bandanas, extras]}
+              price: {type: integer, minimum: 1}
+        owned: {type: array, items: {type: string}}
+        outfit: {$ref: '#/components/schemas/DogAvatarOutfit'}
     SocialPreferenceUpdate:
       type: object
       properties:
         location_visibility: {type: string, enum: ['OFF', FRIENDS]}
         net_matching_enabled: {type: boolean}
         virtual_avatar_key: {type: string, enum: ['', walker, paw, dog, coffee]}
+        dog_avatar_breed: {type: string, enum: [goldenRetriever, corgi, husky, dalmatian, beagle, shiba, poodle, dachshund, cat]}
+        bandana_color: {type: string, enum: [none, red, yellow, green]}
+        public_dog_id: {type: integer, minimum: 1, nullable: true, description: Explicitly publish one currently owned unarchived dog. Omit to preserve; null clears. Never inferred from all owner dogs.}
     SocialPreferences:
       allOf:
         - {$ref: '#/components/schemas/SocialProfile'}
         - type: object
-          required: [location_visibility, net_matching_enabled]
+          required: [location_visibility, net_matching_enabled, public_dog_id]
           properties:
             location_visibility: {type: string, enum: ['OFF', FRIENDS]}
             net_matching_enabled: {type: boolean}
+            public_dog_id: {type: integer, nullable: true, description: Only returned to the owner in their own preferences; absent from public dog summaries.}
     SocialRelationship:
       type: object
       required: [id, user, status, is_incoming]

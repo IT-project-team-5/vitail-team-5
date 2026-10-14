@@ -124,7 +124,7 @@ class SocialApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Cache-Control"], "private, no-store")
         self.assertEqual({row["display_name"] for row in response.data}, {"Bob Walker", "Eve Walker"})
-        self.assertTrue(all(set(row) == {"public_id", "display_name", "photo_url", "avatar_key"} for row in response.data))
+        self.assertTrue(all(set(row) == {"public_id", "display_name", "photo_url", "avatar_key", "dog_avatar_breed", "bandana_color", "dog", "avatar_outfit"} for row in response.data))
         self.assertNotIn("private@example.com", str(response.data))
         by_id = self.client.get("/api/social/users", {"q": self.bob.public_id})
         self.assertEqual(by_id.data[0]["public_id"], self.bob.public_id)
@@ -132,6 +132,8 @@ class SocialApiTests(APITestCase):
         self.assertEqual(overview["me"]["location_visibility"], "OFF")
         self.assertFalse(overview["me"]["net_matching_enabled"])
         self.assertEqual(overview["me"]["avatar_key"], "")
+        self.assertEqual(overview["me"]["dog_avatar_breed"], "goldenRetriever")
+        self.assertEqual(overview["me"]["bandana_color"], "none")
         self.assertNotIn("email", overview["me"])
 
     def test_social_endpoint_throttles_have_independent_per_user_buckets(self):
@@ -166,6 +168,178 @@ class SocialApiTests(APITestCase):
         self.assertEqual(self.client.get("/api/social/users", {"q": "Bob"}).data, [])
         User.objects.filter(pk=self.alice.pk).update(is_active=False)
         self.assertEqual(self.client.get("/api/social/overview").status_code, 404)
+
+    def test_dog_map_profile_choices_are_persisted_and_other_preferences_preserved(self):
+        self.preferences(self.alice, virtual_avatar_key="paw", location_visibility="FRIENDS", net_matching_enabled=True)
+        for breed in User.DogAvatarBreed.values:
+            with self.subTest(breed=breed):
+                updated = self.preferences(self.alice, dog_avatar_breed=breed)
+                self.assertEqual(updated["dog_avatar_breed"], breed)
+                self.assertEqual(updated["avatar_key"], "paw")
+                self.assertEqual(updated["location_visibility"], "FRIENDS")
+                self.assertTrue(updated["net_matching_enabled"])
+                self.alice.refresh_from_db()
+                self.assertEqual(self.alice.dog_avatar_breed, breed)
+        for color in User.BandanaColor.values:
+            with self.subTest(color=color):
+                updated = self.preferences(self.alice, bandana_color=color)
+                self.assertEqual(updated["bandana_color"], color)
+                self.assertEqual(updated["dog_avatar_breed"], "cat")
+                self.alice.refresh_from_db()
+                self.assertEqual(self.alice.bandana_color, color)
+        self.preferences(self.alice, virtual_avatar_key="")
+        self.as_user(self.alice)
+        refreshed = self.client.get("/api/social/overview").data["me"]
+        self.assertEqual(refreshed["avatar_key"], "")
+        self.assertEqual(refreshed["dog_avatar_breed"], "cat")
+        self.assertEqual(refreshed["bandana_color"], "green")
+
+    def test_invalid_dog_map_profile_patch_is_atomic(self):
+        self.preferences(self.alice, dog_avatar_breed="corgi", bandana_color="yellow", virtual_avatar_key="dog", location_visibility="FRIENDS", net_matching_enabled=True)
+        invalid_values = (
+            ("dog_avatar_breed", "unknown"), ("dog_avatar_breed", ""), ("dog_avatar_breed", None),
+            ("bandana_color", "blue"), ("bandana_color", ""), ("bandana_color", None),
+        )
+        for key, invalid in invalid_values:
+            with self.subTest(key=key, invalid=invalid):
+                response = self.client.patch("/api/social/preferences", {
+                    "dog_avatar_breed": "husky", "bandana_color": "red", "virtual_avatar_key": "coffee",
+                    "location_visibility": "OFF", "net_matching_enabled": False, key: invalid,
+                }, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.alice.refresh_from_db()
+                self.assertEqual(self.alice.dog_avatar_breed, "corgi")
+                self.assertEqual(self.alice.bandana_color, "yellow")
+                self.assertEqual(self.alice.virtual_avatar_key, "dog")
+                self.assertEqual(self.alice.location_visibility, "FRIENDS")
+                self.assertTrue(self.alice.net_matching_enabled)
+
+    def test_dog_map_profile_patch_requires_current_active_owner(self):
+        values = {"dog_avatar_breed": "husky", "bandana_color": "red"}
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.patch("/api/social/preferences", values, format="json").status_code, 401)
+        self.as_user(self.cafe)
+        self.assertEqual(self.client.patch("/api/social/preferences", values, format="json").status_code, 403)
+        self.as_user(self.alice)
+        response = self.client.patch("/api/social/preferences", {**values, "public_id": self.bob.public_id}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["public_id"], self.alice.public_id)
+        self.bob.refresh_from_db()
+        self.assertEqual(self.bob.dog_avatar_breed, "goldenRetriever")
+        self.assertEqual(self.bob.bandana_color, "none")
+        User.objects.filter(pk=self.alice.pk).update(deleted_at=self.now)
+        self.assertEqual(self.client.patch("/api/social/preferences", values, format="json").status_code, 404)
+
+    def test_dog_map_profile_rejects_unknown_database_values(self):
+        for field, value in (("dog_avatar_breed", "unknown"), ("bandana_color", "blue")):
+            with self.subTest(field=field):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    User.objects.filter(pk=self.alice.pk).update(**{field: value})
+
+    def test_dog_map_profile_is_visible_in_search_friend_requests_and_friends(self):
+        self.preferences(self.alice, dog_avatar_breed="dachshund", bandana_color="yellow")
+        self.as_user(self.bob)
+        profile = self.client.get("/api/social/users", {"q": self.alice.public_id}).data[0]
+        self.assertEqual(profile["dog_avatar_breed"], "dachshund")
+        self.assertEqual(profile["bandana_color"], "yellow")
+        self.assertNotIn("location_visibility", profile)
+        self.assertNotIn("net_matching_enabled", profile)
+        self.as_user(self.alice)
+        row = self.post("friend-requests", {"public_id": self.bob.public_id}, expected=201)
+        self.as_user(self.bob)
+        incoming = self.client.get("/api/social/overview").data["incoming_requests"][0]["user"]
+        self.assertEqual(incoming["dog_avatar_breed"], "dachshund")
+        self.assertEqual(incoming["bandana_color"], "yellow")
+        accepted = self.post(f"friend-requests/{row['id']}/respond", {"accept": True})
+        self.assertEqual(accepted["user"]["dog_avatar_breed"], "dachshund")
+        self.preferences(self.alice, dog_avatar_breed="poodle", bandana_color="green")
+        self.as_user(self.bob)
+        updated = self.client.get("/api/social/overview").data["friends"][0]["user"]
+        self.assertEqual(updated["dog_avatar_breed"], "poodle")
+        self.assertEqual(updated["bandana_color"], "green")
+
+    def test_another_owner_sees_updated_dog_map_profile_only_with_existing_map_permission(self):
+        self.friend_pair()
+        self.preferences(self.bob, dog_avatar_breed="husky", bandana_color="yellow", virtual_avatar_key="dog")
+        bob_session = self.start(self.bob)
+        self.assertEqual(self.location(self.bob, bob_session, 13).status_code, 200)
+        self.as_user(self.alice)
+        self.assertEqual(self.client.get("/api/social/map").data["friends"], [])
+        self.preferences(self.bob, location_visibility="FRIENDS")
+        self.as_user(self.alice)
+        peer = self.client.get("/api/social/map").data["friends"][0]
+        self.assertEqual(peer["user"]["dog_avatar_breed"], "husky")
+        self.assertEqual(peer["user"]["bandana_color"], "yellow")
+        self.assertEqual(peer["user"]["avatar_key"], "dog")
+        self.preferences(self.bob, dog_avatar_breed="cat", bandana_color="red")
+        self.as_user(self.alice)
+        refreshed = self.client.get("/api/social/map").data["friends"][0]
+        self.assertEqual(refreshed["user"]["dog_avatar_breed"], "cat")
+        self.assertEqual(refreshed["user"]["bandana_color"], "red")
+        self.assertEqual(refreshed["latitude"], peer["latitude"])
+        self.assertEqual(refreshed["longitude"], peer["longitude"])
+        self.assertEqual(refreshed["expires_at"], peer["expires_at"])
+        self.as_user(self.eve)
+        self.assertEqual(self.client.get("/api/social/map").data["friends"], [])
+        self.as_user(self.alice)
+        self.post("blocks", {"public_id": self.bob.public_id})
+        self.assertEqual(self.client.get("/api/social/map").data["friends"], [])
+        self.assertEqual(self.client.get("/api/social/users", {"q": "Bob"}).data, [])
+
+    def test_dog_map_profile_only_change_preserves_active_pairing_gps_and_points(self):
+        alice_session, bob_session, invite = self.accept_pair()
+        alice_before = WalkSession.objects.values().get(pk=alice_session["id"])
+        bob_before = WalkSession.objects.values().get(pk=bob_session["id"])
+        self.preferences(self.alice, dog_avatar_breed="shiba", bandana_color="red")
+        self.assertEqual(NetWalkInvitation.objects.get(pk=invite["id"]).status, "ACTIVE")
+        self.assertEqual(WalkSession.objects.values().get(pk=alice_session["id"]), alice_before)
+        self.assertEqual(WalkSession.objects.values().get(pk=bob_session["id"]), bob_before)
+        self.assertFalse(PointEntry.objects.exists())
+        self.as_user(self.bob)
+        partner = self.client.get("/api/social/map").data["partner"]
+        self.assertEqual(partner["user"]["dog_avatar_breed"], "shiba")
+        self.assertEqual(partner["user"]["bandana_color"], "red")
+        invitation = self.client.get("/api/social/net-walk-invitations").data["active"]
+        self.assertEqual(invitation["user"]["dog_avatar_breed"], "shiba")
+        self.assertEqual(invitation["user"]["bandana_color"], "red")
+
+    def test_invalid_profile_and_consent_patch_does_not_end_active_pairing(self):
+        _, _, invite = self.accept_pair()
+        self.as_user(self.alice)
+        response = self.client.patch("/api/social/preferences", {"bandana_color": "blue", "net_matching_enabled": False}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(NetWalkInvitation.objects.get(pk=invite["id"]).status, "ACTIVE")
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.net_matching_enabled)
+
+    def test_profile_only_patch_does_not_restore_consent_revoked_on_another_device(self):
+        _, _, invite = self.accept_pair()
+        stale_owner = User.objects.get(pk=self.alice.pk)
+        self.assertTrue(stale_owner.net_matching_enabled)
+        self.preferences(self.alice, net_matching_enabled=False, location_visibility="OFF")
+        self.client.force_authenticate(stale_owner)
+        response = self.client.patch("/api/social/preferences", {
+            "dog_avatar_breed": "corgi", "bandana_color": "green", "virtual_avatar_key": "dog",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["net_matching_enabled"])
+        self.assertEqual(response.data["location_visibility"], "OFF")
+        self.assertEqual(NetWalkInvitation.objects.get(pk=invite["id"]).status, "ENDED")
+        self.alice.refresh_from_db()
+        self.assertFalse(self.alice.net_matching_enabled)
+        self.assertEqual(self.alice.dog_avatar_breed, "corgi")
+        self.assertEqual(self.alice.bandana_color, "green")
+
+    def test_nearby_discovery_profile_does_not_expose_private_preferences(self):
+        self.prepare_walkers()
+        self.preferences(self.bob, dog_avatar_breed="beagle", bandana_color="green")
+        self.as_user(self.alice)
+        nearby = self.client.get("/api/social/map").data["nearby"][0]
+        self.assertTrue(nearby["is_approximate"])
+        self.assertEqual(nearby["user"]["dog_avatar_breed"], "beagle")
+        self.assertEqual(nearby["user"]["bandana_color"], "green")
+        self.assertNotIn("location_visibility", nearby["user"])
+        self.assertNotIn("net_matching_enabled", nearby["user"])
 
     def test_request_accept_remove_and_reciprocal_consent(self):
         row = self.post("friend-requests", {"public_id": self.bob.public_id}, expected=201)

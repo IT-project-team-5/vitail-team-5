@@ -23,6 +23,8 @@ from dogs.models import Breed, Dog
 from rewards.models import CafeOrderFeedState, PointEntry, Redemption, Reward
 from rewards.services import create_redemption, credit_points, get_balance
 from checkins.models import CheckInWalk
+from social.models import AvatarPurchase, AvatarPurchaseRequest, AvatarWardrobe
+from social.shop import equip_product, purchase_product
 from walks.models import Walk
 
 
@@ -56,6 +58,9 @@ class DemoResetTests(TestCase):
         from evidence.tests import register_microchip
         register_microchip(cls.owner, cls.dog)
         cls.order = create_redemption(owner=cls.owner, reward_id=cls.reward.pk)
+        purchase_product(owner=cls.owner, product_code="beanie", request_id=uuid4())
+        purchase_product(owner=cls.owner, product_code="beanie", request_id=uuid4())
+        equip_product(owner=cls.owner, category="hats", product_code="beanie")
         cls.session = Session.objects.create(
             session_key="old-session", session_data="old-session-data", expire_date=now + timedelta(days=1),
         )
@@ -78,6 +83,7 @@ class DemoResetTests(TestCase):
             for model in (
                 User, Venue, Breed, Dog, Walk, Walk.dogs.through, CheckInWalk,
                 Reward, Redemption, PointEntry, CafeOrderFeedState, Session, LogEntry,
+                AvatarPurchase, AvatarPurchaseRequest, AvatarWardrobe,
             )
         }
 
@@ -215,7 +221,7 @@ class DemoResetTests(TestCase):
                     self.assertTrue(reward.is_available)
                     self.assertGreaterEqual(reward.point_cost, 40)
                     self.assertLessEqual(reward.point_cost, 180)
-        for model in (Dog, Walk, Walk.dogs.through, CheckInWalk, Redemption, CafeOrderFeedState, Session, LogEntry):
+        for model in (Dog, Walk, Walk.dogs.through, CheckInWalk, Redemption, CafeOrderFeedState, Session, LogEntry, AvatarPurchase, AvatarPurchaseRequest, AvatarWardrobe):
             with self.subTest(model=model._meta.label):
                 self.assertEqual(model.objects.count(), 0)
         self.assertEqual(list(Breed.objects.order_by("pk").values()), self.previous_data["dogs.Breed"])
@@ -239,3 +245,15 @@ class DemoResetTests(TestCase):
         self.reset(owner_points=25000)
         self.assertEqual(get_balance(User.objects.get(email="owner@vitail.test")), 25000)
         self.assertEqual(json.loads(self.credentials.read_text())["owner_points"], 25000)
+
+    def test_purchased_and_equipped_items_and_request_aliases_are_cleared_before_wallet(self):
+        self.assertEqual(AvatarPurchase.objects.count(), 1)
+        self.assertEqual(AvatarPurchaseRequest.objects.count(), 2)
+        self.assertEqual(AvatarWardrobe.objects.get(owner=self.owner).hat_product_code, "beanie")
+        self.reset()
+        self.assertFalse(AvatarPurchase.objects.exists())
+        self.assertFalse(AvatarPurchaseRequest.objects.exists())
+        self.assertFalse(AvatarWardrobe.objects.exists())
+        replacement = User.objects.get(email="owner@vitail.test")
+        self.assertEqual(get_balance(replacement), 10000)
+        self.assertEqual(PointEntry.objects.count(), 1)

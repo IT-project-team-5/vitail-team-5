@@ -1,8 +1,11 @@
 from django.urls import path
 
-from . import views
+from . import shop_views, views
 
 urlpatterns = [
+    path("avatar-shop", shop_views.AvatarShopView.as_view()),
+    path("avatar-shop/purchases", shop_views.AvatarPurchaseView.as_view()),
+    path("avatar-shop/outfit", shop_views.AvatarOutfitView.as_view()),
     path("overview", views.OverviewView.as_view()),
     path("users", views.UserSearchView.as_view()),
     path("friend-requests", views.FriendRequestView.as_view()),

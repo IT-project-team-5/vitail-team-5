@@ -18,7 +18,7 @@ once per dog/day. Both dogs share the owner's 72-point activity cap with walking
 and check-ins. Insufficient allowance rejects the entire award. Successful
 receipts remain replayable by their recipient after midnight without new points.
 See [daily goals](../../docs/DAILY_GOALS.md) for locking, receipts, history and
-late-upload rules, and [verification](../../docs/OWNER_JOURNEY_REPORT.md).
+late-upload rules, and [verification](../../docs/DAILY_GOALS.md#migration-and-verification).
 
 ## Walking streak
 

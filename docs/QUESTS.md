@@ -12,8 +12,8 @@ amount does not mean its qualification engine is implemented.
 | Source | Policy | Current delivery |
 |---|---|---|
 | Walking | 8 points/km; maximum 40 per Melbourne day; dog count does not multiply the award | Connected: server validates confirmed uploads and rounds cumulative daily distance down |
-| Daily goal | 20 points per dog/day, explicitly collected; shared account cap | Independent targets, progress, streaks and collection; backend verified, iOS/device acceptance pending |
-| Venue check-in | 12 points; one daily award per kind (Vet, Park, Café, Restaurant) | Walk-map GPS dwell and confirmed-walk settlement; actual receipt rows; physical acceptance pending |
+| Daily goal | 20 points per dog/day, explicitly collected; shared account cap | Independent targets, progress, streaks and collection; integration verification recorded separately |
+| Venue check-in | 12 points; one daily award per kind (Vet, Park, Café, Restaurant) | Walk-map GPS dwell and confirmed-walk settlement; actual receipt rows; acceptance recorded separately |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
@@ -58,13 +58,13 @@ but preserve accumulated verified seconds within that walk. Reentry resumes
 from the next reliable fix. A device countdown or existing CheckIn row alone
 is not proof of completion. Incomplete progress does not carry into a new walk.
 Ready check-ins remain pending until the immutable walk upload succeeds;
-map/Quest collection cannot award them early. Physical acceptance is still
-pending.
+map/Quest collection cannot award them early. Physical acceptance and later
+integration regression are recorded in [integration evidence](INTEGRATION.md).
 
 ## Task presentation
 
-Owner navigation is Account / Walk / Quest / Redeem. Friends and
-Net-Walking settings open from Account. Walk is the walk/social map and owns the
+Owner navigation is Redeem / Quest / Walk / Friends / Account. Friends and
+Net-Walking settings open from the Friends tab. Walk is the walk/social map and owns the
 sole location stream for walk/social/venue recording. Venue discovery is
 integrated into Walk; no separate Venues tab is required.
 There is no leaderboard tab, endpoint or table in this delivery.
@@ -72,8 +72,8 @@ There is no leaderboard tab, endpoint or table in this delivery.
 Quest uses compact horizontal avatar/venue rows with detail sheets. READY rows
 are highlighted first, IN_PROGRESS rows follow, and COLLECTED rows are muted at
 the bottom. Collection happens in the detail sheet. Base walking is not a task
-row. Unavailable birthdays, ineligible documents and unimplemented goal
-rewards produce no placeholder rows or invented percentage.
+row. Unavailable birthdays and ineligible documents produce no placeholder rows
+or invented percentage. Daily goals show each dog's independent progress.
 
 Streak uses one progress bar with only `x / 7`, `x / 30`, `x / 60` and later
 30-day milestones. A completed milestone fills and highlights the bar; tapping
@@ -95,7 +95,7 @@ receipt without giving a new owner another award.
 ## Daily goals
 
 [Daily goals](DAILY_GOALS.md) documents personalised owner and manual Admin target configuration,
-seven-day calendars, duration eligibility, history and the disabled payout path.
+seven-day calendars, duration eligibility, history and explicit per-dog collection.
 The goal-completion streak is separate from the following existing reward.
 
 ## Walking streaks
@@ -268,7 +268,7 @@ collection, account changes, stale responses, midnight, cap presentation and
 wallet refresh races, with light/dark/large-text snapshots.
 
 These tests do not certify physical GPS/background behavior, field accuracy of
-the connected social location flow, or disabled goal/Net-Walk rewards. Record actual
+the connected social location flow, or disabled Net-Walk rewards. Record actual
 run results with the build under test; use [feature status](FEATURES.md) and
 [Walk device tests](WALK_TESTING.md) for remaining acceptance work.
 
@@ -284,4 +284,4 @@ the intended product for an explicit purchase after eligibility refresh.
 
 Council search uses canonical names from the official Victorian Electoral
 Commission locality/postcode dataset. See [dataset coverage](../backend/evidence/COUNCIL_DATA.md)
-and [physical acceptance](OWNER_JOURNEY_ACCEPTANCE.md).
+and [acceptance evidence](INTEGRATION.md).

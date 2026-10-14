@@ -15,6 +15,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
+from dogs.models import Dog
 from rewards.models import PointEntry
 from rewards.policy import DAILY_ACTIVITY_CAP
 from rewards.services import credit_points
@@ -321,6 +322,14 @@ def update_session_state(*, owner, session_id, state):
 @transaction.atomic
 def update_preferences(*, owner, **values):
     owner = _lock_owners([owner.pk])[owner.pk]
+    if values.get("public_dog_id") is not None:
+        # Match dog edits/transfers: lock the owner before the dog and validate
+        # before saving any appearance or location preference in this PATCH.
+        dog = Dog.objects.select_for_update().filter(
+            pk=values["public_dog_id"], owner_id=owner.pk, archived_at__isnull=True,
+        ).first()
+        if dog is None:
+            raise ValidationError({"public_dog_id": "Choose one of your current, unarchived dogs."})
     for key, value in values.items():
         setattr(owner, key, value)
     if values:

@@ -3,8 +3,8 @@
 Updated 10 October 2026. Each dog can explicitly collect **20 points per Melbourne
 day** after completing its own goal. Walking, goals and check-ins share the
 owner account's **72-point cap**. Walking-day streak bonuses stay separate.
-Backend verification and outstanding iPhone acceptance are recorded in
-[the implementation report](OWNER_JOURNEY_REPORT.md).
+Verification and human-attested physical acceptance are indexed in
+[integration evidence](INTEGRATION.md).
 
 ## Configuration and history
 
@@ -204,10 +204,10 @@ Foregrounding, polling, retry and account teardown reuse the existing stores.
 
 ## Migration and verification
 
-The implementation must be verified in the backend and iOS suites before
-merge. iOS build, simulator and physical-device acceptance are still unverified
-on this Windows implementation host. The commands below remain the reproducible source of truth; historical
-test counts are not used as a current result.
+The integrated implementation must be verified in backend and iOS suites before
+merge. Chien confirmed physical testing of already-passed PRs on 14 October;
+see [integration evidence](INTEGRATION.md). The commands below remain reproducible;
+historical test counts are not a result for a later candidate.
 
 `dogs.0005_doggoaltarget` adds only the target revision table, foreign keys and
 positive-target/identity and dog/effective-date uniqueness constraints. Existing

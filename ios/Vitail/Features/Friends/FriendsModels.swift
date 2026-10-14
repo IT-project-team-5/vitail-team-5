@@ -1,22 +1,111 @@
 import CoreLocation
 import Foundation
 
+enum DogMapBreed: String, Codable, CaseIterable, Identifiable, Sendable {
+    case goldenRetriever, corgi, husky, dalmatian, beagle, shiba, poodle, dachshund, cat
+    var id: String { rawValue }
+    var isEasterEgg: Bool { self == .cat }
+    var title: String {
+        switch self {
+        case .goldenRetriever: return "Golden Retriever"
+        case .corgi: return "Corgi"
+        case .husky: return "Husky"
+        case .dalmatian: return "Dalmatian"
+        case .beagle: return "Beagle"
+        case .shiba: return "Shiba Inu"
+        case .poodle: return "Poodle"
+        case .dachshund: return "Dachshund"
+        case .cat: return "Cat · Easter egg"
+        }
+    }
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .goldenRetriever
+    }
+}
+
+enum DogBandanaColor: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none, red, yellow, green
+    var id: String { rawValue }
+    var title: String { self == .none ? "No bandana" : rawValue.capitalized }
+    var guidance: String? {
+        switch self {
+        case .none: return nil
+        case .red: return "My dog is reactive"
+        case .yellow: return "Please give space, nervous dog"
+        case .green: return "Friendly"
+        }
+    }
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        // Unknown colours carry no handling guidance.
+        self = Self(rawValue: value) ?? .none
+    }
+}
+
+struct PublicDogProfile: Codable, Equatable, Sendable {
+    let name: String
+    let breedName: String
+    let ageMonths: Int
+    let size: String
+    enum CodingKeys: String, CodingKey {
+        case name, size, breedName = "breed_name", ageMonths = "age_months"
+    }
+    var ageDescription: String {
+        let months = max(0, ageMonths)
+        let years = months / 12
+        if years == 0 { return "\(months) mo" }
+        return months % 12 == 0 ? "\(years) yr" : "\(years) yr \(months % 12) mo"
+    }
+    init(name: String, breedName: String, ageMonths: Int, size: String) {
+        self.name = name; self.breedName = breedName; self.ageMonths = ageMonths; self.size = size
+    }
+    init(_ dog: Dog) {
+        self.init(name: dog.name, breedName: dog.breed.name,
+                  ageMonths: dog.currentAgeMonths(), size: dog.size.rawValue)
+    }
+}
+
 struct SocialProfile: Codable, Identifiable, Equatable, Sendable {
     let publicID: String
     let displayName: String
     let photoURL: String?
     let avatarKey: String?
+    let dogAvatarBreed: DogMapBreed
+    let bandanaColor: DogBandanaColor
+    let dog: PublicDogProfile?
+    let avatarOutfit: DogAvatarOutfit
     var id: String { publicID }
 
-    init(publicID: String, displayName: String, photoURL: String?, avatarKey: String? = nil) {
+    init(publicID: String, displayName: String, photoURL: String?, avatarKey: String? = nil,
+         dogAvatarBreed: DogMapBreed = .goldenRetriever, bandanaColor: DogBandanaColor = .none,
+         dog: PublicDogProfile? = nil, avatarOutfit: DogAvatarOutfit = .plain) {
         self.publicID = publicID
         self.displayName = displayName
         self.photoURL = photoURL
         self.avatarKey = avatarKey
+        self.dogAvatarBreed = dogAvatarBreed
+        self.bandanaColor = bandanaColor
+        self.dog = dog
+        self.avatarOutfit = avatarOutfit
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        publicID = try values.decode(String.self, forKey: .publicID)
+        displayName = try values.decode(String.self, forKey: .displayName)
+        photoURL = try values.decodeIfPresent(String.self, forKey: .photoURL)
+        avatarKey = try values.decodeIfPresent(String.self, forKey: .avatarKey)
+        dogAvatarBreed = try values.decodeIfPresent(DogMapBreed.self, forKey: .dogAvatarBreed) ?? .goldenRetriever
+        bandanaColor = try values.decodeIfPresent(DogBandanaColor.self, forKey: .bandanaColor) ?? .none
+        dog = try values.decodeIfPresent(PublicDogProfile.self, forKey: .dog)
+        avatarOutfit = try values.decodeIfPresent(DogAvatarOutfit.self, forKey: .avatarOutfit) ?? .plain
     }
 
     enum CodingKeys: String, CodingKey {
         case publicID = "public_id", displayName = "display_name", photoURL = "photo_url", avatarKey = "avatar_key"
+        case dogAvatarBreed = "dog_avatar_breed", bandanaColor = "bandana_color"
+        case dog, avatarOutfit = "avatar_outfit"
     }
 }
 
@@ -25,25 +114,56 @@ struct SocialPreferences: Codable, Equatable, Sendable {
     let displayName: String
     let photoURL: String?
     let avatarKey: String?
+    let dogAvatarBreed: DogMapBreed
+    let bandanaColor: DogBandanaColor
     let locationVisibility: String
     let netMatchingEnabled: Bool
+    let publicDogID: Int?
+    let dog: PublicDogProfile?
+    let avatarOutfit: DogAvatarOutfit
 
     init(publicID: String, displayName: String, photoURL: String?, avatarKey: String? = nil,
-         locationVisibility: String, netMatchingEnabled: Bool) {
+         locationVisibility: String, netMatchingEnabled: Bool,
+         dogAvatarBreed: DogMapBreed = .goldenRetriever, bandanaColor: DogBandanaColor = .none,
+         publicDogID: Int? = nil, dog: PublicDogProfile? = nil, avatarOutfit: DogAvatarOutfit = .plain) {
         self.publicID = publicID
         self.displayName = displayName
         self.photoURL = photoURL
         self.avatarKey = avatarKey
+        self.dogAvatarBreed = dogAvatarBreed
+        self.bandanaColor = bandanaColor
         self.locationVisibility = locationVisibility
         self.netMatchingEnabled = netMatchingEnabled
+        self.publicDogID = publicDogID
+        self.dog = dog
+        self.avatarOutfit = avatarOutfit
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        publicID = try values.decode(String.self, forKey: .publicID)
+        displayName = try values.decode(String.self, forKey: .displayName)
+        photoURL = try values.decodeIfPresent(String.self, forKey: .photoURL)
+        avatarKey = try values.decodeIfPresent(String.self, forKey: .avatarKey)
+        locationVisibility = try values.decode(String.self, forKey: .locationVisibility)
+        netMatchingEnabled = try values.decode(Bool.self, forKey: .netMatchingEnabled)
+        dogAvatarBreed = try values.decodeIfPresent(DogMapBreed.self, forKey: .dogAvatarBreed) ?? .goldenRetriever
+        bandanaColor = try values.decodeIfPresent(DogBandanaColor.self, forKey: .bandanaColor) ?? .none
+        publicDogID = try values.decodeIfPresent(Int.self, forKey: .publicDogID)
+        dog = try values.decodeIfPresent(PublicDogProfile.self, forKey: .dog)
+        avatarOutfit = try values.decodeIfPresent(DogAvatarOutfit.self, forKey: .avatarOutfit) ?? .plain
     }
 
     enum CodingKeys: String, CodingKey {
         case publicID = "public_id", displayName = "display_name", photoURL = "photo_url", avatarKey = "avatar_key"
         case locationVisibility = "location_visibility", netMatchingEnabled = "net_matching_enabled"
+        case dogAvatarBreed = "dog_avatar_breed", bandanaColor = "bandana_color"
+        case publicDogID = "public_dog_id", dog, avatarOutfit = "avatar_outfit"
     }
     var profile: SocialProfile {
-        SocialProfile(publicID: publicID, displayName: displayName, photoURL: photoURL, avatarKey: avatarKey)
+        SocialProfile(publicID: publicID, displayName: displayName, photoURL: photoURL, avatarKey: avatarKey,
+                      dogAvatarBreed: dogAvatarBreed, bandanaColor: bandanaColor,
+                      dog: dog, avatarOutfit: avatarOutfit)
     }
 }
 
@@ -132,12 +252,35 @@ struct NetWalkInvitations: Decodable, Equatable, Sendable {
     static let empty = NetWalkInvitations(incoming: [], outgoing: [], active: nil)
 }
 
+enum PublicDogSelection: Equatable, Sendable {
+    case hidden
+    case selected(Int)
+    var dogID: Int? { if case let .selected(id) = self { return id }; return nil }
+}
+
 struct SocialPreferenceUpdate: Encodable, Equatable, Sendable {
-    let locationVisibility: String
-    let netMatchingEnabled: Bool
+    let locationVisibility: String?
+    let netMatchingEnabled: Bool?
     let avatarKey: String
+    var dogAvatarBreed: DogMapBreed = .goldenRetriever
+    var bandanaColor: DogBandanaColor = .none
+    var publicDogSelection: PublicDogSelection? = nil
     enum CodingKeys: String, CodingKey {
         case locationVisibility = "location_visibility", netMatchingEnabled = "net_matching_enabled", avatarKey = "virtual_avatar_key"
+        case dogAvatarBreed = "dog_avatar_breed", bandanaColor = "bandana_color"
+        case publicDogID = "public_dog_id"
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(locationVisibility, forKey: .locationVisibility)
+        try values.encodeIfPresent(netMatchingEnabled, forKey: .netMatchingEnabled)
+        try values.encode(avatarKey, forKey: .avatarKey)
+        try values.encode(dogAvatarBreed, forKey: .dogAvatarBreed)
+        try values.encode(bandanaColor, forKey: .bandanaColor)
+        if let publicDogSelection {
+            if let id = publicDogSelection.dogID { try values.encode(id, forKey: .publicDogID) }
+            else { try values.encodeNil(forKey: .publicDogID) }
+        }
     }
 }
 
