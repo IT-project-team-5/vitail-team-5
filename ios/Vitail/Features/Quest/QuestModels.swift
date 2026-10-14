@@ -143,6 +143,7 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
 
     var documentKind: DocumentKind? { DocumentKind(rawValue: kind) }
     var isBirthday: Bool { kind == "BIRTHDAY" }
+    var isDailyGoal: Bool { kind == "DAILY_GOAL" }
     var isStreak: Bool { kind == "STREAK" }
     var expiryLabel: String? {
         guard documentKind == .council, let validTo, DogBirthday.date(from: validTo) != nil else { return nil }
@@ -163,6 +164,17 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
         return progress
     }
     var isSupported: Bool {
+        if isDailyGoal {
+            guard let dogID, dogID > 0, rewardPoints == 20, !title.isEmpty,
+                  id.hasPrefix("daily-goal:\(dogID):"),
+                  DogBirthday.date(from: String(id.suffix(10))) != nil else { return false }
+            switch status {
+            case .ready: return progressRatio == 1
+            case .inProgress: return progressRatio != nil
+            case .collected: return collectedAt.flatMap(QuestCalendar.parse) != nil
+            case .unknown: return false
+            }
+        }
         if isStreak { return isSupportedStreak }
         if documentKind == .council {
             guard let dogID, dogID > 0, !id.isEmpty, !title.isEmpty else { return false }
@@ -215,6 +227,25 @@ struct QuestTask: Decodable, Equatable, Identifiable, Sendable {
         case currentDays = "current_days", milestoneDays = "milestone_days", runStartDate = "run_start_date"
         case validTo = "valid_to", needsExpiry = "needs_expiry"
     }
+}
+
+struct DailyGoalCollectResponse: Decodable, Sendable {
+    struct Award: Decodable, Sendable {
+        let id: Int
+        let kind: String
+        let dogID: Int
+        let localDate: String
+        let points: Int
+        let pointEntryID: Int
+        let awardedAt: String
+        enum CodingKeys: String, CodingKey {
+            case id, kind, points, dogID = "dog_id", localDate = "local_date"
+            case pointEntryID = "point_entry_id", awardedAt = "awarded_at"
+        }
+    }
+    let award: Award
+    let balance: Int
+    let created: Bool
 }
 
 struct BirthdayAward: Decodable, Equatable, Sendable {

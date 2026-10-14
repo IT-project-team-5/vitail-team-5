@@ -232,6 +232,7 @@ class AuthApiTests(APITestCase):
                 "display_name": "Dog Owner",
                 "role": User.Role.OWNER,
                 "photo": None,
+                "onboarding_complete": False,
             },
         )
 

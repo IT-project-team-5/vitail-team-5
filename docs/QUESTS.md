@@ -1,7 +1,6 @@
 # Quest and Point Policy
 
-Canonical reward reference. Reward policy is confirmed through 4 October 2026;
-delivery status is updated 9 October 2026. Latest sources:
+Canonical reward reference. Integration status updated 14 October 2026. Latest sources:
 [New Point Retrieval / Calculation](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation),
 24 September, plus [Venue-Checkin v5](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35815426/Venue-Checkin),
 9 October, and subsequent confirmed collection/UI decisions.
@@ -13,7 +12,7 @@ amount does not mean its qualification engine is implemented.
 | Source | Policy | Current delivery |
 |---|---|---|
 | Walking | 8 points/km; maximum 40 per Melbourne day; dog count does not multiply the award | Connected: server validates confirmed uploads and rounds cumulative daily distance down |
-| Daily goal | 20-point baseline; per-dog/account scope remains open | Per-dog personalised owner and manual Admin targets share one history; progress and goal streaks connected; payouts disabled pending multi-dog rules |
+| Daily goal | 20 points per dog/day, explicitly collected; shared account cap | Independent targets, progress, streaks and collection; backend verified, iOS/device acceptance pending |
 | Venue check-in | 12 points; one daily award per kind (Vet, Park, Café, Restaurant) | Walk-map GPS dwell and confirmed-walk settlement; actual receipt rows; physical acceptance pending |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
@@ -25,8 +24,9 @@ amount does not mean its qualification engine is implemented.
 The implemented shared activity cap is **72 points per Melbourne day for walking, daily goals
 and check-ins**. Wallet balance is not this counter: spending/refunds, admin
 grants and birthday/document credits do not change the activity-earned total.
-Goal cap membership was confirmed on 4 October (40 walking + 20 goal + 12
-check-in). Multi-dog reward/cap scope and net-walk membership remain unresolved.
+The cap belongs to the account, including both dogs' 20-point goals. A goal
+requires its full 20 points of remaining allowance; no partial award. Net-walk
+cap membership remains unresolved.
 Earlier documents
 that simply sum all proposed sources must not silently change the service.
 
@@ -271,3 +271,17 @@ These tests do not certify physical GPS/background behavior, field accuracy of
 the connected social location flow, or disabled goal/Net-Walk rewards. Record actual
 run results with the build under test; use [feature status](FEATURES.md) and
 [Walk device tests](WALK_TESTING.md) for remaining acceptance work.
+
+## Registration and redemption
+
+Every current dog must have an accepted, unrejected microchip registration before
+new reward purchases. Registration remains self-reported; its separate 300-point
+reward may stay uncollected. Council registration does not satisfy this gate.
+`GET /api/redemptions/eligibility` identifies incomplete dogs, and purchase checks
+again under the owner lock. A successful purchase UUID still replays its original
+receipt after account changes. iOS links to each missing registration and keeps
+the intended product for an explicit purchase after eligibility refresh.
+
+Council search uses canonical names from the official Victorian Electoral
+Commission locality/postcode dataset. See [dataset coverage](../backend/evidence/COUNCIL_DATA.md)
+and [physical acceptance](OWNER_JOURNEY_ACCEPTANCE.md).

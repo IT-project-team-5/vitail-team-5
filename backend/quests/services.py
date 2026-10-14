@@ -154,9 +154,13 @@ def quest_dashboard(*, owner, request=None, now=None):
     if QuestDefinition.Code.DOCUMENTS in enabled:
         from evidence.services import quest_tasks
         tasks.extend(quest_tasks(owner=owner, dogs=dogs, request=request, now=now))
+    progress = goal_progress(owner=owner, request=request, now=now)
+    if QuestDefinition.Code.DAILY_GOAL in enabled:
+        from .goals import daily_goal_tasks
+        tasks.extend(daily_goal_tasks(owner=owner, progress=progress, now=now))
     order = {"READY": 0, "IN_PROGRESS": 1, "COLLECTED": 2}
     tasks.sort(key=lambda task: (order[task["status"]], task["kind"], task["dog_id"] or 0, task["id"]))
     return {"server_time": now, "timezone": MELBOURNE.key, "local_date": today,
             "next_reset_at": local_midnight(today + timedelta(days=1)), "tasks": tasks,
-            "daily_goals": goal_progress(owner=owner, request=request, now=now),
-            "goal_rewards_status": "PENDING_MULTI_DOG_POLICY"}
+            "daily_goals": progress,
+            "goal_rewards_status": "AVAILABLE" if QuestDefinition.Code.DAILY_GOAL in enabled else "DISABLED"}

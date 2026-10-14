@@ -49,7 +49,7 @@ class DeletedAccountServiceGuardsTests(TestCase):
         today = local_date(self.now)
         serializer = DocumentRequestSerializer(data={"request_id": str(uuid4()), "dog_id": self.dog.pk,
             "kind": "COUNCIL_REGISTRATION", "registration_number": "Council ABC",
-            "council_name": "City of Melbourne",
+            "council_name": "Melbourne City Council",
             "valid_to": (today + timedelta(days=365)).isoformat()})
         serializer.is_valid(raise_exception=True)
         return serializer.validated_data

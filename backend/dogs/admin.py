@@ -28,8 +28,16 @@ class DogAdminForm(forms.ModelForm):
         model = Dog
         fields = "__all__"
 
+    @transaction.atomic
     def clean(self):
         cleaned = super().clean()
+        owner = cleaned.get("owner")
+        if owner:
+            from django.contrib.auth import get_user_model
+            previous_id = Dog.objects.filter(pk=self.instance.pk).values_list("owner_id", flat=True).first()
+            list(get_user_model().objects.select_for_update().filter(pk__in={owner.pk, previous_id}).order_by("pk"))
+            if previous_id != owner.pk and Dog.objects.filter(owner=owner).count() >= 2:
+                self.add_error("owner", "This account already has two dogs.")
         if cleaned.get("date_of_birth") is not None:
             self.instance.date_of_birth = cleaned["date_of_birth"]
             cleaned["age_months"] = self.instance.current_age_months

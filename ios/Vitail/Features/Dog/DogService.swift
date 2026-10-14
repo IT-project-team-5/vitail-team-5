@@ -1,6 +1,7 @@
 import Foundation
 
 protocol DogServicing: Sendable {
+    func completeOnboarding() async throws -> User
     func getDogs() async throws -> [Dog]
     func getBreeds() async throws -> [Breed]
     func createDog(_ request: DogWriteRequest) async throws -> Dog
@@ -12,6 +13,7 @@ protocol DogServicing: Sendable {
 }
 
 extension DogServicing {
+    func completeOnboarding() async throws -> User { throw APIError.invalidResponse }
     func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview { throw URLError(.unsupportedURL) }
     func saveGoal(dogID: Int, request: DogGoalRequest) async throws -> DogGoalPreview { throw URLError(.unsupportedURL) }
     func uploadPhoto(dogID: Int, data: Data) async throws -> Dog { throw PhotoUploadError.unavailable }
@@ -26,6 +28,10 @@ actor DogService: DogServicing {
 
     func getDogs() async throws -> [Dog] {
         try await apiClient.get("/api/dogs")
+    }
+
+    func completeOnboarding() async throws -> User {
+        try await apiClient.post("/api/auth/onboarding/complete", body: EmptyRequestBody())
     }
 
     func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview {

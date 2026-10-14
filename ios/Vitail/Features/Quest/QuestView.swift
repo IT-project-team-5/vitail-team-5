@@ -154,7 +154,7 @@ struct QuestView: View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             ScrollView {
                 VStack(spacing: AppSpacing.small) {
-                    QuestHeader(points: store.confirmedBalance ?? points, isPulsing: isPointsPulsing)
+                    QuestHeader(points: points, isPulsing: isPointsPulsing)
                         .padding(.bottom, AppSpacing.small)
                     if let goals = store.dailyGoals {
                         if goals.isEmpty {

@@ -23,7 +23,6 @@ struct DogDetailView: View {
                         LabeledContent("Breed", value: currentDog.breed.name)
                         LabeledContent("Birthday", value: currentDog.dateOfBirth.map(DogBirthday.display) ?? "Not recorded")
                         LabeledContent(currentDog.dateOfBirth == nil ? "Recorded age" : "Age", value: currentDog.ageDescription)
-                        LabeledContent("Size", value: currentDog.size.label)
                         LabeledContent("Weight", value: currentDog.weightKg.map { "\($0) kg" } ?? "Not recorded")
                         if currentDog.isBrachycephalic {
                             LabeledContent("Brachycephalic", value: "Yes")
@@ -85,20 +84,30 @@ struct DogDetailView: View {
 struct DogGoalView: View {
     let dog: Dog
     var onChanged: () async -> Void = {}
+    var onSavingChanged: (Bool) -> Void = { _ in }
+    var setupActions: AnyView?
     @StateObject private var model: DogGoalViewModel
     @State private var percentage = 100
+    private var percentageKey: String { "goal-adjustment:\(AppConfiguration.apiBaseURL?.absoluteString ?? ""):\(dog.id)" }
 
-    init(dog: Dog, service: any DogServicing = DogService(), onChanged: @escaping () async -> Void = {}) {
+    init(dog: Dog, service: any DogServicing = DogService(), onChanged: @escaping () async -> Void = {},
+         onSavingChanged: @escaping (Bool) -> Void = { _ in }, setupActions: AnyView? = nil) {
         self.dog = dog
         self.onChanged = onChanged
+        self.onSavingChanged = onSavingChanged
+        self.setupActions = setupActions
         _model = StateObject(wrappedValue: DogGoalViewModel(service: service))
     }
 
     var body: some View {
         Form {
             Section("\(dog.name)'s walking goal") {
-                Stepper("Exercise level: \(percentage)%", value: $percentage, in: 50...200, step: 1)
-                    .disabled(model.isSaving)
+                Text("Exercise level: \(percentage)%").font(.headline)
+                Slider(value: Binding(get: { Double(percentage) }, set: { percentage = Int($0) }), in: 50...200, step: 1) {
+                    Text("Walking goal adjustment")
+                } minimumValueLabel: { Text("50%") } maximumValueLabel: { Text("200%") }
+                    .accessibilityValue("\(percentage) percent of the recommendation")
+                    .disabled(model.isSaving || model.pendingSave != nil)
                 Text("Choose 50–200% of the recommendation. Start at 100% and adjust for your dog's exercise needs.")
                     .font(.footnote)
                 if model.isLoading { ProgressView("Calculating…") }
@@ -109,7 +118,7 @@ struct DogGoalView: View {
                         LabeledContent("Starts", value: DogBirthday.display(preview.effectiveFrom))
                         Text("Changes preserve today's goal. Profile edits do not change a saved target; review and save a new goal when needed.")
                             .font(.footnote)
-                        Button(model.saved ? "Goal saved" : "Save walking goal") {
+                        Button(model.saved ? "Goal saved" : model.pendingSave != nil ? "Retry saving goal" : "Save walking goal") {
                             Task {
                                 if await model.save(dogID: dog.id, percentage: percentage) { await onChanged() }
                             }
@@ -147,10 +156,33 @@ struct DogGoalView: View {
                         .disabled(model.isSaving)
                 }
             }
-            Section { Text("Daily-goal rewards are not yet available.").font(.footnote) }
+            if let pending = model.pendingSave {
+                Section("Pending save") {
+                    Text("Retry will confirm your original \(pending.ownerAdjustment)× adjustment starting \(DogBirthday.display(pending.effectiveFrom)). It will not create another revision.")
+                        .font(.footnote)
+                    if model.preview?.eligible != true {
+                        Button("Retry saving goal") {
+                            Task { if await model.save(dogID: dog.id, percentage: percentage) { await onChanged() } }
+                        }.disabled(!model.canSave(percentage: percentage))
+                    }
+                }
+            }
+            Section { Text("Each dog can collect 20 points after completing its daily goal. Walking, goal and check-in points share your account's 72-point daily cap.").font(.footnote) }
+            if let setupActions { Section { setupActions } }
         }
+        .scrollContentBackground(.hidden)
+        .background(AppColors.background)
+        .tint(AppColors.brand)
         .navigationTitle("Daily walking goal")
-        .task(id: percentage) { await model.load(dogID: dog.id, percentage: percentage) }
+        .onAppear {
+            if let saved = UserDefaults.standard.object(forKey: percentageKey) as? Int, (50...200).contains(saved) { percentage = saved }
+        }
+        .task(id: percentage) {
+            UserDefaults.standard.set(percentage, forKey: percentageKey)
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            await model.load(dogID: dog.id, percentage: percentage)
+        }
         .interactiveDismissDisabled(model.isSaving)
+        .onChange(of: model.isSaving) { _, saving in onSavingChanged(saving) }
     }
 }

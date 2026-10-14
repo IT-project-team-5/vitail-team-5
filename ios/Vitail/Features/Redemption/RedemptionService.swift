@@ -1,11 +1,16 @@
 import Foundation
 
 protocol RedemptionServing: Sendable {
+    func fetchEligibility() async throws -> RedemptionEligibility
     func fetchBalance() async throws -> WalletBalance
     func fetchRewards() async throws -> [Reward]
     func fetchRedemptions() async throws -> [Redemption]
     func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption
     func collectRedemption(id: Int) async throws -> Redemption
+}
+
+extension RedemptionServing {
+    func fetchEligibility() async throws -> RedemptionEligibility { throw APIError.invalidResponse }
 }
 
 actor RedemptionService: RedemptionServing {
@@ -17,6 +22,10 @@ actor RedemptionService: RedemptionServing {
 
     func fetchBalance() async throws -> WalletBalance {
         try await apiClient.get("/api/wallet/")
+    }
+
+    func fetchEligibility() async throws -> RedemptionEligibility {
+        try await apiClient.get("/api/redemptions/eligibility")
     }
 
     func fetchRewards() async throws -> [Reward] {

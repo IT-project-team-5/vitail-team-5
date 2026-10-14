@@ -41,7 +41,7 @@ class DocumentCorrectionTests(APITestCase):
 
     def payload(self, **changes):
         data = {"request_id": str(uuid4()), "dog_id": self.dog.pk, "kind": "COUNCIL_REGISTRATION",
-                "registration_number": "00042", "council_name": "City of Melbourne", "valid_to": "2027-06-15"}
+                "registration_number": "00042", "council_name": "Melbourne City Council", "valid_to": "2027-06-15"}
         data.update(changes)
         return data
 
@@ -67,12 +67,12 @@ class DocumentCorrectionTests(APITestCase):
         self.assertEqual(self.collect(first).status_code, 200)
         old = DocumentSubmission.objects.get()
         ledger = list(PointEntry.objects.values())
-        corrected = self.correct(first, self.payload(registration_number="00100", council_name="Yarra", document_dog_name="Coco on file"))
+        corrected = self.correct(first, self.payload(registration_number="00100", council_name="Yarra City Council", document_dog_name="Coco on file"))
         self.assertEqual(corrected.status_code, 201, corrected.data)
         new = DocumentSubmission.objects.get(pk=corrected.data["submission"]["id"])
         self.assertEqual(new.file.name, old.file.name)
         self.assertEqual(new.entitlement_id, old.entitlement_id)
-        self.assertEqual((new.registration_number, new.council_name, new.awarded_points), ("00100", "Yarra", 0))
+        self.assertEqual((new.registration_number, new.council_name, new.awarded_points), ("00100", "Yarra City Council", 0))
         old.refresh_from_db()
         self.assertEqual(old.response_snapshot, first)
         self.assertEqual(list(PointEntry.objects.values()), ledger)
@@ -190,7 +190,7 @@ class CorrectionConcurrencyTests(TransactionTestCase):
         breed = Breed.objects.create(name="Concurrent correction", energy_level="LOW", default_size="SMALL")
         dog = Dog.objects.create(owner=owner, name="Coco", breed=breed, age_months=12, size="SMALL", is_brachycephalic=False)
         payload = {"request_id": str(uuid4()), "dog_id": dog.pk, "kind": "COUNCIL_REGISTRATION",
-                   "registration_number": "00042", "council_name": "Yarra", "valid_to": "2030-06-15"}
+                   "registration_number": "00042", "council_name": "Yarra City Council", "valid_to": "2030-06-15"}
         client = APIClient()
         client.force_authenticate(owner)
         first = client.post("/api/quests/documents", payload, format="json")

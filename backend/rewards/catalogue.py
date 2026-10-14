@@ -3,6 +3,7 @@ import hashlib
 import json
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
@@ -10,6 +11,7 @@ from .models import Redemption, Reward
 
 
 MELBOURNE = ZoneInfo("Australia/Melbourne")
+DEMO_REWARD_EMAIL = "redemption-demo@vitail.test"
 
 
 def purchase_fingerprint(reward_id):
@@ -18,11 +20,15 @@ def purchase_fingerprint(reward_id):
 
 
 def active_rewards(now):
-    return Reward.objects.filter(
+    rewards = Reward.objects.filter(
         is_available=True, venue__is_active=True, venue__is_partner=True,
         venue__manager_user__is_active=True, venue__manager_user__role="CAFE",
     ).filter(Q(starts_at__isnull=True) | Q(starts_at__lte=now)).filter(
         Q(ends_at__isnull=True) | Q(ends_at__gt=now))
+    # The dedicated fictional catalogue is never sold outside development.
+    if not settings.DEBUG:
+        rewards = rewards.exclude(venue__manager_user__email=DEMO_REWARD_EMAIL)
+    return rewards
 
 
 def daily_allocation_filter(now, prefix=""):

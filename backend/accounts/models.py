@@ -32,6 +32,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     active_walk_session = models.OneToOneField("walks.WalkSession", null=True, blank=True, on_delete=models.SET_NULL, related_name="active_for_user")
     auth_version = models.PositiveIntegerField(default=1)
     deleted_at = models.DateTimeField(null=True, blank=True)
+    onboarding_complete = models.BooleanField(default=True)
 
     objects = UserManager()
 

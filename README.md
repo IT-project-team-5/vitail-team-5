@@ -115,7 +115,7 @@ progress, authenticated venue check-ins, and connected Friends/Net-Walking live
 sessions. Raw social GPS is a rolling 15-minute verification buffer cleaned by
 the worker; the API returns only fresh positions and summary distance. The
 social flow does **not** deliver a leaderboard, wallet rewards for Net-Walking,
-chat, notifications, charity donations or daily-goal rewards. See
+chat, notifications or charity donations. See
 [feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check
@@ -145,7 +145,7 @@ without `--dry-run` to import. Existing venues and accounts are preserved.
 
 | Document | Authority |
 |---|---|
-| [Daily walking goals](docs/DAILY_GOALS.md) | Personalised owner/manual Admin configuration, calendar rules, preserved history and pending multi-dog payout decisions |
+| [Daily walking goals](docs/DAILY_GOALS.md) | Personalised owner/manual Admin configuration, calendar rules, per-dog collection, shared account cap and preserved history |
 | [Quest and point policy](docs/QUESTS.md) | Canonical reward amounts, limits, current delivery and check-in handoff |
 | [Decisions](docs/DECISIONS.md) | Current choices and unresolved questions |
 | [Feature status](docs/FEATURES.md) | What can be tested now versus foundations/future work |
@@ -159,3 +159,8 @@ without `--dry-run` to import. Existing venues and accounts are preserved.
 Each feature owner maintains its UI, API, migrations, tests and relevant docs.
 Do not create a parallel wallet/order model or invent behavior for an open
 policy question.
+
+The owner journey now includes resumable dog/goal setup (maximum two dogs),
+20-point per-dog daily collection, microchip-gated purchases and Council search.
+See [implementation and verification](docs/OWNER_JOURNEY_REPORT.md) and
+[mandatory iPhone acceptance](docs/OWNER_JOURNEY_ACCEPTANCE.md).

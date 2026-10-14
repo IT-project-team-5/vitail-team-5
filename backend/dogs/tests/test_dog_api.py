@@ -47,6 +47,7 @@ class DogApiTests(APITestCase):
             "name": "Milo",
             "breed_id": self.breed.id,
             "age_months": 36,
+            "weight_kg": "8.00",
             "size": Dog.Size.SMALL,
             "is_brachycephalic": False,
         }
@@ -135,8 +136,8 @@ class DogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertTrue(Dog.objects.filter(pk=dog.id).exists())
 
-    def test_ten_dogs_allowed_and_eleventh_rejected(self):
-        for index in range(10):
+    def test_two_dogs_allowed_and_third_rejected(self):
+        for index in range(2):
             response = self.client.post(
                 self.list_url,
                 self.dog_payload(name=f"Dog {index + 1}"),
@@ -146,13 +147,13 @@ class DogApiTests(APITestCase):
 
         response = self.client.post(
             self.list_url,
-            self.dog_payload(name="Dog 11"),
+            self.dog_payload(name="Dog 3"),
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("at most 10 dogs", str(response.data))
-        self.assertEqual(Dog.objects.filter(owner=self.owner).count(), 10)
+        self.assertIn("at most two dogs", str(response.data))
+        self.assertEqual(Dog.objects.filter(owner=self.owner).count(), 2)
 
     def test_invalid_breed_is_rejected(self):
         response = self.client.post(

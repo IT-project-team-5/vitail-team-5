@@ -15,12 +15,14 @@ struct User: Codable, Equatable, Identifiable, Sendable {
     let displayName: String
     let role: UserRole
     var photo: String? = nil
+    var onboardingComplete: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
         case email
         case displayName = "display_name"
         case role, photo
+        case onboardingComplete = "onboarding_complete"
     }
 }
 
