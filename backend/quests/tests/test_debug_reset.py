@@ -238,16 +238,17 @@ class QuestDebugResetTests(APITestCase):
                 dog_name_snapshot=self.dog.name, kind=kind, request_id=uuid4(),
                 request_fingerprint=f"before-reset-{kind}", entitlement=entitlement,
                 registration_number=number,
-                council_name="City of Melbourne" if kind == DocumentKind.COUNCIL else "",
+                council_name="Melbourne City Council" if kind == DocumentKind.COUNCIL else "",
                 valid_to=valid_to,
             )
             originals[kind] = (entitlement, entry, number, valid_to)
 
         before_balance = get_balance(self.owner)
         before_entries = set(PointEntry.objects.filter(user=self.owner).values_list("pk", flat=True))
-        later = self.now + timedelta(days=1)
-        with patch("quests.debug_reset.timezone.now", return_value=later):
-            response = self.client.post("/api/quests/reset", {}, format="json")
+        # Advance the shared clock for reset, resubmission and collection so
+        # this still verifies a different earning date after clock isolation.
+        self.now += timedelta(days=1)
+        response = self.client.post("/api/quests/reset", {}, format="json")
         self.assertEqual(response.status_code, 200)
 
         for kind, (entitlement, entry, number, valid_to) in originals.items():
@@ -258,9 +259,9 @@ class QuestDebugResetTests(APITestCase):
                 "kind": kind, "registration_number": number,
             }
             if kind == DocumentKind.COUNCIL:
-                payload.update(council_name="City of Melbourne", valid_to=valid_to.isoformat())
+                payload.update(council_name="Melbourne City Council", valid_to=valid_to.isoformat())
             submitted = self.client.post("/api/quests/documents", payload, format="json")
-            self.assertEqual(submitted.status_code, 201)
+            self.assertEqual(submitted.status_code, 201, submitted.data)
             self.assertEqual(submitted.data["entitlement_id"], entitlement.pk)
             collected = self.client.post(
                 f"/api/quests/documents/entitlements/{entitlement.pk}/collect", {}, format="json",
@@ -268,6 +269,8 @@ class QuestDebugResetTests(APITestCase):
             self.assertEqual(collected.status_code, 200)
             entitlement.refresh_from_db()
             self.assertEqual(entitlement.point_entry_id, entry.pk)
+            entry.refresh_from_db()
+            self.assertEqual(entry.earned_on, local_date(self.now) - timedelta(days=1))
 
         self.assertEqual(get_balance(self.owner), before_balance)
         self.assertEqual(
