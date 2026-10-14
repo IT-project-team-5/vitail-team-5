@@ -75,6 +75,9 @@ final class WalkLocationManager: NSObject, ObservableObject {
     func setMode(_ newMode: Mode) {
         guard mode != newMode else { return }
         mode = newMode
+        // Fresh stationary fixes are needed for verified venue dwell. Reusing a
+        // cached position on a timer would incorrectly count unverified time.
+        client.distanceFilter = newMode == .recording ? kCLDistanceFilterNone : 5
         if newMode == .off {
             stopUpdates()
             location = nil

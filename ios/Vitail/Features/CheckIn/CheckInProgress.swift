@@ -28,9 +28,12 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
     let updatedAt: Date
     let rewardPoints: Int
     var collectedAt: Date? = nil
+    var walkRequestID: UUID? = nil
+    var isReplayable = false
 
     init(id: String, venueID: Int, venueName: String, photo: String?, requiredSeconds: Int,
-         verifiedSeconds: Int, status: Status, updatedAt: Date, rewardPoints: Int, collectedAt: Date? = nil) {
+         verifiedSeconds: Int, status: Status, updatedAt: Date, rewardPoints: Int,
+         collectedAt: Date? = nil, walkRequestID: UUID? = nil, isReplayable: Bool = false) {
         self.id = id
         self.venueID = venueID
         self.venueName = venueName
@@ -41,6 +44,8 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.rewardPoints = rewardPoints
         self.collectedAt = collectedAt
+        self.walkRequestID = walkRequestID
+        self.isReplayable = isReplayable
     }
 
     enum CodingKeys: String, CodingKey {
@@ -52,6 +57,8 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
         case updatedAt = "updated_at"
         case rewardPoints = "reward_points"
         case collectedAt = "collected_at"
+        case walkRequestID = "walk_request_id"
+        case isReplayable = "is_replayable"
     }
 
     init(from decoder: Decoder) throws {
@@ -66,11 +73,17 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
         updatedAt = try Self.decodeDate(values, key: .updatedAt)
         rewardPoints = try values.decode(Int.self, forKey: .rewardPoints)
         collectedAt = try values.decodeIfPresent(String.self, forKey: .collectedAt).flatMap(Self.parseDate)
+        walkRequestID = try values.decodeIfPresent(UUID.self, forKey: .walkRequestID)
+        isReplayable = try values.decodeIfPresent(Bool.self, forKey: .isReplayable) ?? false
     }
 
     var progressRatio: Double {
         guard requiredSeconds > 0 else { return 0 }
         return min(1, max(0, Double(verifiedSeconds) / Double(requiredSeconds)))
+    }
+
+    func availablePoints(earnedToday: Int) -> Int {
+        isReplayable ? rewardPoints : min(rewardPoints, max(0, CheckInProgressSnapshot.dailyLimit - earnedToday))
     }
 
     var isValid: Bool {
@@ -79,6 +92,7 @@ struct VenueCheckInProgress: Decodable, Equatable, Identifiable, Sendable {
             && updatedAt.timeIntervalSince1970.isFinite
             && (status != .ready || verifiedSeconds >= requiredSeconds)
             && (status != .collected || collectedAt?.timeIntervalSince1970.isFinite == true)
+            && (!isReplayable || (walkRequestID != nil && (status == .inProgress || status == .ready)))
     }
 
     private static func decodeDate(_ values: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Date {
@@ -198,8 +212,11 @@ final class CheckInProgressStore: ObservableObject {
 
     var isAvailable: Bool { service != nil }
     var activeItems: [VenueCheckInProgress] {
-        guard isCurrentDay, earnedPointsToday < CheckInProgressSnapshot.dailyLimit else { return [] }
-        return items.filter { $0.status == .ready || $0.status == .inProgress }
+        guard isCurrentDay else { return [] }
+        return items.filter {
+            ($0.status == .ready || $0.status == .inProgress)
+                && (earnedPointsToday < CheckInProgressSnapshot.dailyLimit || $0.isReplayable)
+        }
             .sorted { ($0.status == .ready ? 0 : 1, $0.id) < ($1.status == .ready ? 0 : 1, $1.id) }
     }
     var collectedTodayItems: [VenueCheckInProgress] {
@@ -294,7 +311,7 @@ final class CheckInProgressStore: ObservableObject {
 
     func collect(id: String) async {
         guard isCurrentOwner, let service, !collectingIDs.contains(id),
-              let item = activeItems.first(where: { $0.id == id }), item.status == .ready,
+              let item = activeItems.first(where: { $0.id == id }), item.status == .ready, item.walkRequestID == nil,
               let requestedDate = localDate else { return }
         let startedGeneration = generation
         let requestID = requests[id] ?? UUID()
@@ -326,6 +343,26 @@ final class CheckInProgressStore: ObservableObject {
             guard isCurrentOwner, generation == startedGeneration else { return }
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Drop client-side receipts only after the DEBUG reset endpoint has
+    /// succeeded. Normal refreshes intentionally keep those receipts to guard
+    /// against eventually-consistent responses resurrecting a collected row.
+    func resetForTesting() async {
+        guard isCurrentOwner else { return }
+        generation += 1
+        revision += 1
+        items = []
+        localDate = nil
+        serverTime = nil
+        receivedAt = nil
+        earnedPointsToday = 0
+        requests = [:]
+        confirmedCollections = [:]
+        collectingIDs = []
+        isRefreshing = false
+        errorMessage = nil
+        await refresh()
     }
 
     func stop() {
