@@ -360,6 +360,34 @@ def daily_activity_points(owner, day):
     ).aggregate(total=Sum("amount"))["total"] or 0
 
 
+def _quest_progress_items(rows, context, replayable_checkin_ids):
+    """Choose one deterministic Quest card per daily venue category.
+
+    The map still needs every per-venue attempt. The Quest summary instead
+    represents the category lifecycle: an explicit DEBUG replay wins, then a
+    collected result, a ready result, and finally the most advanced active
+    attempt. Current-walk and recent rows break otherwise equal ties.
+    """
+    def priority(row):
+        state = 3 if row.point_entry_id else 2 if row.ready_at else 1
+        return (
+            row.pk in replayable_checkin_ids,
+            state,
+            bool(context and row.walk_context_id == context.pk),
+            row.verified_seconds,
+            row.updated_at,
+            row.pk,
+        )
+
+    selected = {}
+    for row in rows:
+        existing = selected.get(row.category_slot)
+        if existing is None or priority(row) > priority(existing):
+            selected[row.category_slot] = row
+    category_order = {kind: index for index, kind in enumerate(Venue.Kind.values)}
+    return sorted(selected.values(), key=lambda row: category_order[row.category_slot])
+
+
 def current_progress(*, owner, walk_request_id=None, now=None):
     now = now or timezone.now()
     day = local_date(now)
@@ -425,8 +453,10 @@ def current_progress(*, owner, walk_request_id=None, now=None):
         row.venue_id for row in dormant
         if row.pk in replay_entries
     } if enabled else set())
+    quest_items = _quest_progress_items(rows, context, replayable_checkin_ids)
     return {"local_date": day, "server_time": now, "earned_points_today": earned_points,
-            "items": rows, "context": context, "rewarded_categories": rewarded_categories,
+            "items": rows, "quest_items": quest_items,
+            "context": context, "rewarded_categories": rewarded_categories,
             "replayable_venue_ids": replayable_venue_ids,
             "replayable_checkin_ids": replayable_checkin_ids}
 

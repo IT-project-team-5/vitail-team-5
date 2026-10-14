@@ -343,6 +343,95 @@ class CheckInServiceTests(CheckInFixture, TestCase):
         self.assertLessEqual(len(twenty_row_queries), len(one_row_queries) + 1)
         self.assertLessEqual(len(twenty_row_queries), 9)
 
+    def test_quest_summary_caps_categories_while_map_keeps_sibling_venues(self):
+        def venue(kind, suffix):
+            return Venue.objects.create(
+                name=f"{kind} {suffix}",
+                kind=kind,
+                latitude=-37.8,
+                longitude=144.9,
+                checkin_enabled=True,
+                is_partner=kind in ("CAFE", "RESTAURANT"),
+            )
+
+        def attach_credit(row, suffix):
+            entry = credit_points(
+                user=self.owner,
+                amount=row.promised_points,
+                type=PointEntry.Type.EARN,
+                source_reference=f"collected:{suffix}",
+                earn_category=PointEntry.EarnCategory.CHECK_IN,
+                earned_on=row.local_date,
+                rules_version=row.rules_version,
+            )
+            row.point_entry = entry
+            row.collected_at = self.now
+            row.save(update_fields=("point_entry", "collected_at", "updated_at"))
+
+        replay_cafe = self.opportunity("CAFE", ready=False)
+        credit_points(
+            user=self.owner,
+            amount=replay_cafe.promised_points,
+            type=PointEntry.Type.EARN,
+            source_reference=f"checkin:{replay_cafe.pk}",
+            earn_category=PointEntry.EarnCategory.CHECK_IN,
+            earned_on=replay_cafe.local_date,
+            rules_version=replay_cafe.rules_version,
+        )
+        ready_cafe = self.opportunity(
+            "CAFE", venue=venue("CAFE", "ready"), venue_name_snapshot="Cafe ready",
+        )
+        collected_cafe = self.opportunity(
+            "CAFE", venue=venue("CAFE", "collected"),
+            venue_name_snapshot="Cafe collected", walk_context=self.walk_context(),
+        )
+        attach_credit(collected_cafe, "cafe")
+
+        park_progress = self.opportunity("PARK", ready=False)
+        park_ready = self.opportunity(
+            "PARK", venue=venue("PARK", "ready"), venue_name_snapshot="Park ready",
+        )
+
+        vet_ready = self.opportunity("VET")
+        vet_collected = self.opportunity(
+            "VET", venue=venue("VET", "collected"),
+            venue_name_snapshot="Vet collected", walk_context=self.walk_context(),
+        )
+        attach_credit(vet_collected, "vet")
+
+        restaurant_progress = self.opportunity(
+            "RESTAURANT", ready=False, verified_seconds=30,
+        )
+        restaurant_advanced = self.opportunity(
+            "RESTAURANT", ready=False, verified_seconds=60,
+            venue=venue("RESTAURANT", "advanced"),
+            venue_name_snapshot="Restaurant advanced",
+        )
+
+        client = APIClient()
+        client.force_authenticate(self.owner)
+        query = f"?walk_request_id={self.context.request_id}"
+        quest_response = client.get(f"/api/check-ins{query}")
+        self.assertEqual(quest_response.status_code, 200)
+        quest_items = quest_response.data["items"]
+        self.assertLessEqual(len(quest_items), 4)
+        self.assertEqual(len({item["kind"] for item in quest_items}), len(quest_items))
+        selected = {item["kind"]: item for item in quest_items}
+        self.assertEqual(selected["CAFE"]["id"], str(replay_cafe.attempt_id))
+        self.assertTrue(selected["CAFE"]["is_replayable"])
+        self.assertEqual(selected["PARK"]["id"], str(park_ready.attempt_id))
+        self.assertEqual(selected["VET"]["id"], str(vet_collected.attempt_id))
+        self.assertEqual(selected["RESTAURANT"]["id"], str(restaurant_advanced.attempt_id))
+
+        map_response = client.get(f"/api/venues{query}")
+        self.assertEqual(map_response.status_code, 200)
+        mapped = {item["id"]: item["check_in"] for item in map_response.data}
+        for row in (
+            replay_cafe, ready_cafe, park_progress, park_ready, vet_ready,
+            restaurant_progress, restaurant_advanced,
+        ):
+            self.assertEqual(mapped[row.venue_id]["id"], str(row.attempt_id))
+
     def test_quest_surface_cannot_accept_client_authored_completion(self):
         row = self.opportunity(ready=False)
         client = APIClient()

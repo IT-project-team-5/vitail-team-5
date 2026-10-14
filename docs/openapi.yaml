@@ -992,12 +992,19 @@ paths:
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins:
     get:
-      summary: Scoped current-walk progress plus today's earned receipts
+      summary: One authoritative Quest check-in per venue kind
       parameters:
         - {$ref: '#/components/parameters/VenueWalkRequestID'}
       responses:
         '200':
-          description: Server time and ledger daily activity total. Unfinished progress never carries into another walk; earned receipts survive disabled offers until midnight.
+          description: >-
+            Server time and ledger daily activity total, plus at most one Quest
+            item for each of CAFE, RESTAURANT, PARK and VET. A replayable reset
+            attempt is authoritative; otherwise collected, ready and in-progress
+            states are selected in that order with deterministic progress and
+            recency tie-breaking. The Venues map endpoint retains every scoped
+            per-venue attempt. Unfinished progress never carries into another
+            walk; earned receipts survive disabled offers until midnight.
           content:
             application/json:
               schema:
@@ -1007,7 +1014,11 @@ paths:
                   local_date: {type: string, format: date}
                   server_time: {type: string, format: date-time}
                   earned_points_today: {type: integer, minimum: 0}
-                  items: {type: array, items: {$ref: '#/components/schemas/VenueCheckIn'}}
+                  items:
+                    type: array
+                    maxItems: 4
+                    description: At most one authoritative Quest item per venue kind.
+                    items: {$ref: '#/components/schemas/VenueCheckIn'}
         default: {$ref: '#/components/responses/Error'}
   /api/check-ins/walk-context:
     post:

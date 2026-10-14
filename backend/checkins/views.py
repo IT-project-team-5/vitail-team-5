@@ -97,7 +97,7 @@ class CheckInProgressView(APIView):
         return Response({
             "local_date": progress["local_date"], "server_time": progress["server_time"],
             "earned_points_today": progress["earned_points_today"],
-            "items": VenueCheckInSerializer(progress["items"], many=True, context={
+            "items": VenueCheckInSerializer(progress["quest_items"], many=True, context={
                 "request": request,
                 "replayable_checkin_ids": progress["replayable_checkin_ids"],
             }).data,
