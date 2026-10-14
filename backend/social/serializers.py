@@ -21,6 +21,7 @@ class PreferencesSerializer(serializers.Serializer):
     virtual_avatar_key = serializers.ChoiceField(choices=VIRTUAL_AVATAR_KEYS, required=False)
     dog_avatar_breed = serializers.ChoiceField(choices=User.DogAvatarBreed.choices, required=False)
     bandana_color = serializers.ChoiceField(choices=User.BandanaColor.choices, required=False)
+    public_dog_id = serializers.IntegerField(min_value=1, max_value=9_223_372_036_854_775_807, allow_null=True, required=False)
 
 
 class StartSessionSerializer(serializers.Serializer):

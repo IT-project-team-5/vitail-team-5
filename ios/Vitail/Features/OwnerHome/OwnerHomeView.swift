@@ -76,7 +76,7 @@ struct OwnerHomeView: View {
         self.session = session
         self.dogService = dogService
         self.documentService = documentService
-        _friends = StateObject(wrappedValue: FriendsStore(ownerID: user.id, session: session, service: friendsService))
+        _friends = StateObject(wrappedValue: FriendsStore(ownerID: user.id, session: session, service: friendsService, dogService: dogService))
         _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
         _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
         _venueCheckIns = StateObject(wrappedValue: VenuesViewModel(service: venueCheckInService, session: session, ownerID: user.id))
@@ -205,6 +205,9 @@ struct OwnerHomeView: View {
     }
 
     private func configureCallbacks() {
+        friends.onWardrobeChanged = { [weak redemptionViewModel] in
+            await redemptionViewModel?.refresh()
+        }
         walkCoordinator.onSocialWalkChanged = { [weak friends] draft, status in
             friends?.updateWalk(isWalking: status == .walking, requestID: draft?.id, startedAt: draft?.startedAt)
         }

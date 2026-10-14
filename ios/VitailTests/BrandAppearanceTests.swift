@@ -66,6 +66,80 @@ final class BrandAppearanceTests: XCTestCase {
         }
     }
 
+    func testDogClothingOutfitSnapshots() async throws {
+        let fixtures: [(name: String, breed: DogMapBreed, bandana: DogBandanaColor, outfit: DogAvatarOutfit)] = [
+            ("Cap-Stripes-Glasses", .goldenRetriever, .red,
+             .init(hat: .baseballCap, bandanaStyle: .striped, decoration: .roundGlasses)),
+            ("Beanie-Dots-Star", .dachshund, .yellow,
+             .init(hat: .beanie, bandanaStyle: .polkaDot, decoration: .starBadge)),
+            ("Sun-Hat-No-Bandana", .cat, .none,
+             .init(hat: .sunHat, bandanaStyle: .striped, decoration: .starBadge))
+        ]
+        for fixture in fixtures {
+            let profile = appearanceProfile(breed: fixture.breed, bandana: fixture.bandana, outfit: fixture.outfit)
+            XCTAssertEqual(profile.bandanaColor, fixture.bandana)
+            XCTAssertEqual(profile.bandanaColor.guidance, fixture.bandana.guidance)
+            for dark in [false, true] {
+                for largeText in [false, true] {
+                    let mode = dark ? "Dark" : "Light"
+                    let textSize = largeText ? "-Large-Text" : ""
+                    try await snapshot(clothingOutfitGallery(profile)
+                        .environment(\.dynamicTypeSize, largeText ? .accessibility2 : .large),
+                                       name: "Dog-Clothing-\(fixture.name)-\(mode)\(textSize)", dark: dark)
+                }
+            }
+        }
+    }
+
+    private func clothingOutfitGallery(_ profile: SocialProfile) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.medium) {
+            Text("Clothing on the map").font(.title2.bold())
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: AppSpacing.medium) {
+                HStack(spacing: AppSpacing.medium) {
+                    SocialAvatarView(user: profile, size: 104)
+                    VStack(alignment: .leading, spacing: AppSpacing.small) {
+                        Text("Profile card · 104 pt").font(.headline)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(profile.dogAvatarBreed.title).font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                HStack(spacing: AppSpacing.small) {
+                    SocialAvatarView(user: profile, size: 32)
+                    Text("Map pin · 32 pt").font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(AppSpacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+            VStack(alignment: .leading, spacing: AppSpacing.small) {
+                if profile.bandanaColor == .none {
+                    Text("No bandana · no designation").font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("The selected pattern stays hidden while no bandana is chosen.")
+                        .font(.caption).foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    DogBandanaGuidanceView(user: profile)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Clothing changes preserve the bandana color and its message.")
+                        .font(.caption).foregroundStyle(AppColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(AppSpacing.medium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(AppColors.primaryText)
+        .padding(AppSpacing.medium)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.background)
+    }
+
     private func dogAvatarGallery(_ breeds: [DogMapBreed]) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
             Text("Map appearances").font(.title2.bold())
@@ -135,10 +209,11 @@ final class BrandAppearanceTests: XCTestCase {
         .background(AppColors.background)
     }
 
-    private func appearanceProfile(breed: DogMapBreed, bandana: DogBandanaColor) -> SocialProfile {
+    private func appearanceProfile(breed: DogMapBreed, bandana: DogBandanaColor,
+                                   outfit: DogAvatarOutfit = .plain) -> SocialProfile {
         SocialProfile(publicID: "snapshot-\(breed.rawValue)-\(bandana.rawValue)",
                       displayName: "Milo's walker", photoURL: nil, avatarKey: "dog",
-                      dogAvatarBreed: breed, bandanaColor: bandana)
+                      dogAvatarBreed: breed, bandanaColor: bandana, avatarOutfit: outfit)
     }
 
     func testBrandLayoutSnapshots() async throws {

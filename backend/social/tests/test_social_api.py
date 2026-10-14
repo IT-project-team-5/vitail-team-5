@@ -124,7 +124,7 @@ class SocialApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Cache-Control"], "private, no-store")
         self.assertEqual({row["display_name"] for row in response.data}, {"Bob Walker", "Eve Walker"})
-        self.assertTrue(all(set(row) == {"public_id", "display_name", "photo_url", "avatar_key", "dog_avatar_breed", "bandana_color"} for row in response.data))
+        self.assertTrue(all(set(row) == {"public_id", "display_name", "photo_url", "avatar_key", "dog_avatar_breed", "bandana_color", "dog", "avatar_outfit"} for row in response.data))
         self.assertNotIn("private@example.com", str(response.data))
         by_id = self.client.get("/api/social/users", {"q": self.bob.public_id})
         self.assertEqual(by_id.data[0]["public_id"], self.bob.public_id)

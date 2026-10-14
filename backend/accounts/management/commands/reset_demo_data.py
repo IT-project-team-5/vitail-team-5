@@ -164,6 +164,7 @@ class Command(BaseCommand):
         from dogs.models import DogDailyGoal
         from evidence.models import DocumentEntitlement, DocumentSubmission, EvidenceFingerprint
         from quests.models import QuestAward
+        from social.models import AvatarPurchase, AvatarPurchaseRequest, AvatarWardrobe
         from walks.models import LocationSample, NetWalkInterval, WalkSession
 
         User.objects.update(active_walk_session=None)
@@ -180,6 +181,9 @@ class Command(BaseCommand):
         Walk.objects.all().delete()
         Redemption.objects.all().delete()
         Reward.objects.all().delete()
+        AvatarPurchaseRequest.objects.all().delete()
+        AvatarPurchase.objects.all().delete()
+        AvatarWardrobe.objects.all().delete()
         PointEntry.objects.all().delete()
         CafeOrderFeedState.objects.all().delete()
         Dog.objects.all().delete()

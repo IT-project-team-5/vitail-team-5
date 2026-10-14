@@ -9,7 +9,6 @@ struct FriendsView: View {
         List {
             if let overview = store.overview {
                 myProfileSection(overview.me.profile)
-                requestsSection(overview)
                 friendsSection(overview)
                 settingsSection
             } else if store.isRefreshing {
@@ -45,7 +44,20 @@ struct FriendsView: View {
                 NavigationLink {
                     AddFriendsView(store: store)
                 } label: {
-                    Label("Add friends", systemImage: "person.badge.plus")
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 23, weight: .medium))
+                            .frame(width: 42, height: 42)
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                            .padding(3).background(AppColors.background, in: Circle())
+                        if !(store.overview?.incomingRequests.isEmpty ?? true) {
+                            Circle().fill(AppColors.error).frame(width: 8, height: 8)
+                                .offset(x: 4, y: -4)
+                        }
+                    }
+                    .padding(4)
+                    .accessibilityLabel("Add friends\((store.overview?.incomingRequests.isEmpty ?? true) ? "" : ", new friend requests")")
                 }
                 .tint(AppColors.brand)
                 .accessibilityIdentifier("friends-add-button")
@@ -148,7 +160,7 @@ struct FriendsView: View {
             ForEach(overview.friends) { friendship in
                 HStack(spacing: AppSpacing.small) {
                     NavigationLink {
-                        FriendProfileView(user: friendship.user)
+                        FriendProfileView(initialUser: friendship.user, store: store)
                     } label: {
                         SocialProfileRow(user: friendship.user)
                     }
@@ -263,6 +275,7 @@ private struct AddFriendsView: View {
 
     var body: some View {
         List {
+            FriendRequestSections(store: store)
             if normalizedQuery.count >= 2 {
                 Section("Results") {
                     if isDebouncing || store.isSearching {
@@ -305,6 +318,7 @@ private struct AddFriendsView: View {
         .navigationTitle("Add Friends")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: "Name or public ID")
+        .refreshable { await store.refresh() }
         .task { if store.overview == nil { await store.refresh() } }
         .task(id: normalizedQuery) {
             await store.search("")
@@ -391,7 +405,7 @@ struct SocialAvatarView: View {
 
     var body: some View {
         if user.avatarKey == SocialAvatarOption.dog.rawValue {
-            DogMapAvatarView(breed: user.dogAvatarBreed, bandanaColor: user.bandanaColor)
+            DogMapAvatarView(breed: user.dogAvatarBreed, bandanaColor: user.bandanaColor, outfit: user.avatarOutfit)
                 .padding(2)
                 .frame(width: size, height: size)
                 .background(AppColors.brand.opacity(0.10), in: Circle())
@@ -436,11 +450,79 @@ struct DogBandanaGuidanceView: View {
     }
 }
 
-private struct FriendProfileView: View {
+struct PublicDogDetailsView: View {
     let user: SocialProfile
+    var body: some View {
+        Section {
+            if let dog = user.dog {
+                LabeledContent("Name", value: dog.name)
+                LabeledContent("Breed", value: dog.breedName)
+                LabeledContent("Age", value: dog.ageDescription)
+                LabeledContent("Size", value: dog.size.capitalized)
+            } else {
+                Text("This walker hasn't shared a dog profile.")
+                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+            }
+            DogBandanaGuidanceView(user: user)
+            if user.bandanaColor == .none {
+                Text("No bandana · no designation")
+                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
+            }
+        } header: {
+            Text("Dog profile")
+        } footer: {
+            Text("Shared by the owner, not a confirmed list of dogs on this walk. Icon faces are decorative; bandanas are owner-selected handling guidance. Ask before approaching.")
+        }
+        .accessibilityIdentifier("friend-public-dog-details")
+    }
+}
+
+private struct FriendRequestSections: View {
+    @ObservedObject var store: FriendsStore
+    var body: some View {
+        if let overview = store.overview {
+            if !overview.incomingRequests.isEmpty {
+                Section("Friend requests") {
+                    ForEach(overview.incomingRequests) { request in
+                        VStack(alignment: .leading, spacing: AppSpacing.small) {
+                            SocialProfileRow(user: request.user)
+                            HStack {
+                                Button("Accept") { Task { await store.respondToRequest(request, accept: true) } }
+                                    .buttonStyle(.borderedProminent).tint(AppColors.brand)
+                                Button("Decline", role: .destructive) {
+                                    Task { await store.respondToRequest(request, accept: false) }
+                                }.buttonStyle(.bordered)
+                            }.disabled(store.isWorking)
+                        }.padding(.vertical, 4)
+                    }
+                }
+            }
+            if !overview.outgoingRequests.isEmpty {
+                Section("Sent requests") {
+                    ForEach(overview.outgoingRequests) { request in
+                        HStack {
+                            SocialProfileRow(user: request.user)
+                            Spacer()
+                            Button("Cancel") { Task { await store.removeFriend(request.user) } }
+                                .disabled(store.isWorking)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct FriendProfileView: View {
+    let initialUser: SocialProfile
+    @ObservedObject var store: FriendsStore
+    private var user: SocialProfile? {
+        store.overview?.friends.first { $0.user.id == initialUser.id }?.user
+    }
 
     var body: some View {
         List {
+            if let user {
             Section {
                 HStack(spacing: AppSpacing.medium) {
                     SocialAvatarView(user: user, size: 72)
@@ -461,6 +543,11 @@ private struct FriendProfileView: View {
             Section("Public ID") {
                 Text(user.publicID).font(.footnote.monospaced()).textSelection(.enabled)
             }
+            PublicDogDetailsView(user: user)
+            } else {
+                ContentUnavailableView("Friend unavailable", systemImage: "person.2.slash",
+                                       description: Text("This profile is no longer in your friends list."))
+            }
         }
         .scrollContentBackground(.hidden)
         .background(AppColors.background)
@@ -475,6 +562,9 @@ private struct MapAppearanceEditor: View {
     @State private var avatarKey: String
     @State private var breed: DogMapBreed
     @State private var bandanaColor: DogBandanaColor
+    @State private var publicDogID: Int?
+    @StateObject private var shop: AvatarShopStore
+    private let initialPublicDogID: Int?
     @State private var isSaving = false
     @State private var lastAttempt: AppearanceDraft?
 
@@ -482,17 +572,21 @@ private struct MapAppearanceEditor: View {
         let avatarKey: String
         let breed: DogMapBreed
         let bandanaColor: DogBandanaColor
+        let publicDogID: Int?
     }
 
     init(store: FriendsStore) {
         self.store = store
+        initialPublicDogID = store.publicDogSelection.dogID
         _avatarKey = State(initialValue: store.avatarKey)
         _breed = State(initialValue: store.dogAvatarBreed)
         _bandanaColor = State(initialValue: store.bandanaColor)
+        _publicDogID = State(initialValue: store.publicDogSelection.dogID)
+        _shop = StateObject(wrappedValue: store.makeAvatarShopStore())
     }
 
     private var draft: AppearanceDraft {
-        AppearanceDraft(avatarKey: avatarKey, breed: breed, bandanaColor: bandanaColor)
+        AppearanceDraft(avatarKey: avatarKey, breed: breed, bandanaColor: bandanaColor, publicDogID: publicDogID)
     }
 
     private var preview: SocialProfile? {
@@ -500,7 +594,10 @@ private struct MapAppearanceEditor: View {
         return SocialProfile(
             publicID: me.publicID, displayName: me.displayName,
             photoURL: me.photoURL, avatarKey: avatarKey,
-            dogAvatarBreed: breed, bandanaColor: bandanaColor
+            dogAvatarBreed: breed, bandanaColor: bandanaColor,
+            dog: store.publicDogOptions.first { $0.id == publicDogID }.map(PublicDogProfile.init)
+                ?? (publicDogID == me.publicDogID ? me.dog : nil),
+            avatarOutfit: shop.snapshot?.outfit ?? me.avatarOutfit
         )
     }
 
@@ -530,6 +627,46 @@ private struct MapAppearanceEditor: View {
                     }
                 }
                 .accessibilityIdentifier("friends-avatar-kind")
+            }
+            Section {
+                if store.isLoadingPublicDogs { ProgressView("Loading your dogs…") }
+                Picker("Public dog", selection: $publicDogID) {
+                    Text("Do not share a dog profile").tag(Int?.none)
+                    ForEach(store.publicDogOptions) { dog in
+                        Text("\(dog.name) · \(dog.breed.name)").tag(Optional(dog.id))
+                    }
+                    if let id = publicDogID, !store.publicDogOptions.contains(where: { $0.id == id }) {
+                        Text(store.overview?.me.dog?.name ?? "Previously selected dog").tag(Optional(id))
+                    }
+                }
+                .disabled(store.isLoadingPublicDogs || store.publicDogLoadError != nil)
+                .accessibilityIdentifier("friends-public-dog-picker")
+                if let error = store.publicDogLoadError {
+                    Text(error).foregroundStyle(AppColors.error)
+                    Button("Reload dogs") { Task { await store.loadPublicDogs() } }
+                }
+                if let dog = preview?.dog {
+                    LabeledContent("Name", value: dog.name)
+                    LabeledContent("Breed", value: dog.breedName)
+                    LabeledContent("Age", value: dog.ageDescription)
+                    LabeledContent("Size", value: dog.size.capitalized)
+                }
+            } header: {
+                Text("Choose a public dog profile")
+            } footer: {
+                Text("Optional. Saving shares only this dog's name, breed, age and size in your social profile, including search and map details. It does not publish your other dogs, exact birthday, chip or documents, or confirm this dog is on the current walk. Choose no dog to hide these details.")
+            }
+            if let preview {
+                Section {
+                    NavigationLink {
+                        MapClothingShopView(store: shop, profile: preview)
+                    } label: {
+                        Label("Clothing shop", systemImage: "cart")
+                    }
+                    .accessibilityIdentifier("friends-clothing-shop-link")
+                } footer: {
+                    Text("Buy outfits with real account pt. Purchases and worn clothing sync across your devices and other walkers; outfit changes save separately from the profile above.")
+                }
             }
             if avatarKey == SocialAvatarOption.dog.rawValue {
                 Section("Choose a face") {
@@ -613,6 +750,7 @@ private struct MapAppearanceEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isSaving)
         .interactiveDismissDisabled(isSaving)
+        .task { await store.loadPublicDogs() }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
@@ -637,7 +775,9 @@ private struct MapAppearanceEditor: View {
             await store.updateAppearance(
                 avatarKey: avatarKey,
                 dogAvatarBreed: breed,
-                bandanaColor: bandanaColor
+                bandanaColor: bandanaColor,
+                publicDogSelection: publicDogID == initialPublicDogID ? nil
+                    : publicDogID.map { .selected($0) } ?? .hidden
             )
         }
         isSaving = false

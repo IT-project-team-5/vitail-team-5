@@ -44,6 +44,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     virtual_avatar_key = models.CharField(max_length=80, blank=True)
     dog_avatar_breed = models.CharField(max_length=20, choices=DogAvatarBreed.choices, default=DogAvatarBreed.GOLDEN_RETRIEVER)
     bandana_color = models.CharField(max_length=10, choices=BandanaColor.choices, default=BandanaColor.NONE)
+    public_dog = models.ForeignKey("dogs.Dog", null=True, blank=True, default=None, on_delete=models.SET_NULL, related_name="public_profiles")
     location_visibility = models.CharField(max_length=10, choices=[("OFF", "Off"), ("FRIENDS", "Friends")], default="OFF")
     net_matching_enabled = models.BooleanField(default=False)
     leaderboard_visible = models.BooleanField(default=False)

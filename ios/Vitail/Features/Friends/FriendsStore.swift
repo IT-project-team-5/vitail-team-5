@@ -17,8 +17,13 @@ final class FriendsStore: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var preferenceSaveError: String?
     @Published private(set) var notice: String?
+    @Published private(set) var publicDogOptions: [Dog] = []
+    @Published private(set) var isLoadingPublicDogs = false
+    @Published private(set) var publicDogLoadError: String?
+    var onWardrobeChanged: (@MainActor () async -> Void)?
 
     private let service: any FriendsServing
+    private let dogService: any DogServicing
     private let now: () -> Date
     private weak var session: SessionStore?
     private var sessionSubscription: AnyCancellable?
@@ -46,10 +51,11 @@ final class FriendsStore: ObservableObject {
     private var syncTask: Task<Void, Never>?
 
     init(ownerID: Int, session: SessionStore? = nil, service: any FriendsServing = FriendsService(),
-         now: @escaping () -> Date = Date.init) {
+         now: @escaping () -> Date = Date.init, dogService: any DogServicing = DogService()) {
         self.ownerID = ownerID
         self.session = session
         self.service = service
+        self.dogService = dogService
         self.now = now
         sessionSubscription = session?.$state.sink { [weak self] state in
             if case let .signedIn(user) = state, user.id == ownerID, user.role == .owner { return }
@@ -64,6 +70,32 @@ final class FriendsStore: ObservableObject {
     var avatarKey: String { preferences?.avatarKey ?? "" }
     var dogAvatarBreed: DogMapBreed { preferences?.dogAvatarBreed ?? .goldenRetriever }
     var bandanaColor: DogBandanaColor { preferences?.bandanaColor ?? .none }
+    var publicDogSelection: PublicDogSelection {
+        failedPreferenceUpdate?.publicDogSelection ?? overview?.me.publicDogID.map { .selected($0) } ?? .hidden
+    }
+    func makeAvatarShopStore() -> AvatarShopStore {
+        AvatarShopStore(ownerID: ownerID, session: session, onOutfitChanged: { [weak self] in
+            guard let self, self.enabled, self.isCurrentOwner else { return }
+            await self.refresh()
+            await self.onWardrobeChanged?()
+        })
+    }
+    func loadPublicDogs() async {
+        guard enabled, isCurrentOwner, !isLoadingPublicDogs else { return }
+        let lifetime = generation
+        isLoadingPublicDogs = true
+        publicDogLoadError = nil
+        do {
+            let dogs = try await dogService.getDogs()
+            guard valid(lifetime) else { return }
+            publicDogOptions = dogs
+        } catch {
+            guard valid(lifetime) else { return }
+            publicDogOptions = []
+            publicDogLoadError = error.localizedDescription
+        }
+        if valid(lifetime) { isLoadingPublicDogs = false }
+    }
     var hasPendingPreferenceRetry: Bool { failedPreferenceUpdate != nil }
     var preferenceRetrySummary: String? {
         guard let failedPreferenceUpdate else { return nil }
@@ -213,11 +245,11 @@ final class FriendsStore: ObservableObject {
     }
 
     func updateAppearance(avatarKey: String, dogAvatarBreed: DogMapBreed,
-                          bandanaColor: DogBandanaColor) async {
+                          bandanaColor: DogBandanaColor, publicDogSelection: PublicDogSelection? = nil) async {
         // Never replay cached consent while changing only the map appearance.
         await savePreferences(.init(locationVisibility: nil, netMatchingEnabled: nil,
                                     avatarKey: avatarKey, dogAvatarBreed: dogAvatarBreed,
-                                    bandanaColor: bandanaColor))
+                                    bandanaColor: bandanaColor, publicDogSelection: publicDogSelection))
     }
 
     private func confirms(_ update: SocialPreferenceUpdate, saved: SocialPreferences) -> Bool {
@@ -226,6 +258,7 @@ final class FriendsStore: ObservableObject {
             && (saved.avatarKey ?? "") == update.avatarKey
             && saved.dogAvatarBreed == update.dogAvatarBreed
             && saved.bandanaColor == update.bandanaColor
+            && (update.publicDogSelection == nil || saved.publicDogID == update.publicDogSelection?.dogID)
     }
 
     private func savePreferences(_ update: SocialPreferenceUpdate) async {
@@ -481,6 +514,8 @@ final class FriendsStore: ObservableObject {
         sessionSubscription = nil
         overview = nil; currentSession = nil; mapSnapshot = .empty; invitations = .empty
         searchResults = []; latestLocation = nil; desiredPreferences = nil; failedPreferenceUpdate = nil
+        publicDogOptions = []; isLoadingPublicDogs = false; publicDogLoadError = nil
+        onWardrobeChanged = nil
         preferencesAwaitingConfirmation = false; preferenceSafetyHold = false
         isWorking = false; isRefreshing = false; isSearching = false
         errorMessage = nil; preferenceSaveError = nil; notice = nil

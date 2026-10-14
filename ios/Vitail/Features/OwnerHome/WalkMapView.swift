@@ -437,8 +437,8 @@ struct WalkMapView: View {
             WalkFinishSummaryView(coordinator: coordinator)
         }
         .sheet(item: $selectedPeer) { peer in
-            SocialPeerSheet(peer: peer, store: friends)
-                .presentationDetents([.medium])
+            SocialPeerSheet(initialPeer: peer, store: friends)
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .onAppear {
@@ -858,9 +858,12 @@ private struct LocationStatusCard: View {
 }
 
 private struct SocialPeerSheet: View {
-    let peer: SocialMapPeer
+    let initialPeer: SocialMapPeer
     @ObservedObject var store: FriendsStore
     @Environment(\.dismiss) private var dismiss
+    private var peer: SocialMapPeer {
+        store.peers.first { $0.id == initialPeer.id } ?? initialPeer
+    }
 
     var body: some View {
         NavigationStack {
@@ -892,6 +895,14 @@ private struct SocialPeerSheet: View {
                             .font(.subheadline).foregroundStyle(AppColors.secondaryText)
                     }
                 }
+                PublicDogDetailsView(user: peer.user)
+                Section("Public ID") {
+                    Text(peer.user.publicID).font(.footnote.monospaced()).textSelection(.enabled)
+                    Button {
+                        UIPasteboard.general.string = peer.user.publicID
+                    } label: { Label("Copy public ID", systemImage: "doc.on.doc") }
+                }
+                friendshipSection
                 actionSection
                 if let error = store.errorMessage {
                     Section { Text(error).foregroundStyle(AppColors.error) }
@@ -905,6 +916,27 @@ private struct SocialPeerSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var friendshipSection: some View {
+        Section("Friendship") {
+            if store.overview?.friends.contains(where: { $0.user.id == peer.user.id }) == true {
+                Label("Friend", systemImage: "person.2.fill")
+            } else if let incoming = store.overview?.incomingRequests.first(where: { $0.user.id == peer.user.id }) {
+                Button("Accept friend request") { Task { await store.respondToRequest(incoming, accept: true) } }
+                    .disabled(store.isWorking)
+                Button("Decline request", role: .destructive) { Task { await store.respondToRequest(incoming, accept: false) } }
+                    .disabled(store.isWorking)
+            } else if store.overview?.outgoingRequests.contains(where: { $0.user.id == peer.user.id }) == true {
+                Text("Friend request sent")
+                Button("Cancel friend request", role: .destructive) { Task { await store.removeFriend(peer.user) } }
+                    .disabled(store.isWorking)
+            } else {
+                Button("Add friend") { Task { await store.sendRequest(peer.user) } }
+                    .disabled(store.isWorking || store.overview == nil)
             }
         }
     }
