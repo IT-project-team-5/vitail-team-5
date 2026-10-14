@@ -4,36 +4,41 @@ struct OwnerHomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private enum Page: String, CaseIterable, Identifiable {
-        case account = "Account"
-        case walk = "Walk"
-        case quest = "Quest"
         case redeem = "Redeem"
+        case quest = "Quest"
+        case walk = "Walk"
+        case friends = "Friends"
+        case account = "Account"
 
         var id: Self { self }
 
         var icon: String {
             switch self {
-            case .account:
-                return "person.crop.circle"
-            case .walk:
-                return "figure.walk"
-            case .quest:
-                return "flag"
             case .redeem:
                 return "gift"
+            case .quest:
+                return "flag"
+            case .walk:
+                return "figure.walk"
+            case .friends:
+                return "person.2"
+            case .account:
+                return "person.crop.circle"
             }
         }
 
         var selectedIcon: String {
             switch self {
-            case .account:
-                return "person.crop.circle.fill"
-            case .walk:
-                return "figure.walk"
-            case .quest:
-                return "flag.fill"
             case .redeem:
                 return "gift.fill"
+            case .quest:
+                return "flag.fill"
+            case .walk:
+                return "figure.walk"
+            case .friends:
+                return "person.2.fill"
+            case .account:
+                return "person.crop.circle.fill"
             }
         }
     }
@@ -53,7 +58,6 @@ struct OwnerHomeView: View {
     @State private var isAddingFirstDog = false
     @State private var accountRefreshID = 0
     @State private var documentSelection: DocumentQuestRoute?
-    @State private var isShowingFriends = false
 
     init(
         user: User, session: SessionStore,
@@ -88,6 +92,24 @@ struct OwnerHomeView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $selection) {
+                    RedemptionView(viewModel: redemptionViewModel)
+                        .tag(Page.redeem)
+                    QuestView(store: questStore, checkIns: checkIns, points: redemptionViewModel.balance,
+                              onOpenDocuments: documentService != nil
+                                ? { route in documentSelection = route } : nil,
+                              onResetAll: {
+                                  async let wallet: Void = redemptionViewModel.refresh()
+                                  async let checkInProgress: Void = checkIns.resetForTesting()
+                                  async let venues: Void = walkCoordinator.venueCheckIns.resetForTesting()
+                                  _ = await (wallet, checkInProgress, venues)
+                              })
+                        .tag(Page.quest)
+                    WalkMapView(coordinator: walkCoordinator,
+                                isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog,
+                                checkIns: checkIns, friends: friends)
+                        .tag(Page.walk)
+                    FriendsView(store: friends)
+                        .tag(Page.friends)
                     OwnerProfileView(user: user, session: session, dogService: dogService,
                                      documentService: documentService ?? DocumentService(), onDocumentsChanged: {
                                          async let quests: Void = questStore.documentsDidChange()
@@ -95,23 +117,9 @@ struct OwnerHomeView: View {
                                          _ = await (quests, wallet)
                                      }, onGoalsChanged: {
                                          await questStore.walksDidChange()
-                                     }, onOpenFriends: { isShowingFriends = true })
+                                     })
                         .id(accountRefreshID)
                         .tag(Page.account)
-                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns, friends: friends)
-                    .tag(Page.walk)
-                    QuestView(store: questStore, checkIns: checkIns, points: redemptionViewModel.balance,
-                              onOpenDocuments: documentService != nil
-                                ? { route in documentSelection = route } : nil,
-                              onResetAll: {
-                                  async let wallet: Void = redemptionViewModel.refresh()
-                                  async let checkInProgress: Void = checkIns.refresh()
-                                  async let venues: Void = walkCoordinator.venueCheckIns.load()
-                                  _ = await (wallet, checkInProgress, venues)
-                              })
-                        .tag(Page.quest)
-                    RedemptionView(viewModel: redemptionViewModel)
-                    .tag(Page.redeem)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -120,9 +128,6 @@ struct OwnerHomeView: View {
             .background(AppColors.background)
             .navigationTitle("Vitail")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $isShowingFriends) {
-                FriendsView(store: friends)
-            }
             .sheet(isPresented: $isAddingFirstDog, onDismiss: {
                 accountRefreshID += 1
                 Task {

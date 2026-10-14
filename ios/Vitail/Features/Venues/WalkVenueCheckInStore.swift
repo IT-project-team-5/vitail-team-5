@@ -221,6 +221,48 @@ final class WalkVenueCheckInStore: ObservableObject {
         }
     }
 
+    /// Reconciles local map state after the DEBUG quest reset has deleted the
+    /// server's venue attempts. Ordinary loads deliberately preserve omitted
+    /// same-walk receipts because a stale GET must not erase newer progress.
+    func resetForTesting() async {
+        guard isEnabled else { return }
+        generation += 1
+        let revision = generation
+        queue?.cancel()
+        queue = nil
+
+        venues = []
+        sessions = [:]
+        confirmedContext = nil
+        contextEstablished = false
+        lastSequence = nil
+        lastReportedAt = [:]
+        insideVenueIDs = []
+        latestLocation = nil
+        locationIsInterrupted = false
+        needsPause = []
+        isLoading = false
+        errorMessage = nil
+
+        var contextError: String?
+        if let context = currentContext {
+            do {
+                try await service.updateContext(context)
+                guard valid(revision), currentContext == context else { return }
+                confirmedContext = context
+                contextEstablished = true
+                if context.state == "FINISHED" { onTerminalConfirmed?() }
+            } catch {
+                if valid(revision) {
+                    contextError = "Venue recording could not be reset. Retry when online."
+                }
+            }
+        }
+
+        await refresh(revision: revision)
+        if valid(revision), let contextError { errorMessage = contextError }
+    }
+
     /// Finish's immutable UUID is preserved while a timeout/relaunch retries the
     /// same settlement. GPS work queued before Finish completes first.
     func prepareForSettlement(request: WalkRequest) async -> Bool {
@@ -336,7 +378,7 @@ final class WalkVenueCheckInStore: ObservableObject {
     private func refresh(revision: Int) async {
         guard valid(revision), !isLoading else { return }
         isLoading = true
-        defer { isLoading = false }
+        defer { if revision == generation { isLoading = false } }
         do {
             let result = try await service.fetchVenues(walkRequestID: walkRequestID)
             guard valid(revision) else { return }

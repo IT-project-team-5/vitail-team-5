@@ -325,6 +325,47 @@ final class WalkVenueCheckInTests: XCTestCase {
         XCTAssertNotEqual(store.presentation(for: store.venues[0]).state, .collected)
     }
 
+    func testTestResetDropsServerOmittedSessionAndRestartsTheSameWalk() async throws {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        let walkID = UUID()
+        store.updateWalk(id: walkID, startedAt: clock, status: .walking)
+        await store.load()
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        let staleSessionID = try XCTUnwrap(store.sessions[1]?.id)
+        let startsBeforeReset = await service.starts
+        XCTAssertEqual(startsBeforeReset, 1)
+
+        await service.simulateTestReset()
+        await store.load()
+        XCTAssertEqual(store.sessions[1]?.id, staleSessionID, "Ordinary polling must retain a receipt omitted by a stale GET")
+
+        let contextsBeforeReset = await service.contexts.count
+        await store.resetForTesting()
+        XCTAssertEqual(store.walkRequestID, walkID)
+        XCTAssertTrue(store.isWalking)
+        XCTAssertNil(store.latestLocation)
+        XCTAssertTrue(store.sessions.isEmpty)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .outside)
+        let contextsAfterReset = await service.contexts
+        XCTAssertEqual(contextsAfterReset.count, contextsBeforeReset + 1)
+        XCTAssertEqual(contextsAfterReset.last?.walkRequestID, walkID)
+        XCTAssertEqual(contextsAfterReset.last?.state, "RECORDING")
+
+        clock = clock.addingTimeInterval(20)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        let replacementSessionID = try XCTUnwrap(store.sessions[1]?.id)
+        let startsAfterReset = await service.starts
+        let reportedCheckInIDs = await service.reportedCheckInIDs
+        XCTAssertNotEqual(replacementSessionID, staleSessionID)
+        XCTAssertEqual(startsAfterReset, 2)
+        XCTAssertTrue(reportedCheckInIDs.isEmpty,
+                      "Fresh GPS after reset must start a new attempt instead of reporting the deleted ID")
+    }
+
     func testInRadiusVenueActivityAllowsTenMinuteStationaryWalk() {
         var clock = origin
         let tracker = WalkSessionTracker(now: { clock })
@@ -426,6 +467,8 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
     private(set) var contexts: [VenueWalkContext] = []
     private(set) var locations: [WalkVenueLocationRequest] = []
     private(set) var pauses = 0
+    private(set) var starts = 0
+    private(set) var reportedCheckInIDs: [UUID] = []
     private var seconds = 0
     private var session: VenueCheckInSession?
     private var pauseFailures = 0
@@ -440,12 +483,19 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
     private var startResponseFails = false
     private var hiddenSession = false
     private var collected = false
-    private let id = UUID(uuidString: "00000000-0000-0000-0000-000000000100")!
+    private var id = UUID(uuidString: "00000000-0000-0000-0000-000000000100")!
     func setVerifiedSeconds(_ value: Int) { seconds = value }
     func setPauseFailures(_ value: Int) { pauseFailures = value }
     func setFinishFailure(_ value: Bool) { finishFails = value }
     func setContextPauseFailure(_ value: Bool) { contextPauseFails = value }
     func setHiddenSession(_ value: Bool) { hiddenSession = value }
+    func simulateTestReset() {
+        session = nil
+        seconds = 0
+        collected = false
+        hiddenSession = false
+        id = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
+    }
     func failNextStartResponse() { startResponseFails = true }
     func setCollected(_ value: Bool) { collected = value }
     func holdStart() { holdingStart = true }
@@ -474,6 +524,7 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
         if context.state == "PAUSED", contextPauseFails { throw APIError.network("Pause context interrupted") }
     }
     func start(venueID: Int, request: WalkVenueLocationRequest) async throws -> VenueCheckInSession {
+        starts += 1
         let response = result(request)
         if holdingStart {
             await withCheckedContinuation { continuation in
@@ -485,6 +536,7 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
         return response
     }
     func report(checkInID: UUID, request: WalkVenueLocationRequest) async throws -> VenueCheckInSession {
+        reportedCheckInIDs.append(checkInID)
         let response = result(request)
         if holdingReport {
             await withCheckedContinuation { continuation in

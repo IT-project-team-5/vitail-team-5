@@ -67,7 +67,7 @@ struct CheckInProgressCard: View {
                     ProgressView(value: item.progressRatio).tint(AppColors.brand)
                     Text("\(item.verifiedSeconds / 60)m \(item.verifiedSeconds % 60)s completed")
                         .font(.subheadline).foregroundStyle(AppColors.secondaryText)
-                    let availablePoints = min(item.rewardPoints, max(0, CheckInProgressSnapshot.dailyLimit - store.earnedPointsToday))
+                    let availablePoints = item.availablePoints(earnedToday: store.earnedPointsToday)
                     if item.status != .collected {
                         Text("\(availablePoints) points").font(.headline)
                         Text("Walking and check-in rewards share a 72-point daily limit.")

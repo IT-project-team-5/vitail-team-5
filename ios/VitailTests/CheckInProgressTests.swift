@@ -1,3 +1,5 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Vitail
 
@@ -168,6 +170,26 @@ final class CheckInProgressTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
     }
 
+    func testSuccessfulTestResetReplacesConfirmedReceiptWithSameIDReplay() async {
+        let service = ResetReplayFixture()
+        let store = CheckInProgressStore(ownerID: 1, service: service)
+        await store.refresh()
+        XCTAssertEqual(store.collectedTodayItems.map(\.id), ["same-attempt"])
+
+        await service.restartSameVenue()
+        await store.refresh()
+        XCTAssertEqual(store.collectedTodayItems.map(\.id), ["same-attempt"],
+                       "Ordinary refreshes must retain stale-response protection.")
+        XCTAssertTrue(store.activeItems.isEmpty)
+
+        await store.resetForTesting()
+        XCTAssertTrue(store.collectedTodayItems.isEmpty)
+        XCTAssertEqual(store.activeItems.map(\.id), ["same-attempt"])
+        XCTAssertEqual(store.activeItems.first?.status, .inProgress)
+        XCTAssertTrue(store.activeItems.first?.isReplayable == true)
+        XCTAssertEqual(store.earnedPointsToday, 72, "The test reset must not lower the wallet's earned total.")
+    }
+
     func testFourVenueOpportunitiesRemainVisibleBelowCapAndHideAtCap() async {
         let service = VenueBudgetFixture(points: 71)
         let store = CheckInProgressStore(ownerID: 1, service: service)
@@ -179,6 +201,79 @@ final class CheckInProgressTests: XCTestCase {
         await store.collect(id: "venue-1")
         let calls = await service.claims
         XCTAssertEqual(calls, 0)
+    }
+
+    func testResetReplayRemainsVisibleAtCapWithoutUnlockingOrdinaryVenues() async throws {
+        let service = VenueBudgetFixture(points: 72, replayableIndex: 2)
+        let store = CheckInProgressStore(ownerID: 1, service: service)
+
+        await store.refresh()
+
+        let replay = try XCTUnwrap(store.activeItems.first)
+        XCTAssertEqual(store.activeItems.map(\.id), ["venue-2"])
+        XCTAssertEqual(store.visibleItems.map(\.id), ["venue-2"])
+        XCTAssertTrue(replay.isReplayable)
+        XCTAssertEqual(replay.status, .inProgress)
+        XCTAssertNotNil(replay.walkRequestID)
+        XCTAssertEqual(replay.availablePoints(earnedToday: store.earnedPointsToday), 12)
+        XCTAssertEqual(serviceItem(isReplayable: false).availablePoints(earnedToday: 72), 0)
+
+        // A Walk-linked replay remains progress-only in Quest. It cannot use
+        // the legacy direct-collect endpoint and must still finish the Walk.
+        await store.collect(id: replay.id)
+        let claims = await service.claims
+        XCTAssertEqual(claims, 0)
+
+        let renderer = ImageRenderer(content:
+            CheckInProgressCard(store: store, checkInID: replay.id)
+                .padding()
+                .frame(width: 393)
+                .background(AppColors.background)
+        )
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.uiImage)
+        XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertGreaterThan(image.size.height, 0)
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Quest replayable venue at daily cap"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testReplayableSignalDecodesFailClosedAndRequiresAWalk() throws {
+        let json = """
+        {
+          "items": [{
+            "id": "replay", "venue_id": 7, "venue_name": "Replay Vet", "photo": null,
+            "required_seconds": 180, "verified_seconds": 60, "status": "IN_PROGRESS",
+            "updated_at": "2026-09-25T13:59:00Z", "reward_points": 12,
+            "walk_request_id": "550e8400-e29b-41d4-a716-446655440000", "is_replayable": true
+          }, {
+            "id": "ordinary", "venue_id": 8, "venue_name": "Ordinary Park", "photo": null,
+            "required_seconds": 300, "verified_seconds": 60, "status": "IN_PROGRESS",
+            "updated_at": "2026-09-25T13:59:00Z", "reward_points": 12,
+            "walk_request_id": "550e8400-e29b-41d4-a716-446655440001"
+          }],
+          "local_date": "2026-09-25", "earned_points_today": 72,
+          "server_time": "2026-09-25T13:59:00Z"
+        }
+        """
+        let snapshot = try JSONDecoder().decode(CheckInProgressSnapshot.self, from: Data(json.utf8))
+        XCTAssertTrue(snapshot.isValid)
+        XCTAssertTrue(snapshot.items[0].isReplayable)
+        XCTAssertFalse(snapshot.items[1].isReplayable, "Missing server signals must stay capped.")
+
+        let invalid = serviceItem(isReplayable: true, walkRequestID: nil)
+        XCTAssertFalse(invalid.isValid, "A standalone row cannot claim reset-replay authority.")
+    }
+
+    private func serviceItem(isReplayable: Bool, walkRequestID: UUID? = UUID()) -> VenueCheckInProgress {
+        VenueCheckInProgress(
+            id: "policy", venueID: 99, venueName: "Policy venue", photo: nil,
+            requiredSeconds: 600, verifiedSeconds: 120, status: .inProgress,
+            updatedAt: Date(), rewardPoints: 12, walkRequestID: walkRequestID,
+            isReplayable: isReplayable
+        )
     }
 
     func testPartialFinalRewardHidesRemainingVenuesAndKeepsCollectedAtBottom() async {
@@ -351,16 +446,25 @@ private actor VenueBudgetFixture: CheckInProgressServing {
     private var serverTime = ISO8601DateFormatter().date(from: "2026-09-25T13:59:00Z")!
     private var points: Int
     private let count: Int
+    private let replayableIndex: Int?
     private(set) var claims = 0
-    init(points: Int, count: Int = 4) { self.points = points; self.count = count }
+    init(points: Int, count: Int = 4, replayableIndex: Int? = nil) {
+        self.points = points
+        self.count = count
+        self.replayableIndex = replayableIndex
+    }
     func setPoints(_ value: Int) { points = value }
     func nextDay() { serverTime = serverTime.addingTimeInterval(120); points = 0 }
     func previousDay() { serverTime = serverTime.addingTimeInterval(-86_400); points = 0 }
     func item(_ index: Int, collected: Bool = false) -> VenueCheckInProgress {
-        VenueCheckInProgress(id: "venue-\(index)", venueID: index, venueName: "Venue \(index)", photo: nil,
-                             requiredSeconds: 600, verifiedSeconds: 600,
-                             status: collected ? .collected : .ready, updatedAt: serverTime, rewardPoints: 12,
-                             collectedAt: collected ? serverTime : nil)
+        let replayable = !collected && index == replayableIndex
+        return VenueCheckInProgress(id: "venue-\(index)", venueID: index, venueName: "Venue \(index)", photo: nil,
+                                    requiredSeconds: 600, verifiedSeconds: replayable ? 240 : 600,
+                                    status: collected ? .collected : (replayable ? .inProgress : .ready),
+                                    updatedAt: serverTime, rewardPoints: 12,
+                                    collectedAt: collected ? serverTime : nil,
+                                    walkRequestID: replayable ? UUID(uuidString: "550e8400-e29b-41d4-a716-446655440000") : nil,
+                                    isReplayable: replayable)
     }
     func fetchProgress() async throws -> CheckInProgressSnapshot {
         CheckInProgressSnapshot(items: (1...count).map { item($0) },
@@ -374,5 +478,31 @@ private actor VenueBudgetFixture: CheckInProgressServing {
         return CheckInCollectionReceipt(checkIn: item(1, collected: true), awardedPoints: award,
                                         walletBalance: 10_000 + award, dailyEarnedPoints: points,
                                         localDate: CheckInProgressSnapshot.day(serverTime))
+    }
+}
+
+private actor ResetReplayFixture: CheckInProgressServing {
+    private let serverTime = ISO8601DateFormatter().date(from: "2026-09-25T13:59:00Z")!
+    private var replaying = false
+
+    func restartSameVenue() { replaying = true }
+
+    func fetchProgress() async throws -> CheckInProgressSnapshot {
+        let item = VenueCheckInProgress(
+            id: "same-attempt", venueID: 7, venueName: "Replay Vet", photo: nil,
+            requiredSeconds: 180, verifiedSeconds: replaying ? 60 : 180,
+            status: replaying ? .inProgress : .collected, updatedAt: serverTime,
+            rewardPoints: 12, collectedAt: replaying ? nil : serverTime,
+            walkRequestID: replaying ? UUID(uuidString: "550e8400-e29b-41d4-a716-446655440000") : nil,
+            isReplayable: replaying
+        )
+        return CheckInProgressSnapshot(
+            items: [item], localDate: CheckInProgressSnapshot.day(serverTime),
+            earnedPointsToday: 72, serverTime: serverTime
+        )
+    }
+
+    func collect(id: String, requestID: UUID) async throws -> CheckInCollectionReceipt {
+        throw APIError.invalidResponse
     }
 }
