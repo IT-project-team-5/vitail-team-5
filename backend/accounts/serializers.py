@@ -18,7 +18,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "display_name", "role", "photo")
+        fields = ("id", "email", "display_name", "role", "photo", "onboarding_complete")
         read_only_fields = fields
 
 
@@ -75,7 +75,7 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated_data):
         try:
             with transaction.atomic():
-                return User.objects.create_user(**validated_data, role=User.Role.OWNER)
+                return User.objects.create_user(**validated_data, role=User.Role.OWNER, onboarding_complete=False)
         except IntegrityError as exc:
             # Catch outside atomic so the failed insert is rolled back first.
             duplicate_email = (

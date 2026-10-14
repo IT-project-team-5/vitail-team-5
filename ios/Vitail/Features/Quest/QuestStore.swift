@@ -11,7 +11,6 @@ final class QuestStore: ObservableObject {
     @Published private(set) var isResetAvailable = true
     @Published private(set) var errorMessage: String?
     @Published private(set) var confirmedCollections: [String: QuestTask] = [:]
-    @Published private(set) var confirmedBalance: Int?
     @Published private(set) var lastAwardEvent: QuestAwardEvent?
     var onAward: (@MainActor (QuestAwardReceipt) async -> Void)?
 
@@ -55,6 +54,9 @@ final class QuestStore: ObservableObject {
     var visibleTasks: [QuestTask] {
         allTasks.filter { task in
             guard task.isSupported else { return false }
+            if task.isDailyGoal {
+                return snapshot?.localDate == displayDate && String(task.id.suffix(10)) == displayDate
+            }
             if task.isStreak {
                 // Earned rewards survive a break; cached live progress must await a new-day snapshot.
                 return task.status == .ready || (task.status == .inProgress && snapshot?.localDate == displayDate)
@@ -108,6 +110,7 @@ final class QuestStore: ObservableObject {
         guard isActive, isCurrentOwner, !isRefreshing, !isResetting, collectingTaskID == nil,
               self.task(id: task.id) == task, task.status == .ready, task.isSupported else { return false }
         if task.isStreak { return true }
+        if task.isDailyGoal { return task.rewardPoints == 20 }
         return task.rewardPoints == (task.isBirthday ? 60 : task.documentKind?.points)
     }
 
@@ -186,6 +189,15 @@ final class QuestStore: ObservableObject {
                           result.award.points == selected.rewardPoints else { throw APIError.invalidResponse }
                     receipt = QuestAwardReceipt(kind: result.award.kind, dogID: nil, points: result.award.points,
                                                 balance: result.balance, collectedAt: result.award.awardedAt, created: result.created)
+                } else if selected.isDailyGoal {
+                    guard let dogID = selected.dogID else { throw APIError.invalidResponse }
+                    let date = String(selected.id.suffix(10))
+                    let result = try await service.collectDailyGoal(dogID: dogID, localDate: date)
+                    guard result.award.id > 0, result.award.pointEntryID > 0, result.award.dogID == dogID,
+                          result.award.localDate == date, result.award.kind == "DAILY_GOAL",
+                          result.award.points == 20 else { throw APIError.invalidResponse }
+                    receipt = QuestAwardReceipt(kind: result.award.kind, dogID: dogID, points: result.award.points,
+                        balance: result.balance, collectedAt: result.award.awardedAt, created: result.created)
                 } else if selected.isBirthday {
                     guard let dogID = selected.dogID else { throw APIError.invalidResponse }
                     let result = try await service.collectBirthday(dogID: dogID)
@@ -217,7 +229,6 @@ final class QuestStore: ObservableObject {
                           days >= milestone - 1 else { throw APIError.invalidResponse }
                 }
                 confirmedCollections[taskID] = selected.collected(at: receipt.collectedAt)
-                confirmedBalance = receipt.balance
                 lastAwardEvent = QuestAwardEvent(taskID: taskID, receipt: receipt)
                 await onAward?(receipt)
                 guard accepts(requestGeneration), !Task.isCancelled else { return }
@@ -255,7 +266,6 @@ final class QuestStore: ObservableObject {
                 snapshotRevision += 1
                 snapshot = nil
                 confirmedCollections = [:]
-                confirmedBalance = response.walletBalance
                 lastAwardEvent = nil
                 await loadSnapshot(generation: requestGeneration, revision: snapshotRevision)
                 return response
@@ -278,7 +288,7 @@ final class QuestStore: ObservableObject {
         refreshTask = nil; collectionTask = nil; resetTask = nil
         snapshot = nil; confirmedCollections = [:]
         errorMessage = nil; isRefreshing = false; collectingTaskID = nil; isResetting = false
-        confirmedBalance = nil; lastAwardEvent = nil
+        lastAwardEvent = nil
         receivedAt = nil; serverDate = nil; onAward = nil
         sessionSubscription?.cancel(); sessionSubscription = nil
     }

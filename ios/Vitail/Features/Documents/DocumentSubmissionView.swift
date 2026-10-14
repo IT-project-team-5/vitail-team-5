@@ -16,6 +16,9 @@ struct DocumentSubmissionView: View {
     @StateObject private var review: DocumentReviewModel
     private let onSubmitted: () async -> Void
     private let onChanged: () async -> Void
+    private let service: any DocumentServing
+    @State private var choosingCouncil = false
+    @State private var selectedCouncil: String?
     @State private var method: DocumentEvidenceMethod = .upload
     @State private var eventDate = Date()
     @State private var importingFile = false
@@ -52,6 +55,7 @@ struct DocumentSubmissionView: View {
         kind = initialKind
         self.onSubmitted = onSubmitted
         self.onChanged = onChanged
+        self.service = service
     }
 
     private var currentSubmission: DocumentSubmission? {
@@ -118,6 +122,13 @@ struct DocumentSubmissionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .disabled(model.isSubmitting || model.collectingID != nil || !model.isActive)
         .task { await model.load() }
+        .sheet(isPresented: $choosingCouncil) {
+            CouncilSearchView(service: service) { council in
+                review.councilName = council.name
+                selectedCouncil = council.name
+                choosingCouncil = false
+            }
+        }
         .onChange(of: method) { _, _ in
             if correcting == nil { clearAttachment() }
             validationMessage = nil
@@ -294,7 +305,15 @@ struct DocumentSubmissionView: View {
                     .font(.footnote).foregroundStyle(AppColors.secondaryText)
             }
             if kind == .council {
-                entryField("Council name", text: $review.councilName)
+                Button {
+                    choosingCouncil = true
+                } label: {
+                    Label(selectedCouncil ?? "Select Council by name or postcode", systemImage: "magnifyingglass")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if selectedCouncil == nil, !review.councilName.isEmpty {
+                    Text("Document suggests \(review.councilName). Search and select the Council to confirm.").font(.footnote)
+                }
                 entryField("Animal ID / registration number", text: $review.registrationNumber)
                 Button {
                     expiryChoice = DocumentRegistration.normalizedExpiry(review.expiryText).flatMap(DogBirthday.date) ?? Date()
@@ -415,6 +434,10 @@ struct DocumentSubmissionView: View {
         }
         do {
             guard kind == .vet || (!review.isReading && review.isConfirmed) else { throw DocumentInputError.confirmationRequired }
+            if kind == .council && selectedCouncil != review.councilName {
+                validationMessage = "Search and select the Council named on your registration."
+                return
+            }
             let draft: DocumentDraft
             if kind == .vet {
                 guard let fileData, let filename else { throw DocumentInputError.attachmentRequired }
@@ -449,6 +472,7 @@ struct DocumentSubmissionView: View {
         isEditing = true
         review.registrationNumber = submission.registrationNumber
         review.councilName = submission.councilName ?? ""
+        selectedCouncil = submission.councilName
         review.registryName = submission.registryName ?? ""
         review.dogName = submission.documentDogName ?? ""
         review.expiryText = submission.validTo.map(DocumentRegistration.expiryInputText) ?? ""
@@ -516,6 +540,7 @@ struct DocumentSubmissionView: View {
 
     private func clearAttachment() {
         review.clear()
+        selectedCouncil = nil
         choosingExpiry = false
         attachmentGeneration = UUID()
         fileData = nil
@@ -557,6 +582,58 @@ struct DocumentSubmissionView: View {
     private func clearPreview() {
         if let previewDirectory { try? FileManager.default.removeItem(at: previewDirectory) }
         previewDirectory = nil
+    }
+}
+
+private struct CouncilSearchView: View {
+    let service: any DocumentServing
+    let onSelect: (CouncilOption) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var results: [CouncilOption] = []
+    @State private var loading = false
+    @State private var error: String?
+    @State private var generation = 0
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Text("Choose the Council on your registration. A postcode can match more than one Council.")
+                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                if loading { ProgressView("Searching…") }
+                if let error { Text(error).foregroundStyle(AppColors.error) }
+                ForEach(results) { council in
+                    Button(council.name) { onSelect(council) }
+                        .accessibilityHint("Select this Council")
+                }
+                if !loading && error == nil && results.isEmpty && !query.isEmpty {
+                    Text("No matching Councils. Try the Council name instead. Search covers Victoria.")
+                }
+            }
+            .searchable(text: $query, prompt: "Council name or four-digit postcode")
+            .scrollDismissesKeyboard(.interactively)
+            .scrollContentBackground(.hidden)
+            .background(AppColors.background)
+            .navigationTitle("Select Council")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .task(id: query) {
+                generation += 1
+                let request = generation
+                results = []; error = nil
+                guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { loading = false; return }
+                loading = true
+                defer { if generation == request { loading = false } }
+                do {
+                    try await Task.sleep(for: .milliseconds(250))
+                    let found = try await service.searchCouncils(query)
+                    guard !Task.isCancelled, generation == request else { return }
+                    results = found
+                } catch {
+                    guard !Task.isCancelled, generation == request else { return }
+                    self.error = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

@@ -3,6 +3,43 @@ import XCTest
 
 final class DogModelsTests: XCTestCase {
     @MainActor
+    func testOutOfOrderGoalPreviewsCannotReplaceCurrentPercentage() async {
+        let service = DogGoalTestService()
+        let model = DogGoalViewModel(service: service)
+        await service.holdNextPreview()
+        let old = Task { await model.load(dogID: 97, percentage: 50) }
+        await service.waitForPreview()
+        await model.load(dogID: 97, percentage: 200)
+        await service.releasePreview()
+        await old.value
+        XCTAssertEqual(model.preview?.ownerAdjustment, "2")
+        XCTAssertTrue(model.canSave(percentage: 200))
+        XCTAssertFalse(model.canSave(percentage: 50))
+    }
+
+    @MainActor
+    func testAmbiguousGoalSaveKeepsRequestAcrossRestart() async throws {
+        let dogID = 987654
+        let key = "goal-request:\(AppConfiguration.apiBaseURL?.absoluteString ?? ""):\(dogID)"
+        UserDefaults.standard.removeObject(forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let service = DogGoalTestService()
+        let model = DogGoalViewModel(service: service)
+        await model.load(dogID: dogID, percentage: 50)
+        await service.failNextSave()
+        let first = await model.save(dogID: dogID, percentage: 50)
+        XCTAssertFalse(first)
+        let firstRequest = await service.savedRequest
+        XCTAssertNotNil(firstRequest?.requestID)
+        let resumed = DogGoalViewModel(service: service)
+        await resumed.load(dogID: dogID, percentage: 50)
+        let retried = await resumed.save(dogID: dogID, percentage: 50)
+        XCTAssertTrue(retried)
+        let retryRequest = await service.savedRequest
+        XCTAssertEqual(firstRequest?.requestID, retryRequest?.requestID)
+        XCTAssertNil(UserDefaults.standard.data(forKey: key))
+    }
+    @MainActor
     func testLateListCannotRestoreDeletedDog() async throws {
         let service = DeferredDogService()
         let model = DogViewModel(service: service)
@@ -213,16 +250,16 @@ final class DogModelsTests: XCTestCase {
     }
 
     @MainActor
-    func testTenDogLimitIsPreservedAfterServiceIntegration() async {
+    func testTwoDogLimitIsPreservedAfterServiceIntegration() async {
         let service = DogLimitService()
         let model = DogViewModel(service: service)
         await model.load()
-        XCTAssertEqual(model.dogs.count, 10)
+        XCTAssertEqual(model.dogs.count, 2)
         XCTAssertFalse(model.canAddDog)
         let didSave = await model.save(
             dog: nil,
             request: DogWriteRequest(
-                name: "Eleventh", breedID: 1, ageMonths: 0,
+                name: "Third", breedID: 1, ageMonths: 0,
                 size: .small, isBrachycephalic: false
             )
         )
@@ -239,7 +276,7 @@ private actor DogLimitService: DogServicing {
         defaultSize: .small, isBrachycephalic: false
     )
     func getDogs() async throws -> [Dog] {
-        (1...10).map {
+        (1...2).map {
             Dog(
                 id: $0, name: "Dog \($0)", breed: breed, ageMonths: 0,
                 size: .small, isBrachycephalic: false, createdAt: "2026-09-09T00:00:00Z"
@@ -258,8 +295,20 @@ private actor DogLimitService: DogServicing {
 private actor DogGoalTestService: DogServicing {
     private(set) var savedRequest: DogGoalRequest?
     private var fail = false
+    private var failSave = false
+    private var holdPreview = false
+    private var previewGate: CheckedContinuation<Void, Never>?
+    private var previewStarted: CheckedContinuation<Void, Never>?
+    func failNextSave() { failSave = true }
+    func holdNextPreview() { holdPreview = true }
+    func waitForPreview() async { if previewGate != nil { return }; await withCheckedContinuation { previewStarted = $0 } }
+    func releasePreview() { previewGate?.resume(); previewGate = nil }
     func failNextPreview() { fail = true }
     func previewGoal(dogID: Int, percentage: Int) async throws -> DogGoalPreview {
+        if holdPreview {
+            holdPreview = false
+            await withCheckedContinuation { previewGate = $0; previewStarted?.resume(); previewStarted = nil }
+        }
         if fail { throw APIError.invalidResponse }
         return DogGoalPreview(eligible: true, missingInputs: [], reason: nil,
             effectiveFrom: "2026-10-06", ownerAdjustment: NSDecimalNumber(value: percentage).dividing(by: 100).stringValue,
@@ -267,6 +316,7 @@ private actor DogGoalTestService: DogServicing {
     }
     func saveGoal(dogID: Int, request: DogGoalRequest) async throws -> DogGoalPreview {
         savedRequest = request
+        if failSave { failSave = false; throw APIError.network("Response interrupted") }
         return try await previewGoal(dogID: dogID, percentage: 50)
     }
     func getDogs() async throws -> [Dog] { [] }

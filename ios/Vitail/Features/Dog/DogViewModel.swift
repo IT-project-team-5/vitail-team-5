@@ -3,7 +3,8 @@ import Foundation
 
 @MainActor
 final class DogViewModel: ObservableObject {
-    static let maximumDogs = 10
+    static let maximumDogs = 2
+    var draftKey: String { "dog-setup:\(AppConfiguration.apiBaseURL?.absoluteString ?? ""):\(ownerID ?? 0)" }
 
     @Published private(set) var lastSavedDog: Dog?
     @Published private(set) var dogs: [Dog] = []
@@ -11,8 +12,10 @@ final class DogViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isSaving = false
     @Published var errorMessage: String?
+    private(set) var saveMayHaveCommitted = false
 
     private let service: any DogServicing
+    var goalService: any DogServicing { service }
     private weak var session: SessionStore?
     private let requiresSession: Bool
     private let ownerID: Int?
@@ -61,8 +64,9 @@ final class DogViewModel: ObservableObject {
         loadRevision += 1
         isLoading = false
         lastSavedDog = nil
-        guard dog != nil || canAddDog else {
-            errorMessage = "An account can have at most 10 dogs."
+        saveMayHaveCommitted = false
+        guard dog != nil || canAddDog || request.requestID != nil else {
+            errorMessage = "An account can have at most two dogs."
             return false
         }
         isSaving = true
@@ -80,7 +84,8 @@ final class DogViewModel: ObservableObject {
             } else {
                 savedDog = try await service.createDog(request)
                 guard accepts(sessionRevision) else { return false }
-                dogs.append(savedDog)
+                if let index = dogs.firstIndex(where: { $0.id == savedDog.id }) { dogs[index] = savedDog }
+                else { dogs.append(savedDog) }
             }
             lastSavedDog = savedDog
             if let photoData {
@@ -92,6 +97,10 @@ final class DogViewModel: ObservableObject {
             return true
         } catch {
             guard accepts(sessionRevision) else { return false }
+            saveMayHaveCommitted = true
+            if case let APIError.http(status, _) = error, [400, 403, 404, 409, 422].contains(status) {
+                saveMayHaveCommitted = false
+            }
             errorMessage = lastSavedDog == nil ? error.localizedDescription
                 : "Dog details saved. The photo could not upload: \(error.localizedDescription)"
             return false
@@ -130,14 +139,19 @@ final class DogGoalViewModel: ObservableObject {
     private let service: any DogServicing
     private var generation = 0
     private var previewPercentage: Int?
+    @Published private(set) var pendingSave: DogGoalRequest?
 
     init(service: any DogServicing = DogService()) { self.service = service }
 
     func canSave(percentage: Int) -> Bool {
-        preview?.eligible == true && previewPercentage == percentage && !isLoading && !isSaving && !saved
+        (pendingSave != nil || (preview?.eligible == true && previewPercentage == percentage)) && !isLoading && !isSaving && !saved
     }
 
     func load(dogID: Int, percentage: Int) async {
+        let key = "goal-request:\(AppConfiguration.apiBaseURL?.absoluteString ?? ""):\(dogID)"
+        if pendingSave == nil, let data = UserDefaults.standard.data(forKey: key) {
+            pendingSave = try? JSONDecoder().decode(DogGoalRequest.self, from: data)
+        }
         generation += 1
         let request = generation
         isLoading = true
@@ -158,16 +172,32 @@ final class DogGoalViewModel: ObservableObject {
     }
 
     func save(dogID: Int, percentage: Int) async -> Bool {
-        guard canSave(percentage: percentage), let preview else { return false }
+        guard canSave(percentage: percentage) else { return false }
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
         do {
+            let key = "goal-request:\(AppConfiguration.apiBaseURL?.absoluteString ?? ""):\(dogID)"
+            if pendingSave == nil, let data = UserDefaults.standard.data(forKey: key) {
+                pendingSave = try? JSONDecoder().decode(DogGoalRequest.self, from: data)
+            }
+            if pendingSave == nil {
+                guard let preview else { return false }
+                pendingSave = DogGoalRequest(requestID: UUID(), ownerAdjustment: preview.ownerAdjustment, effectiveFrom: preview.effectiveFrom)
+                UserDefaults.standard.set(try JSONEncoder().encode(pendingSave), forKey: key)
+            }
+            guard let pendingSave else { return false }
             self.preview = try await service.saveGoal(dogID: dogID,
-                request: DogGoalRequest(ownerAdjustment: preview.ownerAdjustment, effectiveFrom: preview.effectiveFrom))
+                request: pendingSave)
+            self.pendingSave = nil
+            UserDefaults.standard.removeObject(forKey: key)
             saved = true
             return true
         } catch {
+            if case let APIError.http(status, _) = error, [400, 403, 404, 409, 422].contains(status) {
+                pendingSave = nil
+                UserDefaults.standard.removeObject(forKey: "goal-request:\(AppConfiguration.apiBaseURL?.absoluteString ?? ""):\(dogID)")
+            }
             errorMessage = error.localizedDescription
             return false
         }

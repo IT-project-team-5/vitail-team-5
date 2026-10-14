@@ -4,6 +4,21 @@ import XCTest
 
 @MainActor
 final class WalletRefreshTests: XCTestCase {
+    func testAwardBalancePublishesEvenWhenCatalogueFails() async {
+        let service = DelayedWalletFixture()
+        let model = RedemptionViewModel(service: service)
+        let load = Task { await model.refresh() }
+        await service.waitForInitialBalance()
+        await service.finishInitialBalance()
+        await load.value
+        XCTAssertEqual(model.balance, 0)
+        await service.awardBirthday()
+        await service.failCatalogue()
+        await model.refresh()
+        XCTAssertEqual(model.balance, 60)
+        XCTAssertNotNil(model.errorMessage)
+    }
+
     func testQuestAwardDuringWalletLoadQueuesAuthoritativeRefresh() async {
         let service = DelayedWalletFixture()
         let model = RedemptionViewModel(service: service)
@@ -43,8 +58,11 @@ final class WalletRefreshTests: XCTestCase {
 }
 
 private actor DelayedWalletFixture: RedemptionServing {
+    func fetchEligibility() async throws -> RedemptionEligibility { .init(eligible: true, incompleteDogs: []) }
     private(set) var balanceRequests = 0
     private var balance = 0
+    private var catalogueFailed = false
+    func failCatalogue() { catalogueFailed = true }
     private var pending: CheckedContinuation<Void, Never>?
     private var started: CheckedContinuation<Void, Never>?
 
@@ -65,7 +83,10 @@ private actor DelayedWalletFixture: RedemptionServing {
     }
     func awardBirthday() { balance = 60 }
     func finishInitialBalance() { pending?.resume(); pending = nil }
-    func fetchRewards() async throws -> [Reward] { [] }
+    func fetchRewards() async throws -> [Reward] {
+        if catalogueFailed { throw APIError.network("Catalogue unavailable") }
+        return []
+    }
     func fetchRedemptions() async throws -> [Redemption] { [] }
     func createRedemption(rewardID: Int, requestID: UUID) async throws -> Redemption { throw APIError.invalidResponse }
     func collectRedemption(id: Int) async throws -> Redemption { throw APIError.invalidResponse }

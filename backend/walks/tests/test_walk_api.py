@@ -6,11 +6,15 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
+from checkins.models import CheckIn, CheckInWalk
 from dogs.models import Breed, Dog
 from rewards.models import PointEntry, Redemption, Reward
+from rewards.services import credit_points
 from walks.models import Walk
 from venues.services import venue_for
 
@@ -277,6 +281,64 @@ class WalkApiTests(APITestCase):
         for suffix in ("", "/"):
             self.assertEqual(public.get(self.url + suffix).status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_walk_history_queries_are_bounded_for_multiple_awarded_walks(self):
+        walks = []
+        for index in range(3):
+            response = self.submit(self.payload(distance_m=200, start_seconds=-7200 - index * 600))
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            walks.append(Walk.objects.get(pk=response.data["id"]))
+
+        venue = venue_for(self.cafe)
+        venue.latitude = -37.8
+        venue.longitude = 144.9
+        venue.checkin_enabled = True
+        venue.is_partner = True
+        venue.save(update_fields=("latitude", "longitude", "checkin_enabled", "is_partner"))
+        for index, walk in enumerate(walks):
+            context = CheckInWalk.objects.create(
+                owner=self.owner, request_id=walk.request_id, started_at=walk.started_at,
+                ended_at=walk.ended_at, state=CheckInWalk.State.FINISHED,
+                walk=walk, settled_at=walk.ended_at,
+            )
+            checkin_entry = credit_points(
+                user=self.owner, amount=12, type=PointEntry.Type.EARN,
+                source_reference=f"history-checkin:{index}",
+                earn_category=PointEntry.EarnCategory.CHECK_IN,
+                earned_on=walk.point_date, rules_version="history-query-test",
+            )
+            CheckIn.objects.create(
+                owner=self.owner, walk_context=context, venue=venue,
+                venue_name_snapshot=venue.name, local_date=walk.point_date,
+                category_slot=venue.kind, required_seconds=1, verified_seconds=1,
+                center_latitude=venue.latitude, center_longitude=venue.longitude,
+                started_at=walk.started_at, ready_at=walk.started_at + timedelta(seconds=1),
+                expires_at=walk.ended_at, point_entry=checkin_entry,
+                collected_at=walk.ended_at, rules_version="history-query-test",
+            )
+            net_entry = credit_points(
+                user=self.owner, amount=2, type=PointEntry.Type.EARN,
+                source_reference=f"history-net:{index}",
+                earn_category=PointEntry.EarnCategory.NET_WALK,
+                earned_on=walk.point_date, rules_version="history-query-test",
+            )
+            walk.net_distance_m = 10
+            walk.net_point_entry = net_entry
+            walk.net_settled_at = walk.ended_at
+            walk.save(update_fields=("net_distance_m", "net_point_entry", "net_settled_at"))
+
+        for index in range(3, 6):
+            response = self.submit(self.payload(distance_m=200, start_seconds=-7200 - index * 600))
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 6)
+        self.assertLessEqual(len(queries), 4)
+        self.assertEqual(sum(len(item["check_in_awards"]) for item in response.data), 3)
+        self.assertEqual(sum(item["net_points_awarded"] for item in response.data), 6)
+
     def test_simulated_samples_and_invalid_times_leave_no_walk_or_points(self):
         original = self.payload(distance_m=20)
         cases = []
@@ -347,6 +409,9 @@ class WalkApiTests(APITestCase):
         self.assert_wallet(0)
 
     def test_earned_walk_points_can_buy_the_cafes_canonical_reward(self):
+        from evidence.tests import register_microchip
+        register_microchip(self.owner, self.dog)
+        register_microchip(self.owner, self.second_dog)
         reward = Reward.objects.create(venue=venue_for(self.cafe), name="Walk coffee", point_cost=8)
         walked = self.submit(self.payload())
         self.assertEqual(walked.status_code, status.HTTP_201_CREATED)

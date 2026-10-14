@@ -171,6 +171,7 @@ class CoreSchemaBackfillMigrationTests(TransactionTestCase):
         public_ids = list(users.values_list("public_id", flat=True))
         self.assertEqual(len(public_ids), len(set(public_ids)))
         for user in users:
+            self.assertTrue(user.onboarding_complete, "Migration must not restart setup for existing accounts.")
             self.assertRegex(user.public_id, r"^[0-9a-f]{32}$")
             self.assertEqual(user.auth_version, 1)
             self.assertEqual(user.location_visibility, "OFF")

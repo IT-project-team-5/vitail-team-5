@@ -97,7 +97,8 @@ Daily-goal rows preserve per-dog inputs/results. Owner recommendations and Admin
 targets share one append-only effective-dated history, and Quest displays the
 seven-day calendar. Social sessions, bounded samples, invitations, verified
 intervals, friendships and blocks support the connected Friends/Net-Walking
-flow. They do not enable daily-goal payouts, Net-Walk wallet points or a
+flow. Daily goals now support explicit 20-point per-dog collection under the
+shared account cap. Social sessions do not enable Net-Walk wallet points or a
 leaderboard. Ordinary completed-walk uploads still carry validated route
 summaries; live social GPS uses its separate short-lived session endpoint.
 
@@ -111,8 +112,8 @@ summaries; live social GPS uses its separate short-lived session endpoint.
   canonical credit. Concurrent or repeated requests cannot credit twice.
 - Check-in collection accepts persisted server-verified qualification, not
   client-reported elapsed time. Walking, daily-goal settlement and check-in
-  services share the daily activity cap; daily-goal payouts and partial check-in
-  rewards remain disabled pending policy.
+  services share the 72-point account activity cap. Daily goals award a full 20
+  points per dog/day; partial goal/check-in awards remain disabled.
 - Net-Walking invitations, session state and together-distance are repeat-safe
   under owner/session locks. `NET_WALK_REWARDS_ENABLED` defaults off; disabled
   sessions never expose an estimate or create a ledger entry.
@@ -199,6 +200,6 @@ photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
 Future work includes physical-device venue/social GPS acceptance, approved
-multi-dog goal earning, Net-Walk earning, OAuth, password reset/account
+owner-journey acceptance, Net-Walk earning, OAuth, password reset/account
 deletion, notifications, sharing, chat and charity. Schema preparation must not
 be presented as completed functionality. See [open decisions](docs/DECISIONS.md).

@@ -13,6 +13,23 @@ final class RedemptionViewModel: ObservableObject {
     @Published private(set) var retryReward: Reward?
     @Published var errorMessage: String?
     @Published private(set) var purchasedReceipt: Redemption?
+    @Published private(set) var eligibility: RedemptionEligibility?
+    @Published private(set) var registrationRewardID: Int?
+    private var eligibilityGeneration = 0
+
+    func refreshEligibility() async {
+        eligibilityGeneration += 1
+        let generation = eligibilityGeneration
+        eligibility = nil
+        do {
+            let result = try await service.fetchEligibility()
+            guard !Task.isCancelled, generation == eligibilityGeneration else { return }
+            eligibility = result
+        } catch {
+            guard !Task.isCancelled, generation == eligibilityGeneration else { return }
+            eligibility = nil; errorMessage = error.localizedDescription
+        }
+    }
 
     private let service: any RedemptionServing
     private var pendingRequestID: UUID?
@@ -26,6 +43,22 @@ final class RedemptionViewModel: ObservableObject {
     var pendingRedemptions: [Redemption] { redemptions.filter { $0.status == .pending } }
     var history: [Redemption] { redemptions.filter { $0.status != .pending } }
     var cafes: [CafeRewardGroup] { CafeRewardGroup.grouped(rewards) }
+
+    // One explanation drives both disabled controls and the purchase handler.
+    func purchaseBlockReason(rewardID: Int) -> String? {
+        guard let eligibility else { return "Unable to confirm microchip registration. Refresh to try again." }
+        guard eligibility.eligible else { return "Complete microchip registration for every dog before redeeming." }
+        guard let reward = rewards.first(where: { $0.id == rewardID }) else {
+            return "This reward is no longer available. Refresh to see current rewards."
+        }
+        guard let balance else { return "Unable to confirm your points. Refresh to try again." }
+        guard balance >= reward.pointCost else { return "You need \(reward.pointCost - balance) more points." }
+        return nil
+    }
+
+    func canPurchase(rewardID: Int) -> Bool {
+        !isLoading && !isMutating && retryRewardID == nil && purchaseBlockReason(rewardID: rewardID) == nil
+    }
 
     func refresh() async {
         guard !isLoading, !isMutating else { refreshRequested = true; return }
@@ -51,28 +84,63 @@ final class RedemptionViewModel: ObservableObject {
     }
 
     private func reload() async throws {
-        // Fetch history first so any expired orders/refunds are reflected in the balance.
-        let orders = try await service.fetchRedemptions()
-        async let wallet = service.fetchBalance()
+        eligibility = nil
+        // /wallet applies expiry/refunds itself. Publish its authoritative balance
+        // independently so a failed catalogue/history read cannot hide an award
+        // or leave a successful purchase showing the pre-purchase balance.
+        async let orders = service.fetchRedemptions()
         async let offers = service.fetchRewards()
-        let (fetchedWallet, fetchedOffers) = try await (wallet, offers)
+        let fetchedWallet = try await service.fetchBalance()
         try Task.checkCancellation()
-        redemptions = orders
         balance = fetchedWallet.balance
+        let (fetchedOrders, fetchedOffers) = try await (orders, offers)
+        try Task.checkCancellation()
+        redemptions = fetchedOrders
         rewards = fetchedOffers
+        eligibilityGeneration += 1
+        let generation = eligibilityGeneration
+        let fetchedEligibility = try await service.fetchEligibility()
+        try Task.checkCancellation()
+        if generation == eligibilityGeneration { eligibility = fetchedEligibility }
     }
 
     func redeem(rewardID: Int) async {
         guard !isMutating, !isLoading,
               retryRewardID == nil || retryRewardID == rewardID else { return }
+        guard purchasedReceipt == nil else { return }
+        let isRetry = pendingRequestID != nil
         let requestID = pendingRequestID ?? UUID()
-        pendingRequestID = requestID
-        if retryRewardID == nil { retryReward = rewards.first { $0.id == rewardID } }
-        retryRewardID = rewardID
         redeemingRewardID = rewardID
         errorMessage = nil
         defer { redeemingRewardID = nil; drainRequestedRefresh() }
         do {
+            // A retry recovers an existing purchase using its original key. The
+            // server still checks all rules if that request never committed.
+            if !isRetry {
+                eligibilityGeneration += 1
+                eligibility = nil
+                let checkedEligibility = try await service.fetchEligibility()
+                try Task.checkCancellation()
+                eligibility = checkedEligibility
+                if !checkedEligibility.eligible {
+                    registrationRewardID = rewardID
+                    errorMessage = purchaseBlockReason(rewardID: rewardID)
+                    return
+                }
+                async let offers = service.fetchRewards()
+                async let wallet = service.fetchBalance()
+                let (currentOffers, currentWallet) = try await (offers, wallet)
+                try Task.checkCancellation()
+                rewards = currentOffers
+                balance = currentWallet.balance
+                if let reason = purchaseBlockReason(rewardID: rewardID) {
+                    errorMessage = reason
+                    return
+                }
+                retryReward = rewards.first { $0.id == rewardID }
+                pendingRequestID = requestID
+                retryRewardID = rewardID
+            }
             let order = try await service.createRedemption(rewardID: rewardID, requestID: requestID)
             try Task.checkCancellation()
             redemptions.removeAll { $0.id == order.id }
@@ -83,10 +151,15 @@ final class RedemptionViewModel: ObservableObject {
             // Open the server-confirmed receipt immediately, even if refreshing
             // the balance or catalogue is slow or fails after a successful order.
             purchasedReceipt = order
+            registrationRewardID = nil
             // Always use the server balance; never subtract twice on an idempotent retry.
             try await reload()
         } catch {
             guard !Task.isCancelled else { return }
+            if case let APIError.http(status, _) = error, status == 403 {
+                registrationRewardID = rewardID
+                await refreshEligibility()
+            }
             if case let APIError.http(status, _) = error,
                [400, 403, 404, 409, 422].contains(status) {
                 pendingRequestID = nil

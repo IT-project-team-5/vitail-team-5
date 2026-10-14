@@ -29,6 +29,24 @@ class IdempotencyConflictError(Exception):
     pass
 
 
+class MicrochipRegistrationRequired(Exception):
+    def __init__(self, dogs):
+        self.dogs = dogs
+        super().__init__("Complete microchip registration for every dog before redeeming. Collecting registration points is optional.")
+
+
+def redemption_eligibility(owner):
+    from dogs.models import Dog
+    from evidence.models import DocumentSubmission
+    incomplete = []
+    for dog in Dog.objects.filter(owner=owner).order_by("pk"):
+        latest = DocumentSubmission.objects.filter(dog=dog, kind="MICROCHIP_REGISTRATION").select_related("entitlement").first()
+        if (not latest or latest.audit_status == "REJECTED" or
+                latest.entitlement.eligibility_status != "ELIGIBLE" or not latest.registration_number):
+            incomplete.append({"id": dog.pk, "name": dog.name})
+    return {"eligible": not incomplete, "incomplete_dogs": incomplete}
+
+
 def _lock_owner(user):
     owner = get_user_model().objects.select_for_update().get(pk=user.pk)
     if owner.role != owner.Role.OWNER:
@@ -121,6 +139,9 @@ def create_redemption(*, owner, reward_id, request_id=None):
             if existing.reward_id != reward_id or (existing.request_fingerprint and existing.request_fingerprint != fingerprint):
                 raise IdempotencyConflictError("This request ID was already used for another reward.")
             return existing
+    eligibility = redemption_eligibility(owner)
+    if not eligibility["eligible"]:
+        raise MicrochipRegistrationRequired(eligibility["incomplete_dogs"])
     now = timezone.now()
     # All purchases of a product acquire this same row lock before checking its
     # daily allocation, including purchases by different owners.

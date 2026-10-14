@@ -3,6 +3,51 @@ import XCTest
 @testable import Vitail
 
 final class APIIntegrationTests: XCTestCase {
+    func testOwnerJourneyServicesUseAuthoritativeRoutesAndReceipts() async throws {
+        let session = makeSession()
+        defer { session.invalidateAndCancel() }
+        let client = APIClient(baseURL: URL(string: "https://shared.example"), session: session)
+        let authority = CredentialAuthority(apiClient: client, store: IntegrationTokenStore())
+        try await authority.install(AuthTokens(access: "owner-token", refresh: "refresh"))
+        let authenticated = AuthenticatedAPIClient(apiClient: client, credentials: authority)
+        let calls = RequestLog()
+        IntegrationURLProtocol.handler = { request in
+            calls.add(request)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer owner-token")
+            switch request.url?.path {
+            case "/api/auth/onboarding/complete":
+                XCTAssertEqual(request.httpMethod, "POST")
+                return (200, #"{"id":1,"email":"owner@example.com","display_name":"Owner","role":"OWNER","onboarding_complete":true}"#)
+            case "/api/councils":
+                let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
+                XCTAssertEqual(query?.first { $0.name == "q" }?.value, "3000")
+                return (200, #"[{"id":"melbourne-city-council","name":"Melbourne City Council","postcodes":["3000"]}]"#)
+            case "/api/redemptions/eligibility":
+                return (200, #"{"eligible":false,"incomplete_dogs":[{"id":7,"name":"Milo"}]}"#)
+            case "/api/quests/goals/7/collect":
+                XCTAssertEqual(request.httpMethod, "POST")
+                let body = try? integrationRequestBody(request)
+                XCTAssertEqual(body?["local_date"] as? String, "2026-10-10")
+                XCTAssertEqual(body?.count, 1, "The client must not send points or completion.")
+                return (201, #"{"award":{"id":2,"kind":"DAILY_GOAL","dog_id":7,"local_date":"2026-10-10","points":20,"point_entry_id":9,"awarded_at":"2026-10-10T01:00:00Z"},"balance":40,"created":true}"#)
+            default:
+                XCTFail("Unexpected owner journey route")
+                return (404, "{}")
+            }
+        }
+        let owner = try await DogService(apiClient: authenticated).completeOnboarding()
+        XCTAssertEqual(owner.onboardingComplete, true)
+        let options = try await DocumentService(apiClient: authenticated).searchCouncils("3000")
+        XCTAssertEqual(options.first?.id, "melbourne-city-council")
+        let gate = try await RedemptionService(apiClient: authenticated).fetchEligibility()
+        XCTAssertFalse(gate.eligible)
+        XCTAssertEqual(gate.incompleteDogs.first?.id, 7)
+        let receipt = try await QuestService(apiClient: authenticated).collectDailyGoal(dogID: 7, localDate: "2026-10-10")
+        XCTAssertEqual(receipt.award.pointEntryID, 9)
+        XCTAssertEqual(receipt.balance, 40)
+        XCTAssertEqual(calls.requests.count, 4)
+    }
+
     override func tearDown() {
         IntegrationURLProtocol.handler = nil
         super.tearDown()

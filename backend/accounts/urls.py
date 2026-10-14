@@ -2,10 +2,11 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .serializers import AccountTokenRefreshSerializer
-from .views import LoginView, MePhotoView, MeView, RegisterView
+from .views import LoginView, MePhotoView, MeView, RegisterView, CompleteOnboardingView
 
 
 urlpatterns = [
+    path("onboarding/complete", CompleteOnboardingView.as_view(), name="onboarding-complete"),
     path("register", RegisterView.as_view(), name="auth-register"),
     path("login", LoginView.as_view(), name="auth-login"),
     path(

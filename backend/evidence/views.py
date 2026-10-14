@@ -18,6 +18,14 @@ from .services import collect_document, eligibility_for, entitlements_for, regis
 from .uploads import DocumentJSONParser
 
 
+class CouncilSearchView(APIView):
+    permission_classes = [IsOwnerRole]
+
+    def get(self, request):
+        from .councils import search_councils
+        return Response(search_councils(request.query_params.get("q", "")[:100]))
+
+
 class DocumentListCreateView(APIView):
     permission_classes = [IsOwnerRole]
     parser_classes = [DocumentJSONParser]
@@ -78,7 +86,7 @@ class DocumentFileView(APIView):
             file = submission.file.open("rb")
         except FileNotFoundError as exc:
             raise Http404 from exc
-        response = FileResponse(file, as_attachment=True, filename=submission.filename,
+        response = FileResponse(file, as_attachment=request.query_params.get("preview") != "1", filename=submission.filename,
                                 content_type=submission.file_content_type)
         response["Cache-Control"] = "private, no-store"
         response["X-Content-Type-Options"] = "nosniff"

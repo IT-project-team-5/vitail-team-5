@@ -1,5 +1,15 @@
 import Foundation
 
+struct RedemptionEligibility: Decodable, Sendable {
+    struct IncompleteDog: Decodable, Identifiable, Sendable {
+        let id: Int
+        let name: String
+    }
+    let eligible: Bool
+    let incompleteDogs: [IncompleteDog]
+    enum CodingKeys: String, CodingKey { case eligible, incompleteDogs = "incomplete_dogs" }
+}
+
 struct WalletBalance: Decodable, Sendable {
     let balance: Int
 }

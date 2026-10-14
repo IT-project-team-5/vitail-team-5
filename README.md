@@ -67,7 +67,7 @@ Staging and Release.
 
 | Account | Navigation | Available flow |
 |---|---|---|
-| Owner | Account / Walk / Quest / Venues / Redeem | Email registration, profiles/photos, Friends and privacy settings, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
+| Owner | Account / Walk / Quest / Redeem | Email registration, profiles/photos, Friends and privacy settings, personalised dog goals, recorded walks, care rewards, venue check-ins, wallet and café orders |
 | Café | Account / Products / Orders | Admin-created login, venue details/photo/Maps, menu prices and availability, read-only pending orders |
 | Admin | Django Admin | Onboarding, catalogue, positive test-point grants, pending-order cancellation/refunds and evidence access |
 
@@ -80,9 +80,9 @@ Friends and Net-Walking are reached from Account instead of taking a sixth tab.
 Owners can search by name or public ID, handle requests and blocks, choose a
 map avatar, and separately opt into friend location sharing or nearby partner
 discovery. Both controls default off. Walk is the walk/social map and owns the
-sole walk/social location stream: it shows fresh friend/partner positions and
-hosts Net-Walking invitations while a walk is recording. The separate Venues
-map is for check-in discovery. Verified together-distance is displayed, but
+sole location stream: it shows fresh friend/partner positions, hosts Net-Walking
+invitations, and displays tappable venue markers while a walk is recording.
+Venue dwell uses that same GPS stream. Verified together-distance is displayed, but
 wallet rewards stay disabled until the point policy is approved. See [social
 behavior](docs/SOCIAL.md).
 
@@ -97,11 +97,13 @@ and document tasks, plus one walking-streak
 progress bar, with explicit Collect. Collected birthday/document rows leave
 the list after Melbourne midnight; their history remains. Streak advances to
 its next milestone after collection.
-Walk, Quest and Venues observe the same check-in progress. The separate Venues
-map shows every active, check-in-enabled place with coordinates and supplies
-explicit GPS start/resume/cancel and collection through authenticated APIs.
-Dwell is verified by server receipt times; gaps over 90 seconds reset progress.
-Physical-device location and background acceptance still need testing.
+Walk and Quest observe the same check-in progress. Start a walk to earn
+venue rewards: leaving the 20-metre circle or losing reliable GPS pauses dwell
+without losing time already verified in that walk. Completed check-ins remain
+pending until the confirmed walk upload settles them through the shared ledger.
+The saved summary shows only actual awards; daily category limits and the
+72-point activity cap still apply. Physical-device GPS and full video acceptance
+remain pending; see the [venue test checklist](docs/VENUE_CHECKIN_TESTING.md).
 
 Redeem lists cafés, menus and actual product prices. Purchase deducts points
 once and opens a receipt; the owner slides to collect. Uncollected orders
@@ -113,7 +115,7 @@ progress, authenticated venue check-ins, and connected Friends/Net-Walking live
 sessions. Raw social GPS is a rolling 15-minute verification buffer cleaned by
 the worker; the API returns only fresh positions and summary distance. The
 social flow does **not** deliver a leaderboard, wallet rewards for Net-Walking,
-chat, notifications, charity donations or daily-goal rewards. See
+chat, notifications or charity donations. See
 [feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check
@@ -134,14 +136,16 @@ chat, notifications, charity donations or daily-goal rewards. See
 Admin can add parks, restaurants and veterinary clinics under **Venues** without
 creating a café login; `manager_user` is optional. To expose one for check-in,
 save both latitude and longitude, keep it active, and enable check-in. The repo
-does not currently include a bulk venue-import command or a default veterinary
-clinic.
+includes an explicit, attributed [Melbourne venue import](docs/MELBOURNE_VENUES.md)
+for three vets and three parks. Preview it with
+`python manage.py import_melbourne_venues --dry-run` from `backend`, then run
+without `--dry-run` to import. Existing venues and accounts are preserved.
 
 ## Documentation
 
 | Document | Authority |
 |---|---|
-| [Daily walking goals](docs/DAILY_GOALS.md) | Personalised owner/manual Admin configuration, calendar rules, preserved history and pending multi-dog payout decisions |
+| [Daily walking goals](docs/DAILY_GOALS.md) | Personalised owner/manual Admin configuration, calendar rules, per-dog collection, shared account cap and preserved history |
 | [Quest and point policy](docs/QUESTS.md) | Canonical reward amounts, limits, current delivery and check-in handoff |
 | [Decisions](docs/DECISIONS.md) | Current choices and unresolved questions |
 | [Feature status](docs/FEATURES.md) | What can be tested now versus foundations/future work |
@@ -155,3 +159,8 @@ clinic.
 Each feature owner maintains its UI, API, migrations, tests and relevant docs.
 Do not create a parallel wallet/order model or invent behavior for an open
 policy question.
+
+The owner journey now includes resumable dog/goal setup (maximum two dogs),
+20-point per-dog daily collection, microchip-gated purchases and Council search.
+See [implementation and verification](docs/OWNER_JOURNEY_REPORT.md) and
+[mandatory iPhone acceptance](docs/OWNER_JOURNEY_ACCEPTANCE.md).

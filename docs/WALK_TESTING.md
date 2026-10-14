@@ -40,7 +40,10 @@ They do not replace the real-iPhone tests below.
   disabling Precise Location pauses the walk. Five minutes without accepted
   movement, or a five-minute manual pause, ends the walk on the next timer,
   location batch or foreground/Resume check. Suspended iOS timers cannot promise
-  an exact background stop time.
+  an exact background stop time. Fresh server-confirmed eligible venue dwell
+  suppresses the no-movement timeout so a stationary café/restaurant visit can
+  complete its 10/20-minute stay. This exception stops on unreliable GPS,
+  leaving the venue, loss of eligibility or pause; verify it on the phone.
 - All points in delivered location batches are processed in time order. Invalid
   or duplicate samples are ignored. Pause/Resume, an interruption, and gaps over
   60 seconds split the route; no straight-line distance joins those gaps.
