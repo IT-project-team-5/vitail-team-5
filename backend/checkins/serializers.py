@@ -49,12 +49,20 @@ class VenueCheckInSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField(read_only=True)
     reward_points = serializers.IntegerField(source="promised_points", read_only=True)
     collected_at = serializers.DateTimeField(read_only=True)
+    is_replayable = serializers.SerializerMethodField()
 
     def get_photo(self, row):
         if not row.venue_id or not row.venue.photo:
             return None
         request = self.context.get("request")
         return request.build_absolute_uri(row.venue.photo.url) if request else row.venue.photo.url
+
+    def get_is_replayable(self, row):
+        if "replayable_checkin_ids" in self.context:
+            return row.pk in self.context["replayable_checkin_ids"]
+        from .services import is_replayable_checkin
+        request = self.context.get("request")
+        return is_replayable_checkin(row, owner=request.user if request else None)
 
 
 class VenueMapSerializer(serializers.Serializer):
@@ -86,11 +94,16 @@ class VenueMapSerializer(serializers.Serializer):
         return CHECKIN_SECONDS[venue.kind]
 
     def get_checkin_status(self, venue):
-        if venue.kind in self.context.get("rewarded_categories", set()):
-            return "COLLECTED"
-        if not self.context.get("checkin_available", False):
-            return "UNAVAILABLE"
         row = self.context.get("by_venue", {}).get(venue.pk)
+        replaying = bool(
+            row and row.pk in self.context.get("replayable_checkin_ids", set())
+        )
+        if venue.kind in self.context.get("rewarded_categories", set()) and not replaying:
+            return "COLLECTED"
+        if (not self.context.get("checkin_available", False)
+                and venue.pk not in self.context.get("replayable_venue_ids", set())
+                and not replaying):
+            return "UNAVAILABLE"
         if row is None:
             return "AVAILABLE"
         return row.status

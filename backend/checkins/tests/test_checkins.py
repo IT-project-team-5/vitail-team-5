@@ -2,7 +2,8 @@ from datetime import datetime, timedelta, timezone as datetime_timezone
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
+from django.test.utils import CaptureQueriesContext
 from django.http import Http404
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -81,13 +82,73 @@ class CheckInServiceTests(CheckInFixture, TestCase):
         spend_points(user=self.owner, amount=30, source_reference="test-spend")
         self.assertEqual(daily_activity_points(self.owner, local_date(self.now)), 62)
 
-    def test_standalone_collection_cannot_credit_ready_or_legacy_rows(self):
-        for context in (self.context, None):
-            row = self.opportunity(walk_context=context, venue=self.venues["PARK"] if context is None else self.venues["CAFE"])
-            with self.assertRaises(ValidationError) as exc:
-                collect_checkin(owner=self.owner, checkin_id=row.pk, now=self.now)
-            self.assertEqual(str(exc.exception.detail["code"]), "FINISH_WALK_REQUIRED")
+    def test_walk_linked_ready_row_cannot_collect_before_finish(self):
+        row = self.opportunity()
+        with self.assertRaises(ValidationError) as exc:
+            collect_checkin(owner=self.owner, checkin_id=row.pk, now=self.now)
+        self.assertEqual(str(exc.exception.detail["code"]), "FINISH_WALK_REQUIRED")
         self.assertFalse(PointEntry.objects.exists())
+
+    def test_ready_legacy_row_remains_visible_and_collectible_once(self):
+        row = self.opportunity("PARK", walk_context=None)
+        QuestDefinition.objects.filter(code="CHECK_IN").update(is_enabled=False)
+        self.assertEqual(current_progress(owner=self.owner, now=self.now)["items"], [])
+        QuestDefinition.objects.filter(code="CHECK_IN").update(is_enabled=True)
+        Venue.objects.filter(pk=row.venue_id).update(is_active=False)
+        self.assertEqual(current_progress(owner=self.owner, now=self.now)["items"], [])
+        Venue.objects.filter(pk=row.venue_id).update(is_active=True)
+        progress = current_progress(owner=self.owner, now=self.now)
+        self.assertEqual([item.pk for item in progress["items"]], [row.pk])
+
+        first = collect_checkin(owner=self.owner, checkin_id=row.pk, now=self.now)
+        self.assertEqual((first["awarded_points"], first["wallet_balance"]), (12, 12))
+        entry = PointEntry.objects.get(source_reference=f"checkin:{row.pk}")
+
+        QuestDefinition.objects.filter(code="CHECK_IN").update(is_enabled=False)
+        replay = collect_checkin(owner=self.owner, checkin_id=row.pk, now=self.now + timedelta(days=1))
+        self.assertEqual(replay["check_in"].point_entry_id, entry.pk)
+        self.assertEqual(PointEntry.objects.filter(earn_category="CHECK_IN").count(), 1)
+
+    def test_legacy_partner_venue_must_still_be_eligible(self):
+        row = self.opportunity("CAFE", walk_context=None)
+        Venue.objects.filter(pk=row.venue_id).update(is_partner=False)
+
+        self.assertEqual(current_progress(owner=self.owner, now=self.now)["items"], [])
+        with self.assertRaises(ValidationError) as exc:
+            collect_checkin(owner=self.owner, checkin_id=row.pk, now=self.now)
+
+        self.assertEqual(str(exc.exception.detail["code"]), "VENUE_UNAVAILABLE")
+        self.assertFalse(PointEntry.objects.exists())
+
+    def test_legacy_collection_still_enforces_expiry_and_daily_cap(self):
+        expired = self.opportunity("PARK", walk_context=None, expires_at=self.now)
+        with self.assertRaises(ValidationError) as exc:
+            collect_checkin(owner=self.owner, checkin_id=expired.pk, now=self.now)
+        self.assertEqual(str(exc.exception.detail["code"]), "CHECKIN_EXPIRED")
+
+        ready = self.opportunity("VET", walk_context=None)
+        self.credit(61)
+        with self.assertRaises(ValidationError) as exc:
+            collect_checkin(owner=self.owner, checkin_id=ready.pk, now=self.now)
+        self.assertEqual(str(exc.exception.detail["code"]), "DAILY_LIMIT_REACHED")
+        self.assertIsNone(CheckIn.objects.get(pk=ready.pk).point_entry_id)
+
+    def test_legacy_and_walk_rows_cannot_both_award_one_daily_category(self):
+        legacy_park = self.opportunity("PARK", walk_context=None)
+        walk_park = self.opportunity("PARK")
+        self.settle()
+        with self.assertRaises(ValidationError) as exc:
+            collect_checkin(owner=self.owner, checkin_id=legacy_park.pk, now=self.now)
+        self.assertEqual(str(exc.exception.detail["code"]), "CATEGORY_ALREADY_USED")
+        self.assertIsNotNone(CheckIn.objects.get(pk=walk_park.pk).point_entry_id)
+
+        legacy_vet = self.opportunity("VET", walk_context=None)
+        collect_checkin(owner=self.owner, checkin_id=legacy_vet.pk, now=self.now)
+        other_context = self.walk_context()
+        walk_vet = self.opportunity("VET", walk_context=other_context)
+        self.settle(context=other_context)
+        self.assertIsNone(CheckIn.objects.get(pk=walk_vet.pk).point_entry_id)
+        self.assertEqual(PointEntry.objects.filter(earn_category="CHECK_IN").count(), 2)
 
     def test_owner_scoped_receipt_and_inactive_accounts(self):
         row = self.opportunity()
@@ -204,6 +265,20 @@ class CheckInServiceTests(CheckInFixture, TestCase):
         settle_walk_checkins(walk, now=end + timedelta(days=1))
         self.assertEqual(PointEntry.objects.count(), 1)
 
+    def test_walk_serializer_loads_checkin_awards_once(self):
+        row = self.opportunity()
+        walk = self.settle()
+        from walks.serializers import WalkSerializer
+
+        with CaptureQueriesContext(connection) as queries:
+            data = WalkSerializer(walk).data
+
+        checkin_queries = [query["sql"] for query in queries if "checkins_checkin" in query["sql"]]
+        self.assertEqual(len(checkin_queries), 1)
+        self.assertEqual(data["check_in_awards"][0]["id"], str(row.attempt_id))
+        self.assertEqual(data["check_in_points_awarded"], 12)
+        self.assertEqual(data["total_points_awarded"], 12)
+
     def test_progress_does_not_leak_previous_walk_partial_work_or_other_owner(self):
         old = self.opportunity(ready=False)
         self.opportunity("PARK", owner=self.other)
@@ -213,6 +288,60 @@ class CheckInServiceTests(CheckInFixture, TestCase):
         self.assertEqual([item.pk for item in visible["items"]], [row.pk])
         self.assertNotIn(old.pk, [item.pk for item in visible["items"]])
         self.assertEqual(current_progress(owner=self.owner, walk_request_id=uuid4(), now=self.now)["items"], [])
+
+    def test_progress_replay_lookup_queries_are_bounded_for_many_rows(self):
+        def add_replayable(index, *, dormant=False):
+            venue = Venue.objects.create(
+                name=f"Replay venue {index}",
+                kind="CAFE",
+                latitude=-37.8,
+                longitude=144.9,
+                checkin_enabled=True,
+                is_partner=True,
+            )
+            row = self.opportunity(
+                "CAFE",
+                ready=False,
+                venue=venue,
+                venue_name_snapshot=venue.name,
+                walk_context=None if dormant else self.context,
+                started_at=None if dormant else self.now - timedelta(minutes=1),
+            )
+            credit_points(
+                user=self.owner,
+                amount=row.promised_points,
+                type=PointEntry.Type.EARN,
+                source_reference=f"checkin:{row.pk}",
+                earn_category=PointEntry.EarnCategory.CHECK_IN,
+                earned_on=row.local_date,
+                rules_version=row.rules_version,
+            )
+            return row
+
+        add_replayable(0)
+        with CaptureQueriesContext(connection) as one_row_queries:
+            one = current_progress(
+                owner=self.owner,
+                walk_request_id=self.context.request_id,
+                now=self.now,
+            )
+        self.assertEqual(len(one["replayable_checkin_ids"]), 1)
+
+        for index in range(1, 10):
+            add_replayable(index)
+        for index in range(10, 20):
+            add_replayable(index, dormant=True)
+        with CaptureQueriesContext(connection) as twenty_row_queries:
+            twenty = current_progress(
+                owner=self.owner,
+                walk_request_id=self.context.request_id,
+                now=self.now,
+            )
+
+        self.assertEqual(len(twenty["replayable_checkin_ids"]), 10)
+        self.assertEqual(len(twenty["replayable_venue_ids"]), 10)
+        self.assertLessEqual(len(twenty_row_queries), len(one_row_queries) + 1)
+        self.assertLessEqual(len(twenty_row_queries), 9)
 
     def test_quest_surface_cannot_accept_client_authored_completion(self):
         row = self.opportunity(ready=False)

@@ -14,7 +14,10 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from quests.models import QuestDefinition
 from rewards.models import PointEntry
-from rewards.policy import CHECKIN_POINTS, CHECKIN_RADIUS_M, CHECKIN_SECONDS, DAILY_ACTIVITY_CAP, local_date
+from rewards.policy import (
+    CHECKIN_POINTS, CHECKIN_RADIUS_M, CHECKIN_SECONDS, DAILY_ACTIVITY_CAP,
+    local_date,
+)
 from rewards.services import credit_points, get_balance
 from venues.models import Venue
 from walks.services import CLOCK_SKEW, MAX_ACCURACY_M, MAX_WALK_AGE, WalkConflictError, distance_between
@@ -23,6 +26,7 @@ from .models import CheckIn, CheckInWalk
 
 MAX_REPORT_GAP_SECONDS = 90
 CHECKIN_RULES_VERSION = "checkin-walk-v1"
+_REPLAY_ENTRY_UNSET = object()
 
 
 def _owner_lock(owner):
@@ -78,10 +82,91 @@ def _checkin_enabled():
     return QuestDefinition.objects.filter(code=QuestDefinition.Code.CHECK_IN, is_enabled=True).exists()
 
 
-def _require_available_reward(owner, day):
+def replayable_point_entry(owner, day, category_slot, *, row=None):
+    """Return an unattached ledger entry that this qualification can replay."""
+    sources = [f"venue-walk:{owner.pk}:{day}:{category_slot}"]
+    if row is not None:
+        sources.append(f"checkin:{row.pk}")
+    candidates = PointEntry.objects.filter(
+        user=owner,
+        type=PointEntry.Type.EARN,
+        source_reference__in=sources,
+        amount=row.promised_points if row is not None else CHECKIN_POINTS,
+        earn_category=PointEntry.EarnCategory.CHECK_IN,
+        earned_on=day,
+        rules_version=row.rules_version if row is not None else CHECKIN_RULES_VERSION,
+    )
+    for entry in candidates:
+        if not CheckIn.objects.filter(point_entry_id=entry.pk).exists():
+            return entry
+    return None
+
+
+def replayable_point_entries(owner, rows):
+    """Batch the ledger lookup used by the frequently-polled progress APIs."""
+    rows = list(rows)
+    if not rows:
+        return {}
+    rows_by_source = {}
+    for row in rows:
+        for source in (
+            f"venue-walk:{owner.pk}:{row.local_date}:{row.category_slot}",
+            f"checkin:{row.pk}",
+        ):
+            rows_by_source.setdefault(source, []).append(row)
+    candidates = list(PointEntry.objects.filter(
+        user=owner,
+        type=PointEntry.Type.EARN,
+        source_reference__in=rows_by_source,
+        earn_category=PointEntry.EarnCategory.CHECK_IN,
+    ).order_by("pk"))
+    if not candidates:
+        return {}
+    attached_ids = set(CheckIn.objects.filter(
+        point_entry_id__in=[entry.pk for entry in candidates],
+    ).values_list("point_entry_id", flat=True))
+    matches = {}
+    for entry in candidates:
+        if entry.pk in attached_ids:
+            continue
+        for row in rows_by_source.get(entry.source_reference, ()):
+            if (entry.amount == row.promised_points
+                    and entry.earned_on == row.local_date
+                    and entry.rules_version == row.rules_version):
+                matches.setdefault(row.pk, entry)
+    return matches
+
+
+def is_replayable_checkin(row, *, owner=None, now=None, feature_enabled=None,
+                          replay_entry=_REPLAY_ENTRY_UNSET):
+    """Whether an active reset attempt reuses an existing ledger credit."""
+    if row.point_entry_id or row.walk_context_id is None:
+        return False
+    if feature_enabled is None:
+        feature_enabled = _checkin_enabled()
+    if not feature_enabled:
+        return False
+    now = now or timezone.now()
+    context = row.walk_context
+    if context.owner_id != row.owner_id or context.settled_at or not _venue_eligible(row.venue):
+        return False
+    if row.ready_at is None:
+        if (context.state not in (CheckInWalk.State.RECORDING, CheckInWalk.State.PAUSED)
+                or row.started_at is None or row.expires_at <= now):
+            return False
+    elif context.state == CheckInWalk.State.CANCELLED:
+        return False
+    if replay_entry is _REPLAY_ENTRY_UNSET:
+        replay_entry = replayable_point_entry(
+            owner or row.owner, row.local_date, row.category_slot, row=row,
+        )
+    return replay_entry is not None
+
+
+def _require_available_reward(owner, day, *, replay_entry=None):
     if not _checkin_enabled():
         raise ValidationError({"code": "CHECKIN_UNAVAILABLE", "message": "Check-in rewards are currently unavailable."})
-    if daily_activity_points(owner, day) + CHECKIN_POINTS > DAILY_ACTIVITY_CAP:
+    if replay_entry is None and daily_activity_points(owner, day) + CHECKIN_POINTS > DAILY_ACTIVITY_CAP:
         raise ValidationError({"code": "DAILY_LIMIT_REACHED", "message": "There is not enough daily allowance for a check-in reward."})
 
 
@@ -140,11 +225,50 @@ def start_checkin(*, owner, venue_id, walk_request_id, sample, now=None):
     if existing:
         return report_checkin_location(owner=owner, checkin_id=existing.pk, sample=sample, now=now)
     day = local_date(now)
-    _require_available_reward(owner, day)
-    if venue.kind in _rewarded_categories(owner, day):
+    dormant = CheckIn.objects.select_for_update().filter(
+        owner=owner,
+        walk_context__isnull=True,
+        venue=venue,
+        local_date=day,
+        point_entry__isnull=True,
+        started_at__isnull=True,
+        ready_at__isnull=True,
+        expires_at__gt=now,
+    ).first()
+    replay_entry = replayable_point_entry(owner, day, venue.kind, row=dormant) if dormant else None
+    _require_available_reward(owner, day, replay_entry=replay_entry)
+    if replay_entry is None and venue.kind in _rewarded_categories(owner, day):
         raise ValidationError({"code": "CATEGORY_ALREADY_USED", "message": "Today's reward for this venue category has already been earned."})
     if not _inside(venue, sample):
         raise ValidationError({"code": "OUTSIDE_RADIUS", "message": f"Move within {CHECKIN_RADIUS_M} m of {venue.name} to check in."})
+    if dormant:
+        # The DEBUG Quest reset keeps this row so the original ledger key can
+        # be replayed without changing the wallet balance.
+        dormant.walk_context = context
+        dormant.radius_m = CHECKIN_RADIUS_M
+        dormant.center_latitude = venue.latitude
+        dormant.center_longitude = venue.longitude
+        dormant.required_seconds = CHECKIN_SECONDS[venue.kind]
+        dormant.verified_seconds = 0
+        dormant.last_sequence = sample["sequence"]
+        dormant.last_captured_at = sample["recorded_at"]
+        dormant.last_sample_fingerprint = _sample_fingerprint(sample)
+        dormant.last_recorded_at = now
+        dormant.last_latitude = sample["latitude"]
+        dormant.last_longitude = sample["longitude"]
+        dormant.last_verified_at = now
+        dormant.started_at = sample["recorded_at"]
+        dormant.expires_at = context.started_at + MAX_WALK_AGE
+        dormant.venue_name_snapshot = venue.name
+        dormant.promised_points = CHECKIN_POINTS
+        dormant.save(update_fields=(
+            "walk_context", "radius_m", "center_latitude", "center_longitude",
+            "required_seconds", "verified_seconds", "last_sequence",
+            "last_captured_at", "last_sample_fingerprint", "last_recorded_at",
+            "last_latitude", "last_longitude", "last_verified_at", "started_at",
+            "expires_at", "venue_name_snapshot", "promised_points", "updated_at",
+        ))
+        return dormant
     return CheckIn.objects.create(
         owner=owner, walk_context=context, venue=venue, venue_name_snapshot=venue.name,
         local_date=day, category_slot=venue.kind, radius_m=CHECKIN_RADIUS_M,
@@ -183,9 +307,15 @@ def report_checkin_location(*, owner, checkin_id, sample, now=None):
         row.save(update_fields=("last_verified_at", "updated_at"))
         return row
     reliable = _valid_sample(sample, row.walk_context, now)
+    day = local_date(now)
+    reward_blocked = (
+        daily_activity_points(owner, day) + row.promised_points > DAILY_ACTIVITY_CAP
+        or row.category_slot in _rewarded_categories(owner, day)
+    )
+    replay_entry = (replayable_point_entry(owner, row.local_date, row.category_slot, row=row)
+                    if reward_blocked else None)
     allowed = (_checkin_enabled() and _venue_eligible(row.venue)
-               and daily_activity_points(owner, local_date(now)) + row.promised_points <= DAILY_ACTIVITY_CAP
-               and row.category_slot not in _rewarded_categories(owner, local_date(now)))
+               and (replay_entry is not None or not reward_blocked))
     inside = bool(reliable and allowed and _inside(row, sample))
     previous = row.last_verified_at
     gap = (now - previous).total_seconds() if previous else None
@@ -233,16 +363,72 @@ def daily_activity_points(owner, day):
 def current_progress(*, owner, walk_request_id=None, now=None):
     now = now or timezone.now()
     day = local_date(now)
+    enabled = _checkin_enabled()
     contexts = CheckInWalk.objects.filter(owner=owner)
     context = (contexts.filter(request_id=walk_request_id).first() if walk_request_id
                else contexts.filter(state__in=("RECORDING", "PAUSED")).order_by("-started_at").first())
     visible = Q(point_entry__isnull=False, local_date=day)
+    # Rows qualified before venue check-ins moved into Walk have no
+    # CheckInWalk. Keep an unexpired ready row visible so its already-earned
+    # qualification can still be collected after the deployment.
+    if enabled:
+        visible |= Q(
+            walk_context__isnull=True,
+            point_entry__isnull=True,
+            ready_at__isnull=False,
+            local_date=day,
+            expires_at__gt=now,
+            venue__isnull=False,
+            venue__is_active=True,
+            venue__checkin_enabled=True,
+        )
     if context and not context.settled_at and context.state != "CANCELLED":
         visible |= Q(walk_context=context)
-    rows = CheckIn.objects.filter(owner=owner).filter(visible).select_related(
-        "venue", "point_entry", "walk_context").order_by("started_at", "id")
-    return {"local_date": day, "server_time": now, "earned_points_today": daily_activity_points(owner, day),
-            "items": list(rows), "context": context, "rewarded_categories": _rewarded_categories(owner, day)}
+    rows = list(CheckIn.objects.filter(owner=owner).filter(visible).select_related(
+        "venue", "point_entry", "walk_context").order_by("started_at", "id"))
+    dormant = list(CheckIn.objects.filter(
+        owner=owner, walk_context__isnull=True, point_entry__isnull=True,
+        started_at__isnull=True, ready_at__isnull=True, local_date=day,
+        expires_at__gt=now, venue__isnull=False,
+    ).select_related("venue"))
+    replay_entries = replayable_point_entries(owner, [*rows, *dormant]) if enabled else {}
+    earned_points = daily_activity_points(owner, day)
+    rewarded_categories = _rewarded_categories(owner, day)
+    replayable_checkin_ids = set()
+    visible_rows = []
+    for row in rows:
+        legacy_ready = (
+            row.walk_context_id is None
+            and row.point_entry_id is None
+            and row.ready_at is not None
+        )
+        if legacy_ready and not _venue_eligible(row.venue):
+            continue
+        has_replay = False
+        if enabled and row.point_entry_id is None:
+            if row.walk_context_id is not None:
+                has_replay = is_replayable_checkin(
+                    row, owner=owner, now=now, feature_enabled=enabled,
+                    replay_entry=replay_entries.get(row.pk),
+                )
+                if has_replay:
+                    replayable_checkin_ids.add(row.pk)
+            else:
+                has_replay = row.pk in replay_entries
+        if (row.walk_context_id is not None or row.point_entry_id is not None
+                or (earned_points + row.promised_points <= DAILY_ACTIVITY_CAP
+                    and row.category_slot not in rewarded_categories)
+                or has_replay):
+            visible_rows.append(row)
+    rows = visible_rows
+    replayable_venue_ids = ({
+        row.venue_id for row in dormant
+        if row.pk in replay_entries
+    } if enabled else set())
+    return {"local_date": day, "server_time": now, "earned_points_today": earned_points,
+            "items": rows, "context": context, "rewarded_categories": rewarded_categories,
+            "replayable_venue_ids": replayable_venue_ids,
+            "replayable_checkin_ids": replayable_checkin_ids}
 
 
 @transaction.atomic
@@ -265,20 +451,32 @@ def settle_walk_checkins(walk, *, now=None):
             continue
         if row.started_at < walk.started_at or row.ready_at > walk.ended_at:
             raise ValidationError({"code": "CHECKIN_OUTSIDE_WALK", "message": "The submitted walk must cover its completed venue visits."})
-        if (not enabled or row.category_slot in rewarded or not _venue_eligible(row.venue)
+        # A DEBUG reset preserves an already-earned entry on its original day.
+        # A walk finishing after midnight may reattach it, but must never mint a
+        # replacement against the new day's key.
+        replay_entry = replayable_point_entry(owner, row.local_date, row.category_slot, row=row)
+        if (not enabled or (row.category_slot in rewarded and replay_entry is None) or not _venue_eligible(row.venue)
                 or row.verified_seconds < row.required_seconds
-                or DAILY_ACTIVITY_CAP - daily_activity_points(owner, walk.point_date) < row.promised_points):
+                or (replay_entry is None
+                    and DAILY_ACTIVITY_CAP - daily_activity_points(owner, walk.point_date) < row.promised_points)):
             continue
+        award_day = replay_entry.earned_on if replay_entry else walk.point_date
+        source_reference = (replay_entry.source_reference if replay_entry else
+                            f"venue-walk:{owner.pk}:{walk.point_date}:{row.category_slot}")
         row.point_entry = credit_points(
             user=owner, amount=row.promised_points, type=PointEntry.Type.EARN,
-            source_reference=f"venue-walk:{owner.pk}:{walk.point_date}:{row.category_slot}",
-            earn_category="CHECK_IN", earned_on=walk.point_date, rules_version=row.rules_version,
+            source_reference=source_reference,
+            earn_category="CHECK_IN", earned_on=award_day, rules_version=row.rules_version,
         )
-        row.local_date = walk.point_date
+        row.local_date = award_day
         row.collected_at = now
         row.last_verified_at = None
         row.save(update_fields=("point_entry", "local_date", "collected_at", "last_verified_at", "updated_at"))
-        rewarded.add(row.category_slot)
+        # Reattaching a DEBUG-reset credit from an earlier day must not consume
+        # this walk's category slot. A separate, valid current-day visit in the
+        # same walk may still earn today's one category reward.
+        if award_day == walk.point_date:
+            rewarded.add(row.category_slot)
     context.walk = walk
     context.state = "FINISHED"
     context.ended_at = walk.ended_at
@@ -289,12 +487,40 @@ def settle_walk_checkins(walk, *, now=None):
 
 @transaction.atomic
 def collect_checkin(*, owner, checkin_id, now=None):
-    """Read a settled receipt only. Map/Quest cannot settle ahead of Walk upload."""
+    """Read a settled receipt, or honour a ready pre-Walk qualification."""
     owner = _owner_lock(owner)
-    row = CheckIn.objects.select_related("point_entry", "venue", "walk_context").filter(pk=checkin_id, owner=owner).first()
+    now = now or timezone.now()
+    row = CheckIn.objects.select_for_update().select_related(
+        "point_entry", "venue", "walk_context",
+    ).filter(pk=checkin_id, owner=owner).first()
     if row is None:
         raise Http404
     if not row.point_entry_id:
-        raise ValidationError({"code": "FINISH_WALK_REQUIRED", "message": "Finish and save your walk to settle venue points."})
+        if row.walk_context_id:
+            raise ValidationError({"code": "FINISH_WALK_REQUIRED", "message": "Finish and save your walk to settle venue points."})
+        # Compatibility for qualifications created by the former standalone
+        # venue flow. New rows always have a Walk context and cannot use this
+        # path.
+        if not _checkin_enabled():
+            raise ValidationError({"code": "CHECKIN_UNAVAILABLE", "message": "Check-in rewards are currently unavailable."})
+        if not _venue_eligible(row.venue):
+            raise ValidationError({"code": "VENUE_UNAVAILABLE", "message": "This venue is currently unavailable for check-in rewards."})
+        if row.local_date != local_date(now) or row.expires_at <= now:
+            raise ValidationError({"code": "CHECKIN_EXPIRED", "message": "This check-in has expired."})
+        if row.ready_at is None or row.ready_at > now or row.verified_seconds < row.required_seconds:
+            raise ValidationError({"code": "CHECKIN_NOT_READY", "message": "This check-in has not been verified as complete."})
+        replay_entry = replayable_point_entry(owner, row.local_date, row.category_slot, row=row)
+        if replay_entry is None and row.category_slot in _rewarded_categories(owner, row.local_date):
+            raise ValidationError({"code": "CATEGORY_ALREADY_USED", "message": "Today's reward for this venue category has already been earned."})
+        if replay_entry is None and DAILY_ACTIVITY_CAP - daily_activity_points(owner, row.local_date) < row.promised_points:
+            raise ValidationError({"code": "DAILY_LIMIT_REACHED", "message": "There is not enough daily allowance for this reward."})
+        row.point_entry = credit_points(
+            user=owner, amount=row.promised_points, type=PointEntry.Type.EARN,
+            source_reference=replay_entry.source_reference if replay_entry else f"checkin:{row.pk}",
+            earn_category=PointEntry.EarnCategory.CHECK_IN,
+            earned_on=row.local_date, rules_version=row.rules_version,
+        )
+        row.collected_at = now
+        row.save(update_fields=("point_entry", "collected_at", "updated_at"))
     return {"check_in": row, "awarded_points": row.point_entry.amount, "wallet_balance": get_balance(owner),
             "daily_earned_points": daily_activity_points(owner, row.local_date), "local_date": row.local_date}

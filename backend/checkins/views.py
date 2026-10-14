@@ -83,6 +83,8 @@ class VenueMapView(APIView):
                                                "request": request,
                                                "by_venue": by_venue,
                                                "rewarded_categories": progress["rewarded_categories"],
+                                               "replayable_venue_ids": progress["replayable_venue_ids"],
+                                               "replayable_checkin_ids": progress["replayable_checkin_ids"],
                                                "checkin_available": checkin_available,
                                            }).data)
 
@@ -95,7 +97,10 @@ class CheckInProgressView(APIView):
         return Response({
             "local_date": progress["local_date"], "server_time": progress["server_time"],
             "earned_points_today": progress["earned_points_today"],
-            "items": VenueCheckInSerializer(progress["items"], many=True, context={"request": request}).data,
+            "items": VenueCheckInSerializer(progress["items"], many=True, context={
+                "request": request,
+                "replayable_checkin_ids": progress["replayable_checkin_ids"],
+            }).data,
         })
 
 

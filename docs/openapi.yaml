@@ -1098,8 +1098,8 @@ paths:
     parameters:
       - {$ref: '#/components/parameters/AttemptID'}
     post:
-      summary: Replay an already settled owned venue receipt
-      description: This route never creates credits. Unsettled attempts return 400 FINISH_WALK_REQUIRED; finish and save the matching walk to settle. Legacy standalone attempts cannot earn via this route.
+      summary: Collect a legacy standalone qualification or replay a settled receipt
+      description: Walk-linked attempts cannot be collected until the matching Walk upload settles them and return 400 FINISH_WALK_REQUIRED. A valid unexpired READY qualification from the former standalone schema may create or replay its single idempotent credit after current feature, venue, category and daily-cap checks. Already settled receipts replay without creating another credit.
       requestBody:
         content:
           application/json:
@@ -1466,7 +1466,7 @@ components:
           nullable: true
     VenueCheckIn:
       type: object
-      required: [id, venue_id, venue_name, required_seconds, verified_seconds, status, updated_at, reward_points, collected_at]
+      required: [id, venue_id, venue_name, required_seconds, verified_seconds, status, updated_at, reward_points, collected_at, is_replayable]
       properties:
         id: {type: string, format: uuid}
         venue_id: {type: integer, nullable: true}
@@ -1482,6 +1482,7 @@ components:
         updated_at: {type: string, format: date-time}
         reward_points: {type: integer, minimum: 1}
         collected_at: {type: string, format: date-time, nullable: true}
+        is_replayable: {type: boolean, description: True only when this active debug-reset attempt can reattach its existing ledger entry without awarding more points}
     EmptySocialRequest:
       type: object
       additionalProperties: false

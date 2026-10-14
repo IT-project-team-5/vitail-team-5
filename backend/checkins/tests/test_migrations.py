@@ -32,6 +32,10 @@ class WalkCheckInMigrationTests(TransactionTestCase):
             receipt.collected_at = now
             receipt.save()
             pending = CheckIn.objects.create(**common, category_slot="PARK", verified_seconds=30)
+            ready = CheckIn.objects.create(**{
+                **common, "category_slot": "VET", "verified_seconds": 180,
+                "required_seconds": 180, "ready_at": now - timedelta(minutes=1),
+            })
             executor = MigrationExecutor(connection)
             executor.migrate(leaves)
             current = executor.loader.project_state(leaves).apps
@@ -40,6 +44,11 @@ class WalkCheckInMigrationTests(TransactionTestCase):
             self.assertIsNone(upgraded.objects.get(pk=receipt.pk).walk_context_id)
             self.assertEqual(upgraded.objects.get(pk=pending.pk).verified_seconds, 30)
             self.assertIsNone(upgraded.objects.get(pk=pending.pk).last_captured_at)
+            upgraded_ready = upgraded.objects.get(pk=ready.pk)
+            self.assertEqual(upgraded_ready.verified_seconds, 180)
+            self.assertIsNotNone(upgraded_ready.ready_at)
+            self.assertIsNone(upgraded_ready.point_entry_id)
+            self.assertIsNone(upgraded_ready.walk_context_id)
             self.assertEqual(current.get_model("checkins", "CheckInWalk").objects.count(), 0)
             self.assertEqual(current.get_model("rewards", "PointEntry").objects.count(), 1)
         finally:

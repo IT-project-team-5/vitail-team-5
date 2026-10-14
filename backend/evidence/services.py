@@ -252,10 +252,17 @@ def collect_document(*, owner, entitlement_id, now=None):
         ))
         if canonical.pk != entitlement.pk:
             raise ValidationError("Microchip registration earns one reward per dog. This historical reservation cannot be collected.")
+    source_reference = f"document-entitlement:{entitlement.pk}"
+    existing_entry = PointEntry.objects.filter(source_reference=source_reference).first()
+    # DEBUG reset detaches the original receipt without deleting its ledger
+    # credit. Reattach it with its original earning date, including after a day
+    # boundary, so the stable source key cannot mint or conflict with a new lot.
+    earned_on = existing_entry.earned_on if existing_entry else _local_today(now)
     entitlement.point_entry = credit_points(
         user=owner, amount=entitlement.promised_points, type=PointEntry.Type.EARN,
-        source_reference=f"document-entitlement:{entitlement.pk}",
-        earn_category=PointEntry.EarnCategory.DOCUMENT, earned_on=_local_today(now), rules_version=entitlement.rules_version,
+        source_reference=source_reference,
+        earn_category=PointEntry.EarnCategory.DOCUMENT, earned_on=earned_on,
+        rules_version=entitlement.rules_version,
     )
     entitlement.owner = owner
     entitlement.collected_at = now or timezone.now()
