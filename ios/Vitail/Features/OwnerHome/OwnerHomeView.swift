@@ -4,41 +4,41 @@ struct OwnerHomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private enum Page: String, CaseIterable, Identifiable {
-        case account = "Account"
-        case walk = "Walk"
-        case quest = "Quest"
-        case venues = "Venues"
         case redeem = "Redeem"
+        case quest = "Quest"
+        case walk = "Walk"
+        case friends = "Friends"
+        case account = "Account"
 
         var id: Self { self }
 
         var icon: String {
             switch self {
-            case .account:
-                return "person.crop.circle"
-            case .walk:
-                return "figure.walk"
-            case .quest:
-                return "flag"
-            case .venues:
-                return "mappin.and.ellipse"
             case .redeem:
                 return "gift"
+            case .quest:
+                return "flag"
+            case .walk:
+                return "figure.walk"
+            case .friends:
+                return "person.2"
+            case .account:
+                return "person.crop.circle"
             }
         }
 
         var selectedIcon: String {
             switch self {
-            case .account:
-                return "person.crop.circle.fill"
-            case .walk:
-                return "figure.walk"
-            case .quest:
-                return "flag.fill"
-            case .venues:
-                return "mappin.and.ellipse"
             case .redeem:
                 return "gift.fill"
+            case .quest:
+                return "flag.fill"
+            case .walk:
+                return "figure.walk"
+            case .friends:
+                return "person.2.fill"
+            case .account:
+                return "person.crop.circle.fill"
             }
         }
     }
@@ -52,14 +52,12 @@ struct OwnerHomeView: View {
     @StateObject private var onboardingDogs: DogViewModel
     @StateObject private var questStore: QuestStore
     @StateObject private var checkIns: CheckInProgressStore
-    @StateObject private var venueCheckIns: VenuesViewModel
     @StateObject private var friends: FriendsStore
     @State private var selection: Page = .walk
     @State private var hasCheckedOnboarding = false
     @State private var isAddingFirstDog = false
     @State private var accountRefreshID = 0
     @State private var documentSelection: DocumentQuestRoute?
-    @State private var isShowingFriends = false
 
     init(
         user: User, session: SessionStore,
@@ -69,6 +67,7 @@ struct OwnerHomeView: View {
         questService: any QuestServing = QuestService(),
         checkInService: (any CheckInProgressServing)? = nil,
         venueCheckInService: any VenueCheckInServing = VenueCheckInService(),
+        walkVenueCheckInService: any WalkVenueCheckInServing = WalkVenueCheckInService(),
         documentService: (any DocumentServing)? = nil,
         friendsService: any FriendsServing = FriendsService()
     ) {
@@ -79,10 +78,10 @@ struct OwnerHomeView: View {
         _friends = StateObject(wrappedValue: FriendsStore(ownerID: user.id, session: session, service: friendsService))
         _questStore = StateObject(wrappedValue: QuestStore(ownerID: user.id, session: session, service: questService))
         _checkIns = StateObject(wrappedValue: CheckInProgressStore(ownerID: user.id, service: checkInService, session: session))
-        _venueCheckIns = StateObject(wrappedValue: VenuesViewModel(service: venueCheckInService, session: session, ownerID: user.id))
         _onboardingDogs = StateObject(wrappedValue: DogViewModel(service: dogService, session: session))
         _walkCoordinator = StateObject(wrappedValue: WalkSessionCoordinator(
-            ownerID: user.id, session: session, dogService: dogService, walkService: walkService
+            ownerID: user.id, session: session, dogService: dogService, walkService: walkService,
+            venueService: walkVenueCheckInService
         ))
         _redemptionViewModel = StateObject(
             wrappedValue: RedemptionViewModel(service: redemptionService)
@@ -93,6 +92,24 @@ struct OwnerHomeView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 TabView(selection: $selection) {
+                    RedemptionView(viewModel: redemptionViewModel)
+                        .tag(Page.redeem)
+                    QuestView(store: questStore, checkIns: checkIns, points: redemptionViewModel.balance,
+                              onOpenDocuments: documentService != nil
+                                ? { route in documentSelection = route } : nil,
+                              onResetAll: {
+                                  async let wallet: Void = redemptionViewModel.refresh()
+                                  async let checkInProgress: Void = checkIns.resetForTesting()
+                                  async let venues: Void = walkCoordinator.venueCheckIns.resetForTesting()
+                                  _ = await (wallet, checkInProgress, venues)
+                              })
+                        .tag(Page.quest)
+                    WalkMapView(coordinator: walkCoordinator,
+                                isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog,
+                                checkIns: checkIns, friends: friends)
+                        .tag(Page.walk)
+                    FriendsView(store: friends)
+                        .tag(Page.friends)
                     OwnerProfileView(user: user, session: session, dogService: dogService,
                                      documentService: documentService ?? DocumentService(), onDocumentsChanged: {
                                          async let quests: Void = questStore.documentsDidChange()
@@ -100,25 +117,9 @@ struct OwnerHomeView: View {
                                          _ = await (quests, wallet)
                                      }, onGoalsChanged: {
                                          await questStore.walksDidChange()
-                                     }, onOpenFriends: { isShowingFriends = true })
+                                     })
                         .id(accountRefreshID)
                         .tag(Page.account)
-                    WalkMapView(coordinator: walkCoordinator, isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog, checkIns: checkIns, friends: friends)
-                    .tag(Page.walk)
-                    QuestView(store: questStore, checkIns: checkIns, points: redemptionViewModel.balance,
-                              onOpenDocuments: documentService != nil
-                                ? { route in documentSelection = route } : nil,
-                              onResetAll: {
-                                  async let wallet: Void = redemptionViewModel.refresh()
-                                  async let checkInProgress: Void = checkIns.refresh()
-                                  async let venues: Void = venueCheckIns.load()
-                                  _ = await (wallet, checkInProgress, venues)
-                              })
-                        .tag(Page.quest)
-                    VenuesView(viewModel: venueCheckIns, progressStore: checkIns)
-                        .tag(Page.venues)
-                    RedemptionView(viewModel: redemptionViewModel)
-                    .tag(Page.redeem)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -127,9 +128,6 @@ struct OwnerHomeView: View {
             .background(AppColors.background)
             .navigationTitle("Vitail")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $isShowingFriends) {
-                FriendsView(store: friends)
-            }
             .sheet(isPresented: $isAddingFirstDog, onDismiss: {
                 accountRefreshID += 1
                 Task {
@@ -176,16 +174,16 @@ struct OwnerHomeView: View {
                 async let wallet: Void = redemptionViewModel.refresh()
                 async let quests: Void = questStore.refresh()
                 async let venues: Void = checkIns.refresh()
-                async let venueMap: Void = venueCheckIns.load()
+                async let venueMap: Void = walkCoordinator.venueCheckIns.load()
                 _ = await (walks, wallet, quests, venues, venueMap)
                 // Both progress surfaces observe the same server-backed store.
                 // Tab changes/backgrounding cancel this task and its polling.
-                while !Task.isCancelled && (selection == .walk || selection == .quest || selection == .venues) {
+                while !Task.isCancelled && (selection == .walk || selection == .quest) {
                     do { try await Task.sleep(for: .seconds(5)) }
                     catch { break }
                     guard !Task.isCancelled else { break }
                     await checkIns.refresh()
-                    if selection == .venues { await venueCheckIns.load() }
+                    if selection == .walk { await walkCoordinator.venueCheckIns.load() }
                     if selection == .quest { await questStore.refresh() }
                 }
             }
@@ -219,11 +217,13 @@ struct OwnerHomeView: View {
         let draft = walkCoordinator.tracker.makeDraft()
         friends.updateWalk(isWalking: walkCoordinator.tracker.status == .walking,
                            requestID: draft?.id, startedAt: draft?.startedAt)
-        walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel, weak questStore] in
+        walkCoordinator.sync.onWalletChanged = { [weak redemptionViewModel, weak questStore, weak checkIns, weak walkCoordinator] in
             guard let redemptionViewModel, let questStore else { return }
             async let wallet: Void = redemptionViewModel.refresh()
             async let quests: Void = questStore.walksDidChange()
-            _ = await (wallet, quests)
+            async let checkInProgress: Void = checkIns?.refresh() ?? ()
+            async let venueMap: Void = walkCoordinator?.venueCheckIns.load() ?? ()
+            _ = await (wallet, quests, checkInProgress, venueMap)
         }
         questStore.onAward = { [weak redemptionViewModel] _ in
             await redemptionViewModel?.refresh()
@@ -234,20 +234,10 @@ struct OwnerHomeView: View {
             async let quests: Void = questStore.refresh()
             _ = await (wallet, quests)
         }
-        venueCheckIns.onProgressChanged = { [weak checkIns] in
-            await checkIns?.refresh()
-        }
-        venueCheckIns.onPointsAwarded = { [weak redemptionViewModel, weak questStore] in
-            guard let redemptionViewModel, let questStore else { return }
-            async let wallet: Void = redemptionViewModel.refresh()
-            async let quests: Void = questStore.refresh()
-            _ = await (wallet, quests)
-        }
-        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak checkIns, weak venueCheckIns, weak friends] in
+        session.beforeLogout = { [weak walkCoordinator, weak questStore, weak checkIns, weak friends] in
             questStore?.stop()
             checkIns?.stop()
             await friends?.prepareForLogout()
-            await venueCheckIns?.prepareForLogout()
             await walkCoordinator?.prepareForLogout()
         }
     }

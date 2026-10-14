@@ -14,6 +14,7 @@ struct RootView: View {
     var questService: any QuestServing = QuestService()
     var documentService: (any DocumentServing)? = nil
     var friendsService: any FriendsServing = FriendsService()
+    var walkVenueCheckInService: any WalkVenueCheckInServing = WalkVenueCheckInService()
 
     var body: some View {
         Group {
@@ -54,6 +55,7 @@ struct RootView: View {
                 dogService: dogService, redemptionService: redemptionService,
                 walkService: walkService, questService: questService,
                 checkInService: checkInProgressService, venueCheckInService: venueCheckInService,
+                walkVenueCheckInService: walkVenueCheckInService,
                 documentService: documentService, friendsService: friendsService
             )
             .id(user.id)

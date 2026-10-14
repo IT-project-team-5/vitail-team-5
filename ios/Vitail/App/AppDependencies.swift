@@ -7,6 +7,7 @@ struct AppDependencies: Sendable {
     let redemptionService: RedemptionService
     let walkService: WalkService
     let venueCheckInService: VenueCheckInService
+    let walkVenueCheckInService: WalkVenueCheckInService
     let checkInProgressService: CheckInProgressService
     let cafeProfileService: CafeProfileService
     let cafeProductsService: CafeProductsService
@@ -36,6 +37,7 @@ struct AppDependencies: Sendable {
             redemptionService: RedemptionService(apiClient: authenticatedAPIClient),
             walkService: WalkService(apiClient: authenticatedAPIClient),
             venueCheckInService: VenueCheckInService(apiClient: authenticatedAPIClient),
+            walkVenueCheckInService: WalkVenueCheckInService(apiClient: authenticatedAPIClient),
             checkInProgressService: CheckInProgressService(apiClient: authenticatedAPIClient),
             cafeProfileService: CafeProfileService(apiClient: authenticatedAPIClient),
             cafeProductsService: CafeProductsService(apiClient: authenticatedAPIClient),

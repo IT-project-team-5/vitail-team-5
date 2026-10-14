@@ -1,9 +1,10 @@
 # Quest and Point Policy
 
 Canonical reward reference. Reward policy is confirmed through 4 October 2026;
-delivery status is updated 8 October 2026. Latest source:
+delivery status is updated 9 October 2026. Latest sources:
 [New Point Retrieval / Calculation](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/27525122/New+Point+Retrieval+Calculation),
-24 September, plus subsequent confirmed collection/UI decisions.
+24 September, plus [Venue-Checkin v5](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35815426/Venue-Checkin),
+9 October, and subsequent confirmed collection/UI decisions.
 [Open questions](DECISIONS.md#open-decisions) remain explicit; a published reward
 amount does not mean its qualification engine is implemented.
 
@@ -13,7 +14,7 @@ amount does not mean its qualification engine is implemented.
 |---|---|---|
 | Walking | 8 points/km; maximum 40 per Melbourne day; dog count does not multiply the award | Connected: server validates confirmed uploads and rounds cumulative daily distance down |
 | Daily goal | 20-point baseline; per-dog/account scope remains open | Per-dog personalised owner and manual Admin targets share one history; progress and goal streaks connected; payouts disabled pending multi-dog rules |
-| Venue check-in | 12 points; at most one daily opportunity per type, four types total | Connected venue GPS start/resume/cancel, server-verified dwell and ledger collection; physical acceptance pending |
+| Venue check-in | 12 points; one daily award per kind (Vet, Park, Café, Restaurant) | Walk-map GPS dwell and confirmed-walk settlement; actual receipt rows; physical acceptance pending |
 | Birthday | 60 points per dog/year, on the actual birthday | Connected: explicit Collect |
 | Council registration | 300 points per dog per confirmed registration period; renew after its actual expiry | Connected: document reading, confirmed expiry, then Collect; expired pending rewards are unavailable |
 | Microchip registration | 300 points once per dog in its lifetime | Connected: entered number or proof, then Collect; no certificate validity dates |
@@ -50,18 +51,22 @@ actual product prices; policy changes do not reprice existing menus or orders.
 | Café | 10 minutes |
 | Restaurant | 20 minutes |
 
-The current policy specifies a 20-metre radius and explicit user initiation.
-Authenticated start and location reports verify proximity and dwell on the
-server; gaps over 90 seconds reset progress. A device countdown or existing
-CheckIn row alone is not proof of completion. Physical-device acceptance is
-still pending. The separate social live-location flow does not qualify venue
-dwell or create check-in points.
+Every type uses a 20-metre radius. Authenticated start and sequenced fresh
+location reports verify proximity and dwell on the server. Leaving the circle,
+pausing, unreliable GPS or receipt gaps over 90 seconds clear the timing anchor
+but preserve accumulated verified seconds within that walk. Reentry resumes
+from the next reliable fix. A device countdown or existing CheckIn row alone
+is not proof of completion. Incomplete progress does not carry into a new walk.
+Ready check-ins remain pending until the immutable walk upload succeeds;
+map/Quest collection cannot award them early. Physical acceptance is still
+pending.
 
 ## Task presentation
 
-Owner navigation is Account / Walk / Quest / Venues / Redeem. Friends and
+Owner navigation is Account / Walk / Quest / Redeem. Friends and
 Net-Walking settings open from Account. Walk is the walk/social map and owns the
-sole walk/social location stream; Venues has a separate check-in discovery map.
+sole location stream for walk/social/venue recording. Venue discovery is
+integrated into Walk; no separate Venues tab is required.
 There is no leaderboard tab, endpoint or table in this delivery.
 
 Quest uses compact horizontal avatar/venue rows with detail sheets. READY rows
@@ -213,56 +218,46 @@ available when new awards are disabled.
 
 ## Venue integration
 
-Production dependencies inject `CheckInProgressService` and
-`VenueCheckInService`. The Venues tab uses `CheckInLocationManager` for explicit
-start/resume, location reporting, cancellation and collection. Walk, Quest and
-Venues share `CheckInProgressStore`. Venue IDs are integers; check-in IDs are
-attempt UUIDs and must never be interchanged. APIs are listed in
-[OpenAPI](openapi.yaml).
+Production dependencies inject `WalkVenueCheckInService` and the shared Quest
+progress service. `WalkVenueCheckInStore` consumes Walk's existing Core Location
+updates; it never starts a second hardware stream. Venue IDs are integers,
+check-in attempt IDs and immutable walk request IDs are distinct UUIDs. The
+[OpenAPI](openapi.yaml) defines the context/start/location/pause contracts.
 
-The Venues map returns every active, check-in-enabled place with a complete
-coordinate pair, including several places of the same kind. Once one place in a
-kind starts its daily attempt, the other pins in that kind remain visible but
-become unavailable. A disabled check-in catalogue or less than the full 12-point
-daily allowance likewise leaves pins visible and unavailable rather than
-offering an action the server will reject.
+Walk displays active, check-in-enabled, geocoded parks/vets and eligible partner
+venues. Each venue has its own progress within the current walk. Once a kind's
+daily reward is awarded, every venue of that kind shows collected state. Café
+and restaurant have independent daily quotas but both use the display label
+Partner. Disabled catalogue/full-reward allowance prevents charging while
+keeping venue discovery available. See [the data import](MELBOURNE_VENUES.md).
 
-The server measures continuous dwell from receipt times, with a 90-second
-maximum gap. The client reports fresh precise fixes at most once per 25 seconds
-and displays only server-verified seconds. A long gap or leaving the radius
-resets progress. Background delivery is best effort; a locked phone is not a
-guarantee of qualification. Pending permission/start/report work is cancelled
-on teardown, and late responses cannot replace a newer attempt. An existing
-IN_PROGRESS venue offers Resume after relaunch. The `CheckIn` row stores current
-server-timed progress and the latest fix; it does not build raw location-sample
-history. GPS check-ins do not create walk records or walking points; each
-earning path uses the same ledger/cap.
+The server verifies fresh captured fixes, increasing sequences and bounded
+receipt intervals. Outside/unreliable reports, explicit pauses and long gaps
+clear the timing anchor without resetting verified seconds. Duplicate or old
+fixes add nothing. Reentry begins a new interval; offline/background time is
+never backfilled. The circle uses server progress only and freezes outside or
+when location is unreliable. Reduce Motion disables decorative animation.
+Fresh verified stationary venue dwell prevents the five-minute no-movement
+timeout from cutting off longer café/restaurant visits.
 
-```swift
-func fetchProgress() async throws -> CheckInProgressSnapshot
-func collect(id: String, requestID: UUID) async throws -> CheckInCollectionReceipt
-```
+A dedicated `CheckInWalk` context keeps this evidence independent of opt-in
+social presence. Its immutable request ID follows Finish, deferred dog
+confirmation and retry. Starting a new walk cannot inherit incomplete progress;
+ready evidence survives leaving until its matching walk is settled.
 
-A snapshot supplies at most four daily opportunities with stable IDs, venue
-identity/photo, required and server-verified seconds, reward, state and real
-collection timestamp. It also supplies consistent Melbourne `serverTime` /
-`localDate` and authoritative `earnedPointsToday` from zero to 72.
+The confirmed Walk upload settles eligible completed check-ins atomically after
+walking rewards under the owner wallet lock. One stable category/date ledger
+event prevents duplicate rewards on retry or concurrent submission. Incomplete,
+already rewarded, inactive or full-reward-cap-blocked rows award zero points.
+Only successful credits appear in `check_in_awards`; `check_in_points_awarded` and
+`total_points_awarded` remain separate from `Walk.points_awarded` (walking only).
+No-dog completion remains local and earns zero points.
 
-Below the cap, active opportunities remain visible, including zero verified
-progress. At the cap, active rows hide; today's collected rows remain. Keep
-collected slots in the snapshot so another offer cannot replace them as a fifth
-opportunity. Collection returns the actual item/credit, wallet balance, daily
-activity total and date. The server enforces ownership, qualification, daily
-uniqueness and the full-reward allowance; it never trusts client progress.
-
-Walk, Quest and Venues share one store, serialized collection and stable
-ambiguous-retry request UUIDs. Idempotency is enforced by the attempt and its
-one credit, including concurrent collection through different surfaces.
-Confirmed state/cap cannot be undone by old responses. Previous-day rows hide
-until a fresh snapshot arrives. While Walk, Quest or Venues is foreground,
-shared check-in progress polls every five seconds and stops when inactive;
-Venues also refreshes map availability, and Quest refreshes its list. Neither
-verified progress nor points advance using the device clock.
+Map/Quest collection endpoints cannot award pending walk-linked rewards early.
+Quest displays finish-walk guidance for them. Successful receipt reconciliation
+refreshes wallet, map and Quest; unconfirmed settlement shows processing/retry.
+Previous-day collected rows hide until a fresh server snapshot arrives. Neither
+verified progress nor reward totals advance using the device clock.
 
 ## Validation boundary
 

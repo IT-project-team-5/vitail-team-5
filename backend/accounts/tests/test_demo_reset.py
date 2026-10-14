@@ -22,6 +22,7 @@ from venues.models import Venue
 from dogs.models import Breed, Dog
 from rewards.models import CafeOrderFeedState, PointEntry, Redemption, Reward
 from rewards.services import create_redemption, credit_points, get_balance
+from checkins.models import CheckInWalk
 from walks.models import Walk
 
 
@@ -47,6 +48,9 @@ class DemoResetTests(TestCase):
             point_date=now.date(), distance_m=1000, points_awarded=10,
         )
         cls.walk.dogs.add(cls.dog)
+        CheckInWalk.objects.create(owner=cls.owner, request_id=cls.walk.request_id,
+            started_at=cls.walk.started_at, ended_at=cls.walk.ended_at,
+            state="FINISHED", walk=cls.walk, settled_at=now)
         cls.reward = Reward.objects.create(venue=venue_for(cls.cafe), name="Old Coffee", point_cost=40)
         credit_points(user=cls.owner, amount=100)
         cls.order = create_redemption(owner=cls.owner, reward_id=cls.reward.pk)
@@ -70,7 +74,7 @@ class DemoResetTests(TestCase):
         return {
             model._meta.label: list(model.objects.order_by("pk").values())
             for model in (
-                User, Venue, Breed, Dog, Walk, Walk.dogs.through,
+                User, Venue, Breed, Dog, Walk, Walk.dogs.through, CheckInWalk,
                 Reward, Redemption, PointEntry, CafeOrderFeedState, Session, LogEntry,
             )
         }
@@ -209,7 +213,7 @@ class DemoResetTests(TestCase):
                     self.assertTrue(reward.is_available)
                     self.assertGreaterEqual(reward.point_cost, 40)
                     self.assertLessEqual(reward.point_cost, 180)
-        for model in (Dog, Walk, Walk.dogs.through, Redemption, CafeOrderFeedState, Session, LogEntry):
+        for model in (Dog, Walk, Walk.dogs.through, CheckInWalk, Redemption, CafeOrderFeedState, Session, LogEntry):
             with self.subTest(model=model._meta.label):
                 self.assertEqual(model.objects.count(), 0)
         self.assertEqual(list(Breed.objects.order_by("pk").values()), self.previous_data["dogs.Breed"])

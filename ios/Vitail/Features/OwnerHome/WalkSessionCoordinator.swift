@@ -12,6 +12,7 @@ final class WalkSessionCoordinator: ObservableObject {
     let dogSelection: WalkDogSelectionViewModel
     let history: WalkHistoryStore
     let sync: WalkSyncStore
+    let venueCheckIns: WalkVenueCheckInStore
     var onSocialWalkChanged: ((WalkDraft?, WalkSessionTracker.Status) -> Void)?
     var onSocialLocations: (([CLLocation]) -> Void)?
     var onSocialLocationInterrupted: (() -> Void)?
@@ -43,6 +44,7 @@ final class WalkSessionCoordinator: ObservableObject {
         draftPersistence: (any WalkDraftPersisting)? = nil,
         dogService: (any DogServicing)? = nil,
         walkService: (any WalkServing)? = nil,
+        venueService: (any WalkVenueCheckInServing)? = nil,
         now: @escaping () -> Date = Date.init,
         isForeground: Bool? = nil,
         observeLifecycle: Bool = true
@@ -53,13 +55,27 @@ final class WalkSessionCoordinator: ObservableObject {
         self.draftPersistence = draftPersistence ?? WalkDraftFileStore(ownerID: ownerID, serverURL: serverURL)
         history = WalkHistoryStore(persistence: historyPersistence ?? WalkHistoryFileStore(ownerID: ownerID, serverURL: serverURL))
         sync = WalkSyncStore(history: history, service: walkService)
+        venueCheckIns = WalkVenueCheckInStore(service: venueService ?? DisabledWalkVenueCheckInService(), now: now)
         tracker = WalkSessionTracker(now: now)
         tracker.enforcesRewardLimits = walkService != nil
         dogSelection = WalkDogSelectionViewModel(session: tracker, service: dogService ?? DogService())
         loadDraft()
 
+        let recovered = tracker.makeDraft() ?? pendingFinish
+        venueCheckIns.updateWalk(id: recovered?.id, startedAt: recovered?.startedAt,
+            status: pendingFinish != nil ? .finished : tracker.status)
+        tracker.hasVenueActivity = { [weak venueCheckIns] date in venueCheckIns?.hasVerifiedVenueActivity(at: date) == true }
+        sync.beforeSubmit = { [weak venueCheckIns] request in
+            await venueCheckIns?.prepareForSettlement(request: request) ?? false
+        }
+        venueCheckIns.onTerminalConfirmed = { [weak self] in
+            guard let self, isEnabled, pendingFinish == nil, hasLoadedDraft else { return }
+            canStartNewWalk = true
+        }
+
         self.locationManager.onLocations = { [weak self] locations in
             guard let self else { return }
+            self.venueCheckIns.receiveLocations(locations)
             self.tracker.recordBatch(locations)
             self.onSocialLocations?(locations)
         }
@@ -69,6 +85,7 @@ final class WalkSessionCoordinator: ObservableObject {
             // pause reaches the server. A later location callback is the only
             // event that can make Net-Walking ready again.
             onSocialLocationInterrupted?()
+            venueCheckIns.locationInterrupted()
             if pauseRequired {
                 tracker.pauseForInterruption(message: message)
             } else {
@@ -79,6 +96,8 @@ final class WalkSessionCoordinator: ObservableObject {
             guard let self else { return }
             refreshLocationMode()
             saveCheckpoint()
+            let draft = tracker.makeDraft() ?? pendingFinish
+            venueCheckIns.updateWalk(id: draft?.id, startedAt: draft?.startedAt, status: tracker.status)
             if tracker.enforcesRewardLimits && tracker.status == .walking && tracker.pointCount >= 5000 {
                 tracker.finish()
             }
@@ -143,6 +162,7 @@ final class WalkSessionCoordinator: ObservableObject {
         guard isEnabled else { return }
         isEnabled = false
         sync.stop()
+        venueCheckIns.stop()
         inactivityTimer?.invalidate()
         inactivityTimer = nil
         tracker.pauseForInterruption(message: "Walk paused when you signed out. Tap Resume when ready.")
@@ -300,7 +320,7 @@ final class WalkSessionCoordinator: ObservableObject {
         do {
             try draftPersistence.clear()
             pendingFinish = nil
-            canStartNewWalk = true
+            canStartNewWalk = !venueCheckIns.requiresTerminalConfirmation
             storageErrorMessage = nil
             if isEnabled {
                 Task { [weak self] in await self?.sync.refreshAndUpload() }

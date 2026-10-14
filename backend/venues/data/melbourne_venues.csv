@@ -1,0 +1,7 @@
+source,source_url,name,kind,address,latitude,longitude,verified_url
+osm:node:1747242609,https://www.openstreetmap.org/node/1747242609,Port Melbourne Veterinary Clinic & Hospital,VET,109 Bay Street Port Melbourne VIC 3207,-37.840770,144.940114,https://portmelbournevet.com.au/contact/
+osm:node:6744765533,https://www.openstreetmap.org/node/6744765533,Northcote Animal Hospital,VET,339 High Street Northcote VIC 3070,-37.770513,144.998619,https://www.northcotevet.com.au/find-us/
+osm:node:12418149666,https://www.openstreetmap.org/node/12418149666,Ogawa Vet Clinic,VET,109 Holmes Street Brunswick VIC 3056,-37.756767,144.974719,https://www.ogawavetclinic.com.au/clinic-info
+yarra:browns-reserve,https://www.yarracity.vic.gov.au/things-to-do/parks-reserves-and-playgrounds/browns-reserve,Browns Reserve,PARK,169 Nicholson Street Abbotsford VIC 3067,-37.804044,144.996728,https://www.yarracity.vic.gov.au/things-to-do/parks-reserves-and-playgrounds/browns-reserve
+yarra:cambridge-street-reserve,https://www.yarracity.vic.gov.au/things-to-do/parks-reserves-and-playgrounds/cambridge-street-reserve,Cambridge Street Reserve,PARK,96 Cambridge Street Collingwood VIC 3066,-37.805642,144.985591,https://www.yarracity.vic.gov.au/things-to-do/parks-reserves-and-playgrounds/cambridge-street-reserve
+yarra:gahan-reserve,https://www.yarracity.vic.gov.au/things-to-do/parks-reserves-and-playgrounds/gahan-reserve,Gahan Reserve,PARK,118 Park Street Collingwood VIC 3066,-37.803656,144.995002,https://www.yarracity.vic.gov.au/things-to-do/parks-reserves-and-playgrounds/gahan-reserve

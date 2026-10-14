@@ -160,7 +160,7 @@ class Command(BaseCommand):
     def _delete_account_data():
         # Respect protected foreign keys. DELETE preserves sequences, so a token
         # issued for a removed user cannot acquire a new account with the same ID.
-        from checkins.models import CheckIn
+        from checkins.models import CheckIn, CheckInWalk
         from dogs.models import DogDailyGoal
         from evidence.models import DocumentEntitlement, DocumentSubmission, EvidenceFingerprint
         from quests.models import QuestAward
@@ -171,6 +171,7 @@ class Command(BaseCommand):
         NetWalkInterval.objects.all().delete()
         WalkSession.objects.all().delete()
         CheckIn.objects.all().delete()
+        CheckInWalk.objects.all().delete()
         QuestAward.objects.all().delete()
         EvidenceFingerprint.objects.all().delete()
         DocumentSubmission.objects.all().delete()

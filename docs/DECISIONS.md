@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 8 October 2026. The latest confirmed conversation and
+Current as of 9 October 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -14,6 +14,7 @@ below are retained where other project documents cite them.
 
 | Reference | Decision |
 |---|---|
+| R65 | Venue-Checkin v5 (9 October) supersedes older reset-on-exit and manual venue collection behavior. Check-ins use Walk's GPS stream, preserve verified dwell within the same walk, and settle only with its confirmed upload. Actual venue receipts agree with wallet totals. Each of the four venue kinds has one daily reward under the existing point policy; café/restaurant use the display label Partner. Full 12-point rewards must fit the shared activity cap. Real-phone Vet/Park/Café videos remain an acceptance prerequisite. |
 | R1 / R2 | Melbourne pilot; local partners fund the reward catalogue |
 | R6–R10 | Walks start manually, require accurate GPS, use basic speed/accuracy checks, and stop after the inactivity limit; this is not advanced anti-cheat |
 | R12 / R15 / R16 / R33 | Expiring point credits; order creation deducts once and issues a reference; uncollected orders expire at Melbourne midnight and refund |
@@ -30,17 +31,17 @@ below are retained where other project documents cite them.
 | R47 | Café-first menus; purchase confirmation opens the receipt; collection uses an owner slide gesture |
 | R48 | Latest policy replaces the temporary coffee estimate. It is display guidance only and does not reprice products or old orders |
 | R49 / R50 | Same-page login accordions; persisted appearance selection; the whole Walk drawer scrolls; large receipt photo opens café details; café cards show customer dogs |
-| R51 / R54 | Account / Walk / Quest / Venues / Redeem in the merged app. Leaderboard is outside this team's delivery. Quest is a compact actionable list, not a dashboard of unavailable features |
+| R51 / R54 | Account / Walk / Quest / Redeem in the merged app. Leaderboard is outside this team's delivery. Quest is a compact actionable list, not a dashboard of unavailable features |
 | R52 | Use actual nullable dog birthdays; preserve legacy age-only records; birthday qualification is per dog/year |
 | R53 / R55 | Care rewards are per dog and self-reported. Submission reserves eligibility; explicit Collect credits once. Later spot checks replace up-front approval; audit tooling is separate work |
-| R56 | Up to four daily venue opportunities, one per venue kind. Below the walking/check-in cap active Quest rows remain; at the cap uncollected Quest rows hide. The Venues map still shows configured places as unavailable. Today's collected rows remain below until Melbourne midnight |
+| R56 / R65 | Up to four daily venue rewards, one per kind. Café/restaurant retain separate quotas and use the display label Partner. Below the walking/check-in cap active Quest rows remain; at the cap uncollected Quest rows hide. Today's collected state remains until Melbourne midnight |
 | R57 | Registration Quests are fixed to one dog and document kind. PDF/JPEG/PNG upload is the default, with on-device reading and user confirmation; entered details remain secondary. Council requires council, animal reference and actual expiry. Microchip has no expiry and supports proof-backed older identifiers. Submissions remain self-reported, never automatically verified |
 | R58 / O16 resolved | Microchip registration awards 300 points once per dog in its lifetime. No certificate start/end dates or annual renewal reward. Existing credits and receipts remain unchanged; previous microchip rewards prevent another credit |
 | R59 / O18 resolved | Streak counts valid walking days per account in Melbourne. A missed day breaks the run; each new run can earn seven-day points, then 30/60/90… milestones. One progress bar shows only x / target, stays full until explicit Collect, then advances |
 | R60 (corrected) | Council registration awards 300 points per dog per actual registration period. Renewal opens after the confirmed document expiry, not a fixed 10 April date. Expired/superseded pending rewards disappear and cannot be collected. Unknown legacy expiry requires an evidence update without re-awarding paid points. Historical files, receipts and ledger entries remain private |
 | R61 | Dog settings manages current Council/microchip records, including paid/expired documents. Corrections retain the same entitlement and award zero points. Actual expiry is editable; its maximum confirmed expiry remains the renewal boundary, so edits never advance a reward. Original evidence and receipts remain private and unchanged |
 | R62 | Owners may create a local image card for a completed walk and choose its date, dog names and confirmed points. Routes, coordinates and place details are excluded; the system share sheet is the only distribution path. |
-| R63 | Friends and Net-Walking open from Account; Walk is the walk/social map and supplies the sole walk/social location stream. Venues remains a separate check-in discovery map. Friend sharing and nearby matching are independent, default-off choices. A selectable virtual avatar may replace the profile photo on the social map. Explicit invitation acceptance reveals the exact partner position and enables verified together-distance. Net-Walk wallet points remain disabled and unapproved estimates are absent from UI/API. |
+| R63 / R65 | Friends and Net-Walking open from Account; Walk is the walk/social/venue map and supplies its sole location stream. Venue discovery is integrated into Walk. Friend sharing and nearby matching are independent, default-off choices. A selectable virtual avatar may replace the profile photo on the social map. Explicit invitation acceptance reveals the exact partner position and enables verified together-distance. Net-Walk wallet points remain disabled and unapproved estimates are absent from UI/API. |
 | R64 | Social presence expires after 30 seconds. Raw session samples form a rolling 15-minute verification buffer and are purged by a once-per-minute worker; interval summaries retain distance/time without exposing a route. Leaderboard is outside this team's delivery. |
 
 The database normalizes Venue, keeps one PointEntry ledger and adds specific
