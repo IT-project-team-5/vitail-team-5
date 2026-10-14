@@ -1,9 +1,16 @@
 # Decisions and Open Questions
 
-Current as of 14 October 2026. The latest confirmed conversation and
+Current as of 15 October 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
+
+The 15 October release decision assigns remaining Net-Walking and Leaderboard
+work, and defers social sign-in, password reset, self-service account deletion
+and notifications. Client acknowledgement remains separate. Current owners,
+targets and outstanding policy decisions live in the
+[Decision Log](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/40042497)
+and linked Jira issues.
 
 Earlier Android, SwiftData, memory-only Walk, one-time-only streak, lifetime-only or fixed-calendar
 Council rewards, annual microchip rewards, 60-point coffee and submission-immediately-awards proposals are

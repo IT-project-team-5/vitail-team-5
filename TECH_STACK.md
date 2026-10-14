@@ -198,8 +198,8 @@ match. Physical-device checks remain necessary for GPS, background execution,
 photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
-Remaining release work includes final client acceptance and the applicable
-checks for later changes. Net-Walk earnings, OAuth, password reset/account
+Remaining release work includes the agreed Net-Walking remainder, Leaderboard
+integration, final client acceptance and affected checks for later changes. Net-Walk earnings, OAuth, password reset/account
 deletion, notifications, chat and charity remain outside the current delivered
 flows. Completed-walk image sharing is available. Data structures alone do not
 establish a working feature. See [open decisions](docs/DECISIONS.md).

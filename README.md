@@ -159,6 +159,8 @@ without `--dry-run` to import. Existing venues and accounts are preserved.
 | [Walk integration](docs/WALK_INTEGRATION.md) / [device tests](docs/WALK_TESTING.md) | Recording, confirmation, recovery and acceptance limits |
 | [Friends and Net-Walking](docs/SOCIAL.md) | Consent, live-map behavior, API, retention and disabled wallet reward boundary |
 | [Media](backend/MEDIA.md) / [evidence](backend/evidence/README.md) | Public photos and authenticated private document storage |
+| [Verification](docs/VERIFICATION.md) | Repeatable checks, coverage scope, review and evidence |
+| [Operations](docs/OPERATIONS.md) | Local pilot setup, consistent backup, isolated restore and handover limits |
 
 Each feature owner maintains its UI, API, migrations, tests and relevant docs.
 Do not create a parallel wallet/order model or invent behavior for an open
