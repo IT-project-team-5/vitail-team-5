@@ -7,6 +7,7 @@ struct OwnerHomeView: View {
         case redeem = "Redeem"
         case quest = "Quest"
         case walk = "Walk"
+        case statistics = "Statistics"
         case friends = "Friends"
         case account = "Account"
 
@@ -20,6 +21,8 @@ struct OwnerHomeView: View {
                 return "flag"
             case .walk:
                 return "figure.walk"
+            case .statistics:
+                return "chart.bar.xaxis"
             case .friends:
                 return "person.2"
             case .account:
@@ -35,6 +38,8 @@ struct OwnerHomeView: View {
                 return "flag.fill"
             case .walk:
                 return "figure.walk"
+            case .statistics:
+                return "chart.bar.fill"
             case .friends:
                 return "person.2.fill"
             case .account:
@@ -105,9 +110,13 @@ struct OwnerHomeView: View {
                               })
                         .tag(Page.quest)
                     WalkMapView(coordinator: walkCoordinator,
-                                isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog,
-                                checkIns: checkIns, friends: friends)
+                            isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog,
+                            checkIns: checkIns, friends: friends)
                         .tag(Page.walk)
+
+                    StatisticsView()
+                        .tag(Page.statistics)
+
                     FriendsView(store: friends)
                         .tag(Page.friends)
                     OwnerProfileView(user: user, session: session, dogService: dogService,
