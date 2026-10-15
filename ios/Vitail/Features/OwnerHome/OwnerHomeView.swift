@@ -4,6 +4,7 @@ struct OwnerHomeView: View {
     private enum Page: String, CaseIterable, Identifiable {
         case account = "Account"
         case walk = "Walk"
+        case statistics = "Statistics"
         case redeem = "Redeem"
         case order = "Order"
 
@@ -15,6 +16,8 @@ struct OwnerHomeView: View {
                 return "person.crop.circle"
             case .walk:
                 return "figure.walk"
+            case .statistics:
+                return "chart.bar.xaxis"
             case .redeem:
                 return "gift"
             case .order:
@@ -28,6 +31,8 @@ struct OwnerHomeView: View {
                 return "person.crop.circle.fill"
             case .walk:
                 return "figure.walk"
+            case .statistics:
+                return "chart.bar.fill"
             case .redeem:
                 return "gift.fill"
             case .order:
@@ -55,6 +60,8 @@ struct OwnerHomeView: View {
                         message: "Walk tracking will appear here."
                     )
                     .tag(Page.walk)
+                    StatisticsView()
+                        .tag(Page.statistics)
 
                     RedemptionView(viewModel: redemptionViewModel)
                         .tag(Page.redeem)

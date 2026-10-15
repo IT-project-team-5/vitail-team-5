@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "wallets",
     "redemptions",
     "rewards",
+    "statistics.apps.StatisticsConfig",
 ]
 
 MIDDLEWARE = [
