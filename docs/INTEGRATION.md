@@ -1,6 +1,6 @@
 # Product integration and acceptance
 
-Updated 14 October 2026. This record identifies the combined implementation and
+Updated 16 October 2026. This record identifies the combined implementation and
 the boundaries of its evidence. Current feature requirements and acceptance
 criteria remain in the linked Confluence records; do not duplicate their policy
 here. Exact run results belong in the [Testing evidence index](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/13795332).
@@ -10,6 +10,33 @@ here. Exact run results belong in the [Testing evidence index](https://group5-vi
 | Walk venue check-ins and finish settlement | [Venue Check-in](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35815426), [SCRUM-57](https://group5-vitail-project.atlassian.net/browse/SCRUM-57) | [PR #13](https://github.com/IT-project-team-5/vitail-team-5/pull/13), `031c19fb39ea90e593df03f6f6f3216e3c8d329d` |
 | Owner onboarding, per-dog goals and registration-gated redemption | [Dog Registration / Daily Goal](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35913729), [SCRUM-58](https://group5-vitail-project.atlassian.net/browse/SCRUM-58) | [PR #14](https://github.com/IT-project-team-5/vitail-team-5/pull/14), `dcbcbcb5b7bdfa198463ecd2e6d669d975bc84e5` |
 | Public dog profiles and points-based clothing shop | [Net-Walking](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35684355), [SCRUM-56](https://group5-vitail-project.atlassian.net/browse/SCRUM-56) | [PR #15](https://github.com/IT-project-team-5/vitail-team-5/pull/15), `fb26860f7bb11275f95b86e26a6d17325cd01a35` |
+
+## Local statistics candidate — 16 October
+
+The local integration includes PR16 `abd902d` and Jocelyn's current
+[PR17](https://github.com/IT-project-team-5/vitail-team-5/pull/17), `50e3e1a`.
+Tony's latest published work is already in main through PR15; no newer Tony
+branch was published at this check. No new PR or main merge is part of this
+local device-test preparation.
+
+Statistics and the friends leaderboard open from Friends, preserving the five
+main navigation tabs. The API reads existing validated, completed walks; it
+creates no points or separate activity counters. Daily-goal progress combines
+actual dog participation, capped at each eligible dog's own target.
+
+The candidate leaderboard uses walking minutes over today and the preceding six
+Melbourne calendar days. Accepted friends appear only after opting in, with
+blocked, inactive, deleted and non-owner accounts excluded. Names and public IDs
+are shown; login emails are omitted. The owner's own row remains private when
+sharing is off. Equal exact walking seconds share a competition rank (1, 1, 3).
+The opt-in affects leaderboard sharing independently of location/Net-Walking
+consent. These are reviewable candidate choices under
+[SCRUM-46](https://group5-vitail-project.atlassian.net/browse/SCRUM-46) and
+[SCRUM-63](https://group5-vitail-project.atlassian.net/browse/SCRUM-63), pending
+team/client confirmation. The API contract is in [OpenAPI](openapi.yaml).
+
+Record this candidate's real-device outcome separately from the earlier PR13–15
+completion below. No new phone result is asserted by preparing a build.
 
 ## Acceptance evidence
 

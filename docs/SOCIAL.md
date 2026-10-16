@@ -5,8 +5,8 @@ under the **Friends** tab. Owner navigation is **Redeem / Quest / Walk / Friends
 walk/social map and owns the sole walk/social location stream**: it records the
 route, publishes allowed presence, displays friend/partner pins and hosts
 Net-Walking invitations and venue discovery/check-ins using the same location
-stream. There is
-no duplicate social map or leaderboard page.
+stream. Statistics and the opt-in friends leaderboard open inside Friends;
+there is no second social map. See [candidate integration](INTEGRATION.md).
 
 ## Client meeting 8 October — Net-Walking (Tony)
 
@@ -51,7 +51,8 @@ The owner can use their profile photo or choose one of the supported virtual map
 avatars: walker, paw, dog or coffee. The selected key is part of the public
 social profile and is used consistently in friend rows and Walk map pins.
 
-The Friends page starts with the owner's own map-profile card. Its Edit map
+The Friends page starts with the owner's own map-profile card, followed by
+Statistics & leaderboard. Its Edit map
 profile page saves the appearance explicitly to the authenticated owner's
 server preferences, rather than storing it only on the phone. The dog option
 offers eight dog faces and a cat easter egg. A bandana has four choices: red

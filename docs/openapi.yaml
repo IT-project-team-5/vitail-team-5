@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Vitail connected MVP API
-  version: '2026-10-14'
+  version: '2026-10-16'
   description: >-
     Implemented routes only. JWT authentication is required except register,
     login and refresh. Owner/café roles come from the authenticated account.
@@ -1576,6 +1576,51 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/SocialInvitation'}
         default: {$ref: '#/components/responses/Error'}
+  /api/statistics/:
+    get:
+      summary: Personal validated activity and per-dog goal progress (OWNER)
+      tags: [Statistics]
+      description: Completed validated walks use their Melbourne end date. Goal progress is capped per eligible dog before summing. Reading statistics never awards points. Responses are private, no-store.
+      responses:
+        '200':
+          description: Current personal statistics
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserStatistics'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      summary: Opt into or out of friends leaderboard sharing (OWNER)
+      tags: [Statistics]
+      description: Defaults off. Changes only the authenticated owner's leaderboard visibility, independently of location and Net-Walking consent. Repeating the same choice is safe.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [leaderboard_visible]
+              properties:
+                leaderboard_visible: {type: boolean}
+      responses:
+        '200':
+          description: Saved preference and current personal statistics
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserStatistics'}
+        default: {$ref: '#/components/responses/Error'}
+  /api/statistics/leaderboard/:
+    get:
+      summary: Opted-in accepted friends ranked by validated walking minutes (OWNER)
+      tags: [Statistics]
+      description: Today plus the preceding six Melbourne calendar days. Excludes blocked, inactive, deleted and non-owner friends. The current owner sees their own row even when sharing is off. Equal exact seconds share competition ranks; public IDs provide stable tie ordering. No login email or location is returned. Private, no-store.
+      responses:
+        '200':
+          description: Current friends ranking and personal rank
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FriendsLeaderboard'}
+        default: {$ref: '#/components/responses/Error'}
 components:
   requestBodies:
     CheckInLocation:
@@ -1613,6 +1658,60 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    UserStatistics:
+      type: object
+      required: [today_walking_minutes, today_distance_km, daily_goal_minutes, daily_goal_active_seconds, daily_goal_target_seconds, daily_goal_progress, dog_daily_goals, seven_day_goals, leaderboard_visible]
+      properties:
+        today_walking_minutes: {type: integer, minimum: 0, description: Whole active minutes from validated completed walks today}
+        today_distance_km: {type: number, minimum: 0}
+        daily_goal_minutes: {type: integer, minimum: 0, description: Eligible dogs' target seconds summed and rounded up to minutes}
+        daily_goal_active_seconds: {type: integer, minimum: 0, description: Sum of each eligible dog's progress capped at its own target}
+        daily_goal_target_seconds: {type: integer, minimum: 0}
+        daily_goal_progress: {type: number, minimum: 0, maximum: 1}
+        leaderboard_visible: {type: boolean, default: false}
+        dog_daily_goals:
+          type: array
+          items:
+            type: object
+            required: [dog_id, dog_name, active_seconds, target_seconds, completed]
+            properties:
+              dog_id: {type: integer}
+              dog_name: {type: string}
+              active_seconds: {type: integer, minimum: 0}
+              target_seconds: {type: integer, nullable: true, minimum: 1}
+              completed: {type: boolean}
+        seven_day_goals:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            type: object
+            required: [date, completed]
+            properties:
+              date: {type: string, format: date}
+              completed: {type: boolean, description: All eligible dogs met their own goals that day; false when no goals exist}
+    FriendsLeaderboard:
+      type: object
+      required: [metric, period, unit, start_date, end_date, timezone, my_rank, entries]
+      properties:
+        metric: {type: string, enum: [Walking minutes]}
+        period: {type: string, enum: [Last 7 days]}
+        unit: {type: string, enum: [min]}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        timezone: {type: string, enum: [Australia/Melbourne]}
+        my_rank: {type: integer, nullable: true, minimum: 1}
+        entries:
+          type: array
+          items:
+            type: object
+            required: [public_id, display_name, rank, value, is_current_user]
+            properties:
+              public_id: {type: string}
+              display_name: {type: string}
+              rank: {type: integer, minimum: 1}
+              value: {type: number, minimum: 0, description: Walking minutes to two decimal places; ranking compares exact seconds}
+              is_current_user: {type: boolean}
     CheckInLocationSample:
       type: object
       required: [sequence, recorded_at, latitude, longitude, accuracy_m]

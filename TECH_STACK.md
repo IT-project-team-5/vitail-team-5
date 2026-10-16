@@ -97,8 +97,10 @@ targets share one append-only effective-dated history, and Quest displays the
 seven-day calendar. Social sessions, bounded samples, invitations, verified
 intervals, friendships and blocks support the connected Friends/Net-Walking
 flow. Daily goals now support explicit 20-point per-dog collection under the
-shared account cap. Social sessions do not enable Net-Walk wallet points or a
-leaderboard. Ordinary completed-walk uploads still carry validated route
+shared account cap. Net-Walk wallet points remain disabled. Statistics reads
+validated walks and per-dog goals; the opt-in friends leaderboard reuses existing
+friendships, blocks and account preferences. It adds no ranking table.
+Ordinary completed-walk uploads still carry validated route
 summaries; live social GPS uses its separate short-lived session endpoint.
 
 ## Transactions and retry safety
@@ -198,8 +200,9 @@ match. Physical-device checks remain necessary for GPS, background execution,
 photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
-Remaining release work includes the agreed Net-Walking remainder, Leaderboard
-integration, final client acceptance and affected checks for later changes. Net-Walk earnings, OAuth, password reset/account
+Remaining release work includes the agreed Net-Walking remainder, review and
+physical acceptance of the statistics candidate, final client acceptance and
+affected checks for later changes. Net-Walk earnings, OAuth, password reset/account
 deletion, notifications, chat and charity remain outside the current delivered
 flows. Completed-walk image sharing is available. Data structures alone do not
 establish a working feature. See [open decisions](docs/DECISIONS.md).

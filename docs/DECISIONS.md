@@ -1,6 +1,6 @@
 # Decisions and Open Questions
 
-Current as of 15 October 2026. The latest confirmed conversation and
+Current as of 16 October 2026. The latest confirmed conversation and
 24 September **New Point Retrieval / Calculation** policy supersede conflicting
 older proposals. Canonical reward amounts and delivery status are in
 [QUESTS.md](QUESTS.md); do not duplicate them across overview documents.
@@ -17,6 +17,13 @@ Council rewards, annual microchip rewards, 60-point coffee and submission-immedi
 superseded. Their full history remains in Git. Existing decision identifiers
 below are retained where other project documents cite them. The two independently
 introduced R65 entries are qualified as R65-Venue and R65-Onboarding to avoid ambiguity.
+
+The 16 October local test candidate adds Jocelyn's Statistics and an opt-in
+friends leaderboard inside Friends. Its seven-day walking-time metric and
+privacy defaults are documented in [INTEGRATION.md](INTEGRATION.md) for review;
+preparing the candidate does not establish client approval. Earlier references
+to Leaderboard being outside the Quest team's work describe responsibility,
+not a decision to remove it from the product.
 
 ## Current decisions
 
@@ -39,7 +46,7 @@ introduced R65 entries are qualified as R65-Venue and R65-Onboarding to avoid am
 | R47 | Café-first menus; purchase confirmation opens the receipt; collection uses an owner slide gesture |
 | R48 | Latest policy replaces the temporary coffee estimate. It is display guidance only and does not reprice products or old orders |
 | R49 / R50 | Same-page login accordions; persisted appearance selection; the whole Walk drawer scrolls; large receipt photo opens café details; café cards show customer dogs |
-| R51 / R54 | Redeem / Quest / Walk / Friends / Account in the integrated app. Leaderboard is outside this team's delivery. Quest is a compact actionable list, not a dashboard of unavailable features |
+| R51 / R54 | Redeem / Quest / Walk / Friends / Account in the integrated app. Leaderboard is owned by Jocelyn; its current local integration is described above. Quest is a compact actionable list, not a dashboard of unavailable features |
 | R52 | Use actual nullable dog birthdays; preserve legacy age-only records; birthday qualification is per dog/year |
 | R53 / R55 | Care rewards are per dog and self-reported. Submission reserves eligibility; explicit Collect credits once. Later spot checks replace up-front approval; audit tooling is separate work |
 | R56 / R65-Venue | Up to four daily venue rewards, one per kind. Café/restaurant retain separate quotas and use the display label Partner. Below the walking/check-in cap active Quest rows remain; at the cap uncollected Quest rows hide. Today's collected state remains until Melbourne midnight |
@@ -50,7 +57,7 @@ introduced R65 entries are qualified as R65-Venue and R65-Onboarding to avoid am
 | R61 | Dog settings manages current Council/microchip records, including paid/expired documents. Corrections retain the same entitlement and award zero points. Actual expiry is editable; its maximum confirmed expiry remains the renewal boundary, so edits never advance a reward. Original evidence and receipts remain private and unchanged |
 | R62 | Owners may create a local image card for a completed walk and choose its date, dog names and confirmed points. Routes, coordinates and place details are excluded; the system share sheet is the only distribution path. |
 | R63 / R65-Venue | Friends and Net-Walking open from the Friends tab; Walk is the walk/social/venue map and supplies its sole location stream. Venue discovery is integrated into Walk. Friend sharing and nearby matching are independent, default-off choices. A selectable virtual avatar may replace the profile photo on the social map. Explicit invitation acceptance reveals the exact partner position and enables verified together-distance. Net-Walk wallet points remain disabled and unapproved estimates are absent from UI/API. |
-| R64 | Social presence expires after 30 seconds. Raw session samples form a rolling 15-minute verification buffer and are purged by a once-per-minute worker; interval summaries retain distance/time without exposing a route. Leaderboard is outside this team's delivery. |
+| R64 | Social presence expires after 30 seconds. Raw session samples form a rolling 15-minute verification buffer and are purged by a once-per-minute worker; interval summaries retain distance/time without exposing a route. Leaderboard is owned by Jocelyn; its current local integration is described above. |
 | R65-Onboarding | New owners resume dog/goal setup until explicit completion. Existing accounts default complete. Weight replaces manual size selection; established breed defaults supply internal size. Request UUIDs protect dog and goal retries |
 | R66 | New purchases require accepted microchip registration for every current dog. Collecting document points and mandatory admin approval are not prerequisites. The selected product remains available after completing registration |
 | R67 | Council selection uses real VEC locality/postcode data, supports overlapping postcodes and validates canonical names. Originals remain private; Django Admin supports secure preview/download |
@@ -59,8 +66,8 @@ introduced R65 entries are qualified as R65-Venue and R65-Onboarding to avoid am
 The database normalizes Venue, keeps one PointEntry ledger and adds specific
 daily-goal, check-in, live-location, Net-Walk invitation/interval and friendship
 records. Friends, consented live location and verified together-distance are
-connected; this does not authorize inventing wallet qualification rules or
-claim a leaderboard. The six optional identity/chat/charity/push tables
+connected. The local Statistics candidate reads validated activity for ranking;
+it does not authorize new wallet qualification rules. The six optional identity/chat/charity/push tables
 are deferred. See [database design](database-design-2026-09-25/README.md).
 
 ## Implementation boundaries

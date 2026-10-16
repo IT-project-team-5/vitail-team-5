@@ -116,8 +116,9 @@ The database has a normalized Venue, personalised daily-goal configuration and
 progress, authenticated venue check-ins, and connected Friends/Net-Walking live
 sessions. Raw social GPS is a rolling 15-minute verification buffer cleaned by
 the worker; the API returns only fresh positions and summary distance. The
-social flow does **not** deliver a leaderboard, wallet rewards for Net-Walking,
-chat, notifications or charity donations. See
+local candidate adds personal Statistics and an opt-in friends leaderboard
+inside Friends. Net-Walking wallet rewards remain disabled; chat, notifications
+and charity donations are not implemented. See
 [feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check
