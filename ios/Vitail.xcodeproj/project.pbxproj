@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F61000000000000000000001 /* FriendsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000001 /* FriendsModels.swift */; };
+		F61000000000000000000002 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* FriendsService.swift */; };
+		F61000000000000000000003 /* FriendsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000003 /* FriendsStore.swift */; };
+		F61000000000000000000004 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000004 /* FriendsView.swift */; };
+		F61000000000000000000006 /* DogMapAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000006 /* DogMapAvatarView.swift */; };
+		F61000000000000000000007 /* MapClothingShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000007 /* MapClothingShopView.swift */; };
+		F61000000000000000000008 /* AvatarShopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000008 /* AvatarShopTests.swift */; };
+		F61000000000000000000005 /* FriendsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000005 /* FriendsTests.swift */; };
 		000000000000000000000001 /* VitailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* VitailApp.swift */; };
 		000000000000000000000002 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* RootView.swift */; };
 		000000000000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000003 /* APIClient.swift */; };
@@ -56,11 +64,6 @@
 		000000000000000000000032 /* CafeProductsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000032 /* CafeProductsViewModel.swift */; };
 		000000000000000000000033 /* CafeProductsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000033 /* CafeProductsView.swift */; };
 		000000000000000000000034 /* CafeProductsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000034 /* CafeProductsTests.swift */; };
-		000000000000000000000080 /* ActivityShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000080 /* ActivityShareModels.swift */; };
-		000000000000000000000081 /* DogIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000081 /* DogIllustration.swift */; };
-		000000000000000000000082 /* ActivityShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000082 /* ActivityShareCard.swift */; };
-		000000000000000000000083 /* ActivityShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000083 /* ActivityShareView.swift */; };
-		000000000000000000000084 /* ActivityShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000084 /* ActivityShareTests.swift */; };
 		00000000000000000000E100 /* WalkMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E200 /* WalkMapView.swift */; };
 		00000000000000000000E101 /* WalkDogSelectionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E201 /* WalkDogSelectionViewModel.swift */; };
 		00000000000000000000E102 /* WalkDogSelectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E202 /* WalkDogSelectionCard.swift */; };
@@ -80,10 +83,6 @@
 		00000000000000000000E110 /* WalkMVPIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E210 /* WalkMVPIntegrationTests.swift */; };
 		00000000000000000000E112 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E212 /* Assets.xcassets */; };
 		00000000000000000000E113 /* BrandAppearanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000E213 /* BrandAppearanceTests.swift */; };
-		01CD9DA43081293D00DA9B24 /* StatisticsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */; };
-		01CD9DA53081293D00DA9B24 /* StatisticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA13081293D00DA9B24 /* StatisticsService.swift */; };
-		01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */; };
-		01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA23081293D00DA9B24 /* StatisticsView.swift */; };
 		0AAED6B12652C1880DE3DC82 /* DocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6ECF0F73A9474B166766F7F /* DocumentTests.swift */; };
 		0C8E9474CB798E7B179E0A06 /* QuestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C5A6C711492542BA1C468B /* QuestView.swift */; };
 		18F5C0396BDE66D33BEEAFD6 /* CheckInProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2314C5A5C0FD7092845870F /* CheckInProgressCard.swift */; };
@@ -116,14 +115,16 @@
 		F53000000000000000000002 /* WalkVenueCheckInStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54000000000000000000002 /* WalkVenueCheckInStore.swift */; };
 		F53000000000000000000003 /* WalkVenueViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54000000000000000000003 /* WalkVenueViews.swift */; };
 		F53000000000000000000004 /* WalkVenueCheckInTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54000000000000000000004 /* WalkVenueCheckInTests.swift */; };
-		F61000000000000000000001 /* FriendsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000001 /* FriendsModels.swift */; };
-		F61000000000000000000002 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000002 /* FriendsService.swift */; };
-		F61000000000000000000003 /* FriendsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000003 /* FriendsStore.swift */; };
-		F61000000000000000000004 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000004 /* FriendsView.swift */; };
-		F61000000000000000000005 /* FriendsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000005 /* FriendsTests.swift */; };
-		F61000000000000000000006 /* DogMapAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000006 /* DogMapAvatarView.swift */; };
-		F61000000000000000000007 /* MapClothingShopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000007 /* MapClothingShopView.swift */; };
-		F61000000000000000000008 /* AvatarShopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60000000000000000000008 /* AvatarShopTests.swift */; };
+		000000000000000000000080 /* ActivityShareModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000080 /* ActivityShareModels.swift */; };
+		000000000000000000000081 /* DogIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000081 /* DogIllustration.swift */; };
+		000000000000000000000082 /* ActivityShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000082 /* ActivityShareCard.swift */; };
+		000000000000000000000083 /* ActivityShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000083 /* ActivityShareView.swift */; };
+		000000000000000000000084 /* ActivityShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000084 /* ActivityShareTests.swift */; };
+		01CD9DA43081293D00DA9B24 /* StatisticsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */; };
+		01CD9DA53081293D00DA9B24 /* StatisticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA13081293D00DA9B24 /* StatisticsService.swift */; };
+		01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */; };
+		01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA23081293D00DA9B24 /* StatisticsView.swift */; };
+		E72026101600000000000011 /* StatisticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026101600000000000001 /* StatisticsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -154,12 +155,16 @@
 		00000000000000000000E20E /* WalkBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkBackgroundTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E20F /* WalkSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkSessionCoordinatorTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E210 /* WalkMVPIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkMVPIntegrationTests.swift; sourceTree = "<group>"; };
+		F60000000000000000000001 /* FriendsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsModels.swift; sourceTree = "<group>"; };
+		F60000000000000000000002 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
+		F60000000000000000000003 /* FriendsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsStore.swift; sourceTree = "<group>"; };
+		F60000000000000000000004 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
+		F60000000000000000000006 /* DogMapAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogMapAvatarView.swift; sourceTree = "<group>"; };
+		F60000000000000000000007 /* MapClothingShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapClothingShopView.swift; sourceTree = "<group>"; };
+		F60000000000000000000008 /* AvatarShopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopTests.swift; sourceTree = "<group>"; };
+		F60000000000000000000005 /* FriendsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsTests.swift; sourceTree = "<group>"; };
 		00000000000000000000E212 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		00000000000000000000E213 /* BrandAppearanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandAppearanceTests.swift; sourceTree = "<group>"; };
-		01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StatisticsModels.swift; path = Vitail/Features/Statistics/StatisticsModels.swift; sourceTree = "<group>"; };
-		01CD9DA13081293D00DA9B24 /* StatisticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StatisticsService.swift; path = Vitail/Features/Statistics/StatisticsService.swift; sourceTree = "<group>"; };
-		01CD9DA23081293D00DA9B24 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StatisticsView.swift; path = Vitail/Features/Statistics/StatisticsView.swift; sourceTree = "<group>"; };
-		01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StatisticsViewModel.swift; path = Vitail/Features/Statistics/StatisticsViewModel.swift; sourceTree = "<group>"; };
 		020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInProgressTests.swift; sourceTree = "<group>"; };
 		0CE610A3A25D0A51379BA41C /* DocumentSubmissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSubmissionView.swift; sourceTree = "<group>"; };
 		100000000000000000000001 /* VitailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitailApp.swift; sourceTree = "<group>"; };
@@ -211,11 +216,6 @@
 		100000000000000000000032 /* CafeProductsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsViewModel.swift; sourceTree = "<group>"; };
 		100000000000000000000033 /* CafeProductsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsView.swift; sourceTree = "<group>"; };
 		100000000000000000000034 /* CafeProductsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CafeProductsTests.swift; sourceTree = "<group>"; };
-		100000000000000000000080 /* ActivityShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareModels.swift; sourceTree = "<group>"; };
-		100000000000000000000081 /* DogIllustration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogIllustration.swift; sourceTree = "<group>"; };
-		100000000000000000000082 /* ActivityShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareCard.swift; sourceTree = "<group>"; };
-		100000000000000000000083 /* ActivityShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareView.swift; sourceTree = "<group>"; };
-		100000000000000000000084 /* ActivityShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareTests.swift; sourceTree = "<group>"; };
 		110000000000000000000001 /* Vitail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vitail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		110000000000000000000002 /* VitailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		120000000000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -242,6 +242,7 @@
 		F20000000000000000000002 /* DogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDetailView.swift; sourceTree = "<group>"; };
 		F20000000000000000000003 /* AvatarProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarProfileTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000004 /* SlideToCollect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlideToCollect.swift; sourceTree = "<group>"; };
+		F6ECF0F73A9474B166766F7F /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
 		F50000000000000000000001 /* VenueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueModels.swift; sourceTree = "<group>"; };
 		F50000000000000000000002 /* VenueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VenueService.swift; sourceTree = "<group>"; };
 		F50000000000000000000003 /* CheckInLocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInLocationManager.swift; sourceTree = "<group>"; };
@@ -253,15 +254,16 @@
 		F54000000000000000000002 /* WalkVenueCheckInStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkVenueCheckInStore.swift; sourceTree = "<group>"; };
 		F54000000000000000000003 /* WalkVenueViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkVenueViews.swift; sourceTree = "<group>"; };
 		F54000000000000000000004 /* WalkVenueCheckInTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkVenueCheckInTests.swift; sourceTree = "<group>"; };
-		F60000000000000000000001 /* FriendsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsModels.swift; sourceTree = "<group>"; };
-		F60000000000000000000002 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
-		F60000000000000000000003 /* FriendsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsStore.swift; sourceTree = "<group>"; };
-		F60000000000000000000004 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
-		F60000000000000000000005 /* FriendsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsTests.swift; sourceTree = "<group>"; };
-		F60000000000000000000006 /* DogMapAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogMapAvatarView.swift; sourceTree = "<group>"; };
-		F60000000000000000000007 /* MapClothingShopView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapClothingShopView.swift; sourceTree = "<group>"; };
-		F60000000000000000000008 /* AvatarShopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarShopTests.swift; sourceTree = "<group>"; };
-		F6ECF0F73A9474B166766F7F /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
+		100000000000000000000080 /* ActivityShareModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareModels.swift; sourceTree = "<group>"; };
+		100000000000000000000081 /* DogIllustration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogIllustration.swift; sourceTree = "<group>"; };
+		100000000000000000000082 /* ActivityShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareCard.swift; sourceTree = "<group>"; };
+		100000000000000000000083 /* ActivityShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareView.swift; sourceTree = "<group>"; };
+		100000000000000000000084 /* ActivityShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareTests.swift; sourceTree = "<group>"; };
+		01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsModels.swift; sourceTree = "<group>"; };
+		01CD9DA13081293D00DA9B24 /* StatisticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsService.swift; sourceTree = "<group>"; };
+		01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsViewModel.swift; sourceTree = "<group>"; };
+		01CD9DA23081293D00DA9B24 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
+		E72026101600000000000001 /* StatisticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -285,10 +287,6 @@
 		200000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */,
-				01CD9DA13081293D00DA9B24 /* StatisticsService.swift */,
-				01CD9DA23081293D00DA9B24 /* StatisticsView.swift */,
-				01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */,
 				202000000000000000000001 /* Config */,
 				203000000000000000000001 /* Vitail */,
 				20E000000000000000000001 /* VitailTests */,
@@ -392,6 +390,7 @@
 		20A000000000000000000001 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				E72026101600000000000021 /* Statistics */,
 				F62000000000000000000001 /* Friends */,
 				222CA46EF530402A1EFB0C1D /* Documents */,
 				58A8F78977627F369AF92B94 /* CheckIn */,
@@ -452,6 +451,7 @@
 		20E000000000000000000001 /* VitailTests */ = {
 			isa = PBXGroup;
 			children = (
+				E72026101600000000000001 /* StatisticsTests.swift */,
 				F60000000000000000000005 /* FriendsTests.swift */,
 				F60000000000000000000008 /* AvatarShopTests.swift */,
 				88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */,
@@ -548,6 +548,19 @@
 			path = CafeProducts;
 			sourceTree = "<group>";
 		};
+		F62000000000000000000001 /* Friends */ = {
+			isa = PBXGroup;
+			children = (
+				F60000000000000000000001 /* FriendsModels.swift */,
+				F60000000000000000000002 /* FriendsService.swift */,
+				F60000000000000000000003 /* FriendsStore.swift */,
+				F60000000000000000000004 /* FriendsView.swift */,
+				F60000000000000000000006 /* DogMapAvatarView.swift */,
+				F60000000000000000000007 /* MapClothingShopView.swift */,
+			);
+			path = Friends;
+			sourceTree = "<group>";
+		};
 		216000000000000000000001 /* Sharing */ = {
 			isa = PBXGroup;
 			children = (
@@ -557,6 +570,22 @@
 				100000000000000000000083 /* ActivityShareView.swift */,
 			);
 			path = Sharing;
+			sourceTree = "<group>";
+		};
+
+		F52000000000000000000001 /* Venues */ = {
+			isa = PBXGroup;
+			children = (
+				F50000000000000000000001 /* VenueModels.swift */,
+				F50000000000000000000002 /* VenueService.swift */,
+				F50000000000000000000003 /* CheckInLocationManager.swift */,
+				F50000000000000000000004 /* VenuesViewModel.swift */,
+				F50000000000000000000005 /* VenuesView.swift */,
+				F54000000000000000000001 /* WalkVenueCheckInService.swift */,
+				F54000000000000000000002 /* WalkVenueCheckInStore.swift */,
+				F54000000000000000000003 /* WalkVenueViews.swift */,
+			);
+			path = Venues;
 			sourceTree = "<group>";
 		};
 		222CA46EF530402A1EFB0C1D /* Documents */ = {
@@ -593,32 +622,15 @@
 			path = Quest;
 			sourceTree = "<group>";
 		};
-		F52000000000000000000001 /* Venues */ = {
+		E72026101600000000000021 /* Statistics */ = {
 			isa = PBXGroup;
 			children = (
-				F50000000000000000000001 /* VenueModels.swift */,
-				F50000000000000000000002 /* VenueService.swift */,
-				F50000000000000000000003 /* CheckInLocationManager.swift */,
-				F50000000000000000000004 /* VenuesViewModel.swift */,
-				F50000000000000000000005 /* VenuesView.swift */,
-				F54000000000000000000001 /* WalkVenueCheckInService.swift */,
-				F54000000000000000000002 /* WalkVenueCheckInStore.swift */,
-				F54000000000000000000003 /* WalkVenueViews.swift */,
+				01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */,
+				01CD9DA13081293D00DA9B24 /* StatisticsService.swift */,
+				01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */,
+				01CD9DA23081293D00DA9B24 /* StatisticsView.swift */,
 			);
-			path = Venues;
-			sourceTree = "<group>";
-		};
-		F62000000000000000000001 /* Friends */ = {
-			isa = PBXGroup;
-			children = (
-				F60000000000000000000001 /* FriendsModels.swift */,
-				F60000000000000000000002 /* FriendsService.swift */,
-				F60000000000000000000003 /* FriendsStore.swift */,
-				F60000000000000000000004 /* FriendsView.swift */,
-				F60000000000000000000006 /* DogMapAvatarView.swift */,
-				F60000000000000000000007 /* MapClothingShopView.swift */,
-			);
-			path = Friends;
+			path = Statistics;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -720,6 +732,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				01CD9DA43081293D00DA9B24 /* StatisticsModels.swift in Sources */,
+				01CD9DA53081293D00DA9B24 /* StatisticsService.swift in Sources */,
+				01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */,
+				01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */,
 				F61000000000000000000001 /* FriendsModels.swift in Sources */,
 				F61000000000000000000002 /* FriendsService.swift in Sources */,
 				F61000000000000000000003 /* FriendsStore.swift in Sources */,
@@ -739,10 +755,6 @@
 				F53000000000000000000001 /* WalkVenueCheckInService.swift in Sources */,
 				F53000000000000000000002 /* WalkVenueCheckInStore.swift in Sources */,
 				F53000000000000000000003 /* WalkVenueViews.swift in Sources */,
-				01CD9DA43081293D00DA9B24 /* StatisticsModels.swift in Sources */,
-				01CD9DA53081293D00DA9B24 /* StatisticsService.swift in Sources */,
-				01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */,
-				01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */,
 				6183F0943A9D16686636D2F4 /* DocumentViewModel.swift in Sources */,
 				D9C29929901701A969EE6D1B /* DocumentSubmissionView.swift in Sources */,
 				7FD30FB8769D56350BFCE302 /* DocumentService.swift in Sources */,
@@ -815,6 +827,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E72026101600000000000011 /* StatisticsTests.swift in Sources */,
 				F61000000000000000000005 /* FriendsTests.swift in Sources */,
 				F61000000000000000000008 /* AvatarShopTests.swift in Sources */,
 				000000000000000000000084 /* ActivityShareTests.swift in Sources */,
