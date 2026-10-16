@@ -5,8 +5,8 @@ under the **Friends** tab. Owner navigation is **Redeem / Quest / Walk / Friends
 walk/social map and owns the sole walk/social location stream**: it records the
 route, publishes allowed presence, displays friend/partner pins and hosts
 Net-Walking invitations and venue discovery/check-ins using the same location
-stream. There is
-no duplicate social map or leaderboard page.
+stream. Statistics and the opt-in friends leaderboard open inside Friends;
+there is no second social map. See [candidate integration](INTEGRATION.md).
 
 ## Client meeting 8 October — Net-Walking (Tony)
 
@@ -51,7 +51,8 @@ The owner can use their profile photo or choose one of the supported virtual map
 avatars: walker, paw, dog or coffee. The selected key is part of the public
 social profile and is used consistently in friend rows and Walk map pins.
 
-The Friends page starts with the owner's own map-profile card. Its Edit map
+The Friends page starts with the owner's own map-profile card, followed by
+Statistics & leaderboard. Its Edit map
 profile page saves the appearance explicitly to the authenticated owner's
 server preferences, rather than storing it only on the phone. The dog option
 offers eight dog faces and a cat easter egg. A bandana has four choices: red
@@ -105,12 +106,10 @@ bandana colour, public dog choice or location consent.
 Apply account migration `0007_user_public_dog` and social migration
 `0005_avatar_shop` before deploying this client. Old clients ignore the new
 profile fields; newer clients display hidden dog/plain clothing fallbacks when
-those fields are absent, but need the updated server to save/buy. These changes
-have branch-local validation. Chien confirmed physical testing of already-passed
-PRs on 14 October; integrated regression remains a separate record in
-[INTEGRATION.md](INTEGRATION.md).
+those fields are absent, but need the updated server to save/buy. We completed real-phone testing for the merged PRs 13–15 and record combined
+regression separately in [INTEGRATION.md](INTEGRATION.md).
 
-Historical PR #15 author-reported validation on 14 October (head `fb26860`): the full iOS suite passed 404 tests with one
+PR #15's original validation record, 14 October (head `fb26860`): the full iOS suite passed 404 tests with one
 existing simulator device-lock check skipped, and the additional clothing
 snapshot test passed across light/dark and large-text variants. The MySQL
 social/rewards/Demo-reset suite passed all 175 tests, including shop concurrency.
@@ -264,7 +263,7 @@ backend to verify:
    guidance, including no designation for no bandana. Reject unknown API values.
    Disconnect while saving, retry after reconnecting, and verify no success is
    claimed before confirmation. Neither appearance editing nor its retry may
-   silently enable location sharing. Physical two-phone results remain pending.
+   silently enable location sharing. Record the two-phone observations for the tested build.
 9. Choose a public dog, save, refresh the other phone's search/friend/map detail
    and check the four-field summary. Clear it and verify an open detail updates;
    archive/transfer/delete must suppress it. Check that other dogs and private

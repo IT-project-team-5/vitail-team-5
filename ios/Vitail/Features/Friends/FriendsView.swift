@@ -2,13 +2,22 @@ import SwiftUI
 
 struct FriendsView: View {
     @ObservedObject var store: FriendsStore
+    @ObservedObject var session: SessionStore
     @State private var pendingRemoval: SocialProfile?
     @State private var pendingBlock: SocialProfile?
 
     var body: some View {
         List {
+            if let profile = store.overview?.me.profile { myProfileSection(profile) }
+            Section {
+                NavigationLink {
+                    StatisticsView(ownerID: store.ownerID, session: session)
+                } label: {
+                    Label("Statistics & leaderboard", systemImage: "chart.bar.xaxis")
+                }
+                .accessibilityIdentifier("friends-statistics-link")
+            }
             if let overview = store.overview {
-                myProfileSection(overview.me.profile)
                 friendsSection(overview)
                 settingsSection
             } else if store.isRefreshing {

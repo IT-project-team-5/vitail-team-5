@@ -67,20 +67,6 @@ struct CafeRewardGroup: Identifiable {
     }
 }
 
-enum CoffeeEstimate {
-    // A wallet comparison only; each café controls its actual menu prices.
-    static let pointsPerCup = 504
-
-    static var accessibilityHint: String {
-        "Estimate based on \(pointsPerCup) points per cup. Menu prices vary."
-    }
-
-    static func text(for points: Int) -> String {
-        let cups = (Double(max(0, points)) / Double(pointsPerCup) * 10).rounded() / 10
-        return "≈ \(cups.formatted(.number.precision(.fractionLength(0...1)))) \(cups == 1 ? "cup" : "cups") of coffee"
-    }
-}
-
 enum CollectionDeadline {
     // The café pilot's collection window ends at Melbourne midnight. Use
     // calendar days so daylight-saving changes do not move the displayed cutoff.

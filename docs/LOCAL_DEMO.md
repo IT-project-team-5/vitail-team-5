@@ -31,8 +31,8 @@ and sessions. Breed reference data and
 schema migrations remain. Account ID sequences are preserved so old tokens and
 local route archives cannot become another user's data.
 
-1. Confirm that Compose points to the intended **local** database. Stop the API
-   and expiry worker so nothing writes during the reset; leave MySQL running.
+1. Confirm that Compose points to the intended **local** database. Stop `api`,
+   `expiry` and `social_presence` so no service writes during the reset; leave MySQL running.
 2. Take and verify a private SQL backup of that database.
 3. Create `backend/.local-demo/` and run the command in a one-off API container.
    Replace the database name below if the verified local configuration differs;
@@ -48,7 +48,8 @@ local route archives cannot become another user's data.
    prevents the reset. `--owner-points` accepts 1 through 1,000,000. All deletions
    and creations share a transaction; failure to save credentials rolls it back.
 4. Verify five users, three populated and geocoded Venues, fifteen available products,
-   the owner's balance, and an empty order/walk history. Restart API and expiry.
+   the owner's balance, and an empty order/walk history. Restart `api`, `expiry`
+   and `social_presence`.
 5. Sign out of any old iOS session, then sign in with the generated credentials.
    The admin uses the web admin; the owner and cafés use the iOS app.
 

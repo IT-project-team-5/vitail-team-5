@@ -28,3 +28,7 @@ ios/Config/Local.xcconfig
 # Uploaded profile and dog photos
 backend/media/
 backend/private_uploads/
+
+# Local verification results (publish through the shared evidence index)
+test-results/
+backend/.coverage

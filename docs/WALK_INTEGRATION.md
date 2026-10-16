@@ -136,7 +136,7 @@ Social tests cover default-off privacy, friendship/block permissions, stale
 presence, invitations, exact versus approximate map positions and repeat-safe
 together-distance. They do not certify field GPS accuracy.
 
-Real iPhone acceptance still needs lock-screen capture, paused movement,
+For later affected builds, real-iPhone checks cover lock-screen capture, paused movement,
 permission changes, active recovery, pending-summary recovery, offline confirmed
 completion/retry, logout without an award, and zero-dog completion. A connected
 happy path is Start → Pause → Finish → choose dogs → Complete walk → inspect
@@ -144,7 +144,7 @@ receipt and Redeem balance → purchase → collect. Follow `WALK_TESTING.md` an
 record the current build/device results without treating simulator tests as
 physical GPS acceptance.
 
-Social field acceptance additionally requires two real owner accounts and two
+Social field checks use two real owner accounts and two
 iPhones: verify default-off invisibility, friend-only sharing, nearby discovery,
 invitation consent, partner position, together-distance, background behavior and
 prompt disappearance after pause/finish/disable/block/network loss.

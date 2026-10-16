@@ -204,10 +204,9 @@ Foregrounding, polling, retry and account teardown reuse the existing stores.
 
 ## Migration and verification
 
-The integrated implementation must be verified in backend and iOS suites before
-merge. Chien confirmed physical testing of already-passed PRs on 14 October;
-see [integration evidence](INTEGRATION.md). The commands below remain reproducible;
-historical test counts are not a result for a later candidate.
+We verify goal changes in the backend and iOS suites before merge. Real-phone
+testing of the merged PRs 13–15 is complete; see [integration evidence](INTEGRATION.md).
+Use the commands below for each changed build and save its own results.
 
 `dogs.0005_doggoaltarget` adds only the target revision table, foreign keys and
 positive-target/identity and dog/effective-date uniqueness constraints. Existing

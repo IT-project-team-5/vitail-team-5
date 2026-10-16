@@ -1,111 +1,93 @@
-# 墨爾本寵物登記：流程、提交方式與辨識邊界
+# Pet registration evidence in Melbourne
 
-流程查證：2026-09-25；實作決策更新：2026-09-27。登記 Quest 預設「上傳證明」，讀取後核對／補正資料；「填資料」保留為次要途徑。提交為 self-reported，符合當期資格才可 Collect；不做事前人工審查或宣稱官方驗證。
+Research checked 25 September 2026; implementation decisions updated 27 September. English editorial revision: 15 October. This records the research and decisions at those dates; current reward rules are maintained in [QUESTS.md](QUESTS.md).
 
-## 先釐清兩種登記
+Registration Quests default to **Upload proof**. The app reads available text, then asks the owner to check or complete the details. **Enter details** is a secondary option. Submissions are self-reported: collecting a reward does not certify government registration or document authenticity.
 
-| 項目 | Council registration | Microchip registration |
+## The two registrations
+
+| | Council registration | Microchip registration |
 |---|---|---|
-| 管理者 | 狗居住地址所屬的 local council | 維州核准的 microchip registry |
-| 用途 | 地方政府的寵物登記 | 晶片號碼與寵物／聯絡人資料連結 |
-| 時間 | 維州三個月大起須登記，既有登記每年 4 月 10 日前續期 | 晶片與基本登記是終身識別；資料變更時需更新 |
-| 初次辦理 | 先植入晶片，再向所屬 council 申請 | 找獸醫／合法 implanter 植入並登錄 |
-| 文件 | Council 核發的登記確認／相關當期文件 | Registry 的 certificate of identification／registration |
+| Responsible organisation | The local council where the dog lives | An approved Victorian microchip registry |
+| Purpose | Register the pet with local government | Link the chip number to the pet and contact details |
+| Timing | Required from three months of age; existing registrations renew annually by 10 April | Basic registration identifies the pet for life; update contact details when they change |
+| First application | Microchip the dog, then apply to the local council | A vet or authorised implanter inserts the chip and arranges registration |
+| Completed evidence | Council registration confirmation or current registration record | Registry identification or registration certificate |
 
-依據：[Agriculture Victoria：Council registration](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/dog-and-cat-registration/pet-registration-benefits)、[Microchipping](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/microchipping-of-dogs-and-cats)。Council 與 registry 的地址／聯絡資料也需要各自更新，見[登記與搬家說明](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/dog-and-cat-registration/dog-and-cat-registration-fees)。
+Sources: [Agriculture Victoria — registration](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/dog-and-cat-registration/pet-registration-benefits), [microchipping](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/microchipping-of-dogs-and-cats), and [registration and moving address](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/dog-and-cat-registration/dog-and-cat-registration-fees). Council and registry contact details must be updated separately.
 
-**Microchip 不要求證書年度起訖。** 舊介面的這項要求與實際流程不符，已移除。 [CAR 官方 FAQ](https://car.com.au/apps/help-center) 說明基本登記一次付費、終身有效；不應把額外付費服務或 registry 公司牌照的續期當成每隻狗的證書期限。[維州 registry 規定](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/domestic-animal-microchip-registries)要求保留動物一生或首次建檔後 30 年，取較長。
+Microchip certificates do not need annual start/end dates. [CAR's FAQ](https://car.com.au/apps/help-center) describes basic registration as a one-time payment for life. Paid extras and a registry company's licence renewal are separate. [Victorian registry rules](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/domestic-animal-microchip-registries) require records for the animal's life or 30 years after first registration, whichever is longer.
 
-Council 文件的期間也不能推定為申請日起剛好 12 個月。例如 [Port Phillip](https://www.portphillip.vic.gov.au/council-services/pets-and-animals/pet-registration)有指定登記年度及接近年度末首次登記的安排。
+Council registration is not necessarily twelve months from application. [Port Phillip](https://www.portphillip.vic.gov.au/council-services/pets-and-animals/pet-registration), for example, specifies a registration year and arrangements for late-year first registrations. The app uses the confirmed expiry printed on the evidence, not an assumed annual date.
 
-## 已確認的提交方式
+## Submission requirements
 
-每頁固定綁定 `dogID + documentKind`，標題沿用 Quest 名稱；不同狗各自一個 Quest，不再選狗或文件種類。
+Each Quest belongs to one dog and one document type; owners do not switch these within the form.
 
-1. 上方教學分「已有登記，去哪找」和「還沒登記，去哪辦」，附官方連結。
-2. 下方預設 **Upload proof**，選檔即讀取；**Enter details** 為次要方式。
-3. Council 保存 Council 名稱、Animal ID／Registration number、文件實際到期日 `valid_to`。讀取後核對或手填，不再用年份選單或固定 4/10 推算刷新。到期日含當天，墨爾本隔日零時才能開始下一期。
-4. Microchip 手填：通常為 15 位 ASCII 數字；清除空格／連字號，保留開頭 0，不限制必須以 9 開頭。舊／海外等其他格式走上傳證明途徑。
-5. 上傳接受 PDF、JPEG、PNG（含照片、截圖），自動填入能明確讀到的欄位，使用者核對並補齊缺漏。Council 必須確認 Council、號碼、到期日；Microchip 確認晶片號碼，Registry 可選。限制為 4 MiB；PDF 1–20 頁且未加密，圖片最多 16 MP。
-6. 顯示此狗／此類型的提交與領取狀態，不列整個帳號的歷史或重複政策說明。Vet 保留就診日期＋照片。
+| Evidence | Details to confirm |
+|---|---|
+| Council | Council name, Animal ID/registration number and actual expiry date (`valid_to`). Valid through that day; renewal opens at midnight the next day in Melbourne. |
+| Microchip | Chip number; registry is optional. Manual entry accepts 15 ASCII digits, removes spaces/hyphens, preserves leading zeroes and does not require a leading 9. Older or overseas formats use supporting proof. No expiry is required. |
+| Vet visit | Actual visit date and photo. |
 
-Council 編號沒有墨爾本統一格式：[Greater Dandenong](https://www.greaterdandenong.vic.gov.au/pets-and-animals/renew-your-pet-registration) 明確使用 1–5 位 Animal number；[Hume](https://www.hume.vic.gov.au/Residents/Pets-and-Animals/Register-Your-Pet) 要求 Animal ID，不能填 Tag number。手填保存字母、數字、空格、連字號；不套用通用位數規則。
+Accept PDF, JPEG and PNG, including photos and screenshots. Limits: 4 MiB; unencrypted PDFs of 1–20 pages; images up to 16 megapixels. Fill only clearly identified fields, then require owner confirmation and missing details. Show the current dog's submission and collection status, without an account-wide history in the form.
 
-正式證明包括 Council 當年度有效登記證書／正式完成 Email，以及 registry 的 Registration／Identification Certificate。申請表、待付款通知、待處理畫面不能當作完成證明；這是教學與日後抽查標準。讀取器可提供文件類型警示與欄位建議，但不驗證真偽或政府資料庫狀態。
+Council numbers have no Melbourne-wide format. [Greater Dandenong](https://www.greaterdandenong.vic.gov.au/pets-and-animals/renew-your-pet-registration) uses a 1–5 digit Animal number; [Hume](https://www.hume.vic.gov.au/Residents/Pets-and-Animals/Register-Your-Pet) asks for Animal ID rather than tag number. Preserve letters, digits, spaces and hyphens instead of imposing one length rule.
 
-## Council tutorial 草稿
+Completed evidence includes a current council certificate or official completion email, and a registry identification/registration certificate. Applications, unpaid notices and processing screens do not establish completion. These are tutorial and later spot-check criteria; the reader cannot verify the issuer's database.
 
-**Already registered?**
+## Council tutorial
 
-Check the registration confirmation or renewal paperwork from your local council. If you cannot find your pet's registration details, ask that council for a copy. Upload the completed-registration proof, then check your council, animal registration number and the expiry date printed on it. You can also enter these details yourself.
+**Already registered?** Find the registration confirmation or renewal paperwork from your local council. Request a copy if it is missing. Upload completed-registration proof, then check the council, registration number and printed expiry. You can also enter these details yourself.
 
-**Not registered yet?**
+**Not registered yet?** Have your dog microchipped, then apply through the council where the dog lives. Prepare the microchip details and supporting documents. Upload confirmation after registration is complete.
 
-Make sure your dog is microchipped, then apply through the council where your dog lives. Have your microchip details and any supporting documents ready. Upload the confirmation once registration is complete.
+- City of Melbourne: [eServices → Pet Registration](https://eservices.melbourne.vic.gov.au/ePathway/Production/Web/Default.aspx), with application/contact information through [government ABLIS](https://ablis.business.gov.au/service/vic/registration-of-cats-and-dogs-city-of-melbourne/28570).
+- Elsewhere: [find the council for your address](https://www.vec.vic.gov.au/electoral-boundaries/which-boundaries-cover-where-i-live), then use its pet-registration service.
+- Completion varies: [Yarra](https://www.yarracity.vic.gov.au/residents/pets-and-animals/register-your-pet) distinguishes submission/payment acknowledgement from the issued certificate; [Melton](https://www.melton.vic.gov.au/Regulations/Animals) accepts its official completion email without waiting for the tag.
 
-- City of Melbourne 居民：[官方 eServices](https://eservices.melbourne.vic.gov.au/ePathway/Production/Web/Default.aspx) → Pet Registration。
-- [政府 ABLIS 登記／聯絡入口](https://ablis.business.gov.au/service/vic/registration-of-cats-and-dogs-city-of-melbourne/28570)：含申請連結及 City of Melbourne Animal Management 聯絡資料。
-- 其他地區：[VEC 地址與 Council 查詢](https://www.vec.vic.gov.au/electoral-boundaries/which-boundaries-cover-where-i-live)，再進所屬 Council 的寵物登記頁。
+Do not send all Greater Melbourne residents to one council. Documents may contain tag, payment, reference and chip numbers; the first number is not necessarily the registration number. The [older City of Melbourne form](https://mvga-prod-files.s3.ap-southeast-4.amazonaws.com/public/2024-07/Pet-registration-form-2024-25.pdf) separates tag and reference fields. It is a field-layout example, not a source for current fees.
 
-教學不能把所有 Greater Melbourne 使用者導到同一 Council。Council 的 tag number、reference number、付款參考及 microchip number 可能同時出現在文件上，不能靠抓第一串數字認定是登記號碼。現有 City of Melbourne 表格也把 tag number 和 reference number 分列，見[官方表格](https://mvga-prod-files.s3.ap-southeast-4.amazonaws.com/public/2024-07/Pet-registration-form-2024-25.pdf)（舊年度樣式僅用來理解欄位，不引用舊費率）。
+## Microchip tutorial
 
-[Yarra 官方流程](https://www.yarracity.vic.gov.au/residents/pets-and-animals/register-your-pet) 明確區分送件付款確認與登記完成後核發證書；[Melton](https://www.melton.vic.gov.au/Regulations/Animals) 的正式完成 Email 也可作為登記證明，不必等實體狗牌寄達。
+**Already microchipped?** Find the number in your pet records. Use [Pet Address](https://petaddress.com.au/) to identify the registry, sign in and download the certificate. Check your contact details. This lookup does not expose arbitrary owners' full personal details.
 
-## Microchip tutorial 草稿
+**Cannot find the number?** Ask your usual vet for the recorded number, or take the dog to a vet for a scan.
 
-**Already microchipped?**
+**Not microchipped yet?** Book a vet appointment for implantation and registration. Upload the registry certificate when received.
 
-Find your microchip number on your pet's records. Use Pet Address to find the registry, then sign in and download your dog's registration certificate. Check that your contact details are up to date.
+- [CAR](https://car.com.au/apps/help-center): sign in → My Animals → select dog → Generate Certificate.
+- [AAR Pet Owners](https://www.aar.org.au/pet-owners/): print the pet's registration certificate.
+- [Approved Victorian registries](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/domestic-animal-microchip-registries).
 
-**Cannot find the number?**
+If a chip exists but no registry is found, ask the vet to confirm the number and contact an approved registry. Do not recommend another implant. CAR may require a veterinary scan for a new Victorian registration. Older or overseas numbers can differ from 15 digits; length alone does not prove a document false.
 
-Ask your usual vet for the recorded number, or take your dog to a vet for a scan.
+## What document reading can do
 
-**Not microchipped yet?**
+The upload flow provides text recognition and suggested values for owner confirmation:
 
-Book a vet appointment for microchipping and registration. Once you receive the registry certificate, upload it here.
+- Extract embedded PDF text first; read scanned pages and images when needed.
+- Identify labelled numbers, dog names and issuers for the selected document type. Council expiry must be explicitly labelled; payment deadlines, birthdays and issue dates do not qualify.
+- Keep chip, council and payment numbers separate. Leave missing, unclear or conflicting fields unresolved.
+- Store the document's dog name as a suggestion, without substituting the app name or automatically changing the dog's main chip record.
+- Allow another photo or manual correction for blur, glare, cropping, handwriting and multi-dog documents.
 
-- [Pet Address](https://petaddress.com.au/)：輸入已知晶片號碼查出 registry；不提供任意查詢人的完整個資。
-- [CAR 官方說明](https://car.com.au/apps/help-center)：登入 → My Animals → 選狗 → Generate Certificate。
-- [AAR Pet Owners](https://www.aar.org.au/pet-owners/)：Print your pet’s registration certificate。
-- [維州核准 registry 清單](https://agriculture.vic.gov.au/livestock-and-animals/animal-welfare-victoria/domestic-animals-act/registration-legislation-and-permits/microchipping-of-dogs-cats-and-horses/domestic-animal-microchip-registries)。
+Reading runs on-device using iOS 17-compatible `VNRecognizeTextRequest` and PDFKit, without blocking the screen. See [Apple Vision](https://developer.apple.com/documentation/vision/vnrecognizetextrequest) and [Apple's explanation](https://developer.apple.com/videos/play/wwdc2025/272/).
 
-已植入卻查不到 registry 時，先請獸醫確認號碼，再向核准 registry 詢問登錄；不要引導重複植入。CAR 的維州新登錄還可能要求獸醫掃描驗證。晶片通常是 15 碼，但須處理舊／海外號碼，不能僅以長度判假。
+Text recognition cannot prove ownership, detect every alteration or confirm current official registration. Its suggestions are not permission for the server to award points.
 
-## 基本圖片判讀的可行性
+## Reward decisions recorded on 27 September
 
-正式上傳頁已接上 **OCR 輔助填寫＋使用者確認**：
+- Council: 300 points per dog per valid registration period, renewed from the confirmed actual expiry. Microchip: 300 points once per dog for life.
+- Expired uncollected council rewards disappear and cannot be claimed through an old link. Original evidence and point records remain.
+- A renewed registration can reuse the same Animal ID, but one file cannot establish different qualifications. Editing an unexpired qualification cannot earn another award.
+- Missing expiry on an old record must be corrected on that qualification. Previously collected points are not awarded again; do not invent 9 April from an old year value.
+- Only a currently valid, uncollected qualification can be collected after confirmation. There is no mandatory review before collection; later spot checks remain separate.
 
-- 圖片／掃描 PDF 讀出文字；有文字層的 PDF 優先抽取文字。
-- 在已知 Quest 類型內辨識號碼、狗名、核發機構；Council 只辨識明確標示為 expiry／valid until 的日期，不把付款截止日、生日或核發日拿來刷新。
-- 不把晶片號碼、Council 參考號碼及付款號碼混用；找不到明確候選就要求補正。
-- 文件上的狗名另存為辨識資料，不用 App 狗名代替；不自動改寫狗狗主檔晶片資料。圖片無法單獨建立真實所有權。
-- 模糊、反光、裁切、手寫及多隻狗共用文件會增加錯讀；保留重拍／手動修正。
-- 一般文件資訊可在裝置端讀取。Apple 說明 Vision 在裝置端執行；app 使用支援 iOS 17 的 `VNRecognizeTextRequest`，PDFKit 讀文字層或渲染頁面，工作不阻塞主畫面。[Apple Vision](https://developer.apple.com/documentation/vision/vnrecognizetextrequest)、[Apple WWDC 說明](https://developer.apple.com/videos/play/wwdc2025/272/)。
+## Recorded reader check — 27 September 2026
 
-OCR 能讀文字與提出一致性提示，不能證明文件未變造、當下政府／registry 登記狀態或實際所有權。未串接獲授權的查驗服務前，狀態仍應是 self-reported／已提交。前端 OCR 結果不得當成後端已驗證的發點授權。
+The production `DocumentReader.swift` processed 40 real web files: ten council forms, ten registry forms, ten difficult images and ten unrelated images. All completed without a program error. None automatically supplied a registration number or expiry; six suggested only a registry name. Other fields required owner input or a replacement document.
 
-既有 OCR 研究使用官方空白表格及網路圖片，沒有足夠已核發證書正例，不能據此宣稱完整證書辨識率或涵蓋所有狀況。既有研究不是已核發證書的正確率保證；正式讀取器另以測試與實際檔案回歸驗證。
+Two blank-form labels had been mistaken for dog names: “Date of Birth of Animal” and “Tick for Cross-Breed”. Exclusion rules and regression tests removed these results on rerun.
 
-## 已確認的獎勵規則
-
-- Council 每隻狗每有效登記期 300 點，依確認過的實際到期日刷新；移除固定 4/10 規則。Microchip 維持每隻狗終身一次 300 點。
-- Council 舊期未領取資格過期後失效，不再出現在 Quest，也不能透過舊 Collect 連結補領。資料庫原始證據與帳本保留。
-- 相同 Animal ID 可在續期後再用；同一份檔案不能支援不同資格。未過期的資格不能靠改到期日重領。
-- 舊紀錄到期日未知時，要求補正同一份資格；已領點紀錄補日期不再給點，也不憑舊年份虛構 4/9 到期。
-- 手填或核對上傳內容後，只有目前有效、未領取的資格可 Collect；後續抽查，沒有前置人工審核。讀取結果不等於官方已驗證。
-
-
-## 2026-09-27 實作回歸結果
-
-以正式 `DocumentReader.swift` 跑既有 40 份真實檔案：10 份 Council
-官方表格、10 份 registry 官方表格、10 份較難辨識的圖片、10 份其他圖片。
-40 份全部完成讀取，沒有程式錯誤；沒有一份自動填出登記號碼或到期日。
-其中 6 份只提出 registry 名稱，其餘欄位等待使用者核對或更換文件。
-曾把空白狗名欄位後的「Date of Birth of Animal」及「Tick for Cross-Breed」
-讀成名字，已加入排除規則及測試，重跑後不再出現。
-
-此結果支持錯誤輸入／空白表單的保守處理，**不代表已核發證書的辨識率**。
-另外的程式測試涵蓋文字 PDF、實際 Vision 讀圖／掃描 PDF、PDF 可見表單欄位、
-多隻狗、多號碼、多日期、低信心、取消後的延遲結果及手動更正。這些生成的
-測試素材是工程測試，不計入上述真實檔案數。
+This supports conservative handling of blank or unsuitable inputs, **not an accuracy claim for issued certificates**. Separate generated tests cover text/scanned PDFs, Vision image reading, visible form fields, multiple dogs/numbers/dates, low confidence, cancelled reads and manual corrections. They are engineering fixtures, not part of the 40 real files.

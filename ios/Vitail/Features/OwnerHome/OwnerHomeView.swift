@@ -105,10 +105,11 @@ struct OwnerHomeView: View {
                               })
                         .tag(Page.quest)
                     WalkMapView(coordinator: walkCoordinator,
-                                isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog,
-                                checkIns: checkIns, friends: friends)
+                            isActive: selection == .walk && hasCheckedOnboarding && !isAddingFirstDog,
+                            checkIns: checkIns, friends: friends)
                         .tag(Page.walk)
-                    FriendsView(store: friends)
+
+                    FriendsView(store: friends, session: session)
                         .tag(Page.friends)
                     OwnerProfileView(user: user, session: session, dogService: dogService,
                                      documentService: documentService ?? DocumentService(), onDocumentsChanged: {

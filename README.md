@@ -1,5 +1,7 @@
 # Vitail — Dog Walking Rewards
 
+[Project Hub — requirements, delivery, testing and handover](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/overview)
+
 Native iOS app and Django API for a Melbourne dog-walking rewards pilot.
 Owners record walks, collect eligible care rewards and spend points at cafés.
 Café accounts manage their own venue, menu and incoming orders.
@@ -76,7 +78,7 @@ account role controls access. Tokens use Keychain and a shared refresh path.
 Owner logout lives inside the avatar/profile editor; both account types have
 persisted System/Light/Dark appearance settings.
 
-Friends and Net-Walking are reached from Account instead of taking a sixth tab.
+Friends and Net-Walking settings open from the Friends tab.
 Owners can search by name or public ID, handle requests and blocks, choose a
 map avatar, and separately opt into friend location sharing or nearby partner
 discovery. Both controls default off. Walk is the walk/social map and owns the
@@ -114,14 +116,17 @@ The database has a normalized Venue, personalised daily-goal configuration and
 progress, authenticated venue check-ins, and connected Friends/Net-Walking live
 sessions. Raw social GPS is a rolling 15-minute verification buffer cleaned by
 the worker; the API returns only fresh positions and summary distance. The
-social flow does **not** deliver a leaderboard, wallet rewards for Net-Walking,
-chat, notifications or charity donations. See
+local candidate adds personal Statistics and an opt-in friends leaderboard
+inside Friends. Net-Walking wallet rewards remain disabled; chat, notifications
+and charity donations are not implemented. See
 [feature status](docs/FEATURES.md) before treating a capability as available.
 
 ## Quick connected-flow check
 
 1. Create a `CAFE` login in Admin and its venue/menu; café Products can manage
-   that account's items. Register an owner from the iOS login page.
+   that account's items. Register an owner, complete dog/goal setup, and submit
+   microchip registration for every current dog. Leave the separate registration
+   points uncollected so the balance below stays predictable.
 2. Optionally grant the owner 100 test points in Admin → Point entries, with a
    future expiry. This uses the real ledger, not a second test wallet.
 3. Price a test item at 40 points, refresh Redeem and purchase it. Verify the
@@ -151,10 +156,12 @@ without `--dry-run` to import. Existing venues and accounts are preserved.
 | [Feature status](docs/FEATURES.md) | What can be tested now versus foundations/future work |
 | [Technical architecture](TECH_STACK.md) | Shared services, storage, transactions and development conventions |
 | [OpenAPI](docs/openapi.yaml) | Implemented HTTP request/response contract |
-| [Database design](docs/database-design-2026-09-25/README.md) | Domain tables, constraints and requirement coverage; migrations define physical schema |
+| [Database design snapshot](docs/database-design-2026-09-25/README.md) | Historical foundation and requirement coverage; current models/migrations define the schema |
 | [Walk integration](docs/WALK_INTEGRATION.md) / [device tests](docs/WALK_TESTING.md) | Recording, confirmation, recovery and acceptance limits |
 | [Friends and Net-Walking](docs/SOCIAL.md) | Consent, live-map behavior, API, retention and disabled wallet reward boundary |
 | [Media](backend/MEDIA.md) / [evidence](backend/evidence/README.md) | Public photos and authenticated private document storage |
+| [Verification](docs/VERIFICATION.md) | Repeatable checks, coverage scope, review and evidence |
+| [Operations](docs/OPERATIONS.md) | Local pilot setup, consistent backup, isolated restore and handover limits |
 
 Each feature owner maintains its UI, API, migrations, tests and relevant docs.
 Do not create a parallel wallet/order model or invent behavior for an open

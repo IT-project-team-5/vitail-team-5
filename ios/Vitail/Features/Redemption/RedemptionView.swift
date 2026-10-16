@@ -16,11 +16,6 @@ struct RedemptionView: View {
                     Text("Your points").font(.subheadline).foregroundStyle(AppColors.secondaryText)
                     Text(viewModel.balance.map { "\($0.formatted())" } ?? "—")
                         .font(.system(.largeTitle, design: .rounded).weight(.semibold))
-                    if let balance = viewModel.balance {
-                        Text(CoffeeEstimate.text(for: balance))
-                            .font(.caption).foregroundStyle(AppColors.secondaryText)
-                            .accessibilityHint(CoffeeEstimate.accessibilityHint)
-                    }
                 }
                 .padding(.vertical, 12)
                 PendingPurchaseNotice(viewModel: viewModel)

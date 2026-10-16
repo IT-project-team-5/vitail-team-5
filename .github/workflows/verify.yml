@@ -38,6 +38,13 @@ jobs:
       MYSQL_PORT: 3306
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Check changed whitespace
+        run: |
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^ HEAD
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -45,13 +52,39 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y default-libmysqlclient-dev pkg-config
-          python -m pip install -r backend/requirements.txt
+          python -m pip install -r backend/requirements-test.txt
       - name: Check schema and run tests including database locks
         working-directory: backend
+        shell: bash
         run: |
-          python manage.py check
-          python manage.py makemigrations --check --dry-run
-          python manage.py test --verbosity 1
+          set -o pipefail
+          mkdir -p ../test-results/backend
+          git rev-parse HEAD > ../test-results/backend/source-sha.txt
+          python --version > ../test-results/backend/runtime.txt
+          python -m pip freeze --all > ../test-results/backend/dependencies.txt
+          python manage.py check 2>&1 | tee ../test-results/backend/check.log
+          python manage.py makemigrations --check --dry-run 2>&1 | tee ../test-results/backend/migration-drift.log
+          python -m coverage run manage.py test --noinput --verbosity 2 2>&1 | tee ../test-results/backend/tests.log
+      - name: Export backend coverage
+        if: always()
+        working-directory: backend
+        run: |
+          mkdir -p ../test-results/backend
+          if [ -f .coverage ]; then
+            python -m coverage report > ../test-results/backend/coverage.txt
+            python -m coverage json -o ../test-results/backend/coverage.json
+            python -m coverage xml -o ../test-results/backend/coverage.xml
+          else
+            echo "::warning::No coverage data was created; see test/setup logs."
+          fi
+      - name: Save backend verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: test-results/backend
+          if-no-files-found: warn
+          retention-days: 90
 
   ios:
     runs-on: macos-15
@@ -73,15 +106,45 @@ jobs:
               output.write('TEST_DEVICE=' + phones[0]['udid'] + '\n')
           PY
       - name: Build and test
-        run: >-
-          xcodebuild test -project ios/Vitail.xcodeproj -scheme Vitail
-          -destination "platform=iOS Simulator,id=$TEST_DEVICE"
-          -resultBundlePath TestResults.xcresult
-          CODE_SIGNING_ALLOWED=NO
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p test-results/ios
+          git rev-parse HEAD > test-results/ios/source-sha.txt
+          xcodebuild -version > test-results/ios/xcode-version.txt
+          xcodebuild test -project ios/Vitail.xcodeproj -scheme Vitail \
+            -destination "platform=iOS Simulator,id=$TEST_DEVICE" \
+            -enableCodeCoverage YES -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test-results/ios/xcodebuild.log
+      - name: Export test and coverage JSON
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p test-results/ios
+          export_json() {
+            local target="$1"
+            shift
+            if "$@" > "$target.tmp" 2> "$target.stderr.log"; then
+              mv "$target.tmp" "$target"
+            else
+              rm -f "$target.tmp"
+              echo "::warning::Could not export $target; see retained export log and result bundle."
+            fi
+          }
+          if [ -d TestResults.xcresult ]; then
+            export_json test-results/ios/summary.json xcrun xcresulttool get test-results summary --path TestResults.xcresult
+            export_json test-results/ios/cases.json xcrun xcresulttool get test-results tests --path TestResults.xcresult
+            export_json test-results/ios/coverage.json xcrun xccov view --report --json TestResults.xcresult
+          else
+            echo "::warning::No Xcode result bundle was created; see build log."
+          fi
       - name: Save Xcode test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-test-results
-          path: TestResults.xcresult
-          if-no-files-found: ignore
+          path: |
+            TestResults.xcresult
+            test-results/ios
+          if-no-files-found: warn
+          retention-days: 90

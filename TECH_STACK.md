@@ -38,20 +38,20 @@ credentials are bound to the selected backend; a Debug URL change requires a
 new login. Refresh authentication failures clear the stale session; transient
 server/network failures retain credentials for retry.
 
-Owner navigation is Account / Walk / Quest / Venues / Redeem. Friends and
-Net-Walking settings open from Account; Walk is the walk/social map and owns the
-sole walk/social location stream, while Venues has a separate check-in discovery
-map. Café navigation is Account / Products / Orders. The login choice is context, not permission:
+Owner navigation is Redeem / Quest / Walk / Friends / Account. Friends and
+Net-Walking settings open from Friends. Walk combines walking, social positions
+and venue discovery, using one location stream. Café navigation is Account / Products / Orders. The login choice is context, not permission:
 registration creates OWNER, café accounts are admin-created, and the returned
 role must match before entering its interface.
 
 `OwnerHomeView` owns the active `WalkSessionCoordinator`, Friends store, Quest
 store, shared check-in store and wallet view model. Switching tabs or opening
 Friends preserves a walk; changing accounts stops work and rejects late
-responses. Walk, Quest and Venues observe the same check-in collection state.
+responses. Walk and Quest observe the same check-in collection state.
 The coordinator also feeds the authenticated social session from the same Core
 Location stream, so Friends never starts a second walk/social location manager.
-Physical-device location and background acceptance remain release work.
+We completed phone testing for merged PRs 13–15. Later location or background
+changes receive affected phone checks; see [acceptance evidence](docs/INTEGRATION.md).
 
 The design system contains semantic colors, spacing, buttons, avatars and
 collection controls. Persisted System/Light/Dark selection applies to pages,
@@ -71,11 +71,10 @@ sheets and login. Use system text styles and verify large-text layouts.
 | `checkins` | Authenticated venue discovery, GPS dwell verification, collection and shared daily-cap service |
 | `social` | Friend discovery/requests/blocks, privacy preferences, live-map access and explicit Net-Walk invitations |
 
-The core foundation contains 24 business tables, including the explicit
-Walk–Dog relation, effective-dated `DogGoalTarget` and `NetWalkInvitation`. It
-does not include Django's built-in auth/admin/session tables.
-[Database design](docs/database-design-2026-09-25/README.md) describes
-fields and constraints; model migrations are the physical schema authority.
+The [archived database design](docs/database-design-2026-09-25/README.md)
+documents the earlier 24-table foundation, including the Walk–Dog relation,
+`DogGoalTarget` and `NetWalkInvitation`. It excludes Django system tables and
+predates later features. Current models and migrations define the schema.
 The six later tables for external identity, chat, charity/donation and push
 registration/delivery are not created by this foundation.
 
@@ -98,8 +97,10 @@ targets share one append-only effective-dated history, and Quest displays the
 seven-day calendar. Social sessions, bounded samples, invitations, verified
 intervals, friendships and blocks support the connected Friends/Net-Walking
 flow. Daily goals now support explicit 20-point per-dog collection under the
-shared account cap. Social sessions do not enable Net-Walk wallet points or a
-leaderboard. Ordinary completed-walk uploads still carry validated route
+shared account cap. Net-Walk wallet points remain disabled. Statistics reads
+validated walks and per-dog goals; the opt-in friends leaderboard reuses existing
+friendships, blocks and account preferences. It adds no ranking table.
+Ordinary completed-walk uploads still carry validated route
 summaries; live social GPS uses its separate short-lived session endpoint.
 
 ## Transactions and retry safety
@@ -199,7 +200,9 @@ match. Physical-device checks remain necessary for GPS, background execution,
 photos and protected storage. Test counts belong to the actual validation run,
 not an undated claim of permanent coverage.
 
-Future work includes physical-device venue/social GPS acceptance, approved
-owner-journey acceptance, Net-Walk earning, OAuth, password reset/account
-deletion, notifications, sharing, chat and charity. Schema preparation must not
-be presented as completed functionality. See [open decisions](docs/DECISIONS.md).
+Remaining release work includes the agreed Net-Walking remainder, review and
+physical acceptance of the statistics candidate, final client acceptance and
+affected checks for later changes. Net-Walk earnings, OAuth, password reset/account
+deletion, notifications, chat and charity remain outside the current delivered
+flows. Completed-walk image sharing is available. Data structures alone do not
+establish a working feature. See [open decisions](docs/DECISIONS.md).

@@ -1,11 +1,12 @@
 # Feature Status
 
-Updated 14 October 2026. **Connected** means a real client/API
+Updated 16 October 2026. **Connected** means a real client/API
 flow exists; it does not certify every physical-device acceptance case.
 **Foundation** means data/services are prepared but the end-user feature is not
 complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
-Physical acceptance confirmed by Chien on 14 October applies to the already-passed
-PRs; integrated verification is separate. See [acceptance evidence](INTEGRATION.md).
+We completed real-phone testing for the merged PRs 13–15 and statistics
+integration candidate `a0414b5`. Client acceptance is recorded separately;
+see [acceptance evidence](INTEGRATION.md).
 
 | Feature | Delivery | Current boundary |
 |---|---|---|
@@ -28,17 +29,20 @@ PRs; integrated verification is separate. See [acceptance evidence](INTEGRATION.
 | Streak rewards | Connected | Verified walking days per Melbourne date; missed-day reset; one x / milestone bar and explicit collection; each run earns 7-day then 30/60/90… rewards; earned claims survive a break |
 | Friends and blocks | Connected | Search by display name/public ID, requests, removal, directional blocks, selectable map avatar and privacy controls; login email is never exposed |
 | Live sessions/location/Net-Walking | Connected; acceptance recorded separately; wallet rewards disabled | Walk publishes through authenticated session APIs from its existing Core Location stream. Friend and nearby-partner visibility are independent and default off; invitations grant exact partner position; server shows verified together-distance. Raw GPS has a 15-minute rolling retention worker. No reward estimate or credit is shown while policy is disabled |
-| Leaderboard | Outside this delivery | No tab, endpoint or table; this team does not present it as a partial Friends feature |
-| OAuth, password reset, account deletion | Later delivery | Email login remains current; social identity/account erasure flows are not complete |
-| Chat, push, charity | Later delivery | Optional identity/chat/charity/push tables are not created; no working UI/API is claimed |
+| Statistics and Leaderboard | Connected; integration tested | Personal validated activity, per-dog goal progress and an opt-in accepted-friends ranking open inside Friends; [SCRUM-46](https://group5-vitail-project.atlassian.net/browse/SCRUM-46) teammate review and client acceptance remain pending |
+| OAuth, password reset, self-service account deletion | Deferred from this release | Email login remains current. The 15 October team scope decision awaits client acknowledgement |
+| Notifications | Deferred from this release | No working push delivery is claimed; see the current scope decision |
+| Chat and charity | Scope unresolved | No working UI/API is claimed; these were not automatically included in the four agreed team deferrals |
 | Social sharing | Connected | Completed walks can render a local image card with optional date, dog names and confirmed points; route and location are excluded, and sharing uses the system sheet with no public-post database |
 
-The 24-table core foundation includes a Walk–Dog relation and explicit
-`NetWalkInvitation`, and excludes Django system tables. A migrated table is not
-proof that its feature is enabled.
-See [database coverage](database-design-2026-09-25/README.md),
+The [archived database coverage](database-design-2026-09-25/README.md) describes
+the earlier 24-table foundation. Current models and migrations define the schema;
+a table alone does not establish an enabled feature. See
 [Walk device acceptance](WALK_TESTING.md) and [open decisions](DECISIONS.md).
 
 New onboarding, council selection and registration-gated redemption are implemented.
 See [daily-goal behavior](DAILY_GOALS.md) and
 [integration and acceptance evidence](INTEGRATION.md).
+
+The [Decision Log](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/40042497)
+and linked Jira items own the current release commitments and client decisions.

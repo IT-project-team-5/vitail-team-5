@@ -120,6 +120,11 @@
 		000000000000000000000082 /* ActivityShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000082 /* ActivityShareCard.swift */; };
 		000000000000000000000083 /* ActivityShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000083 /* ActivityShareView.swift */; };
 		000000000000000000000084 /* ActivityShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000084 /* ActivityShareTests.swift */; };
+		01CD9DA43081293D00DA9B24 /* StatisticsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */; };
+		01CD9DA53081293D00DA9B24 /* StatisticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA13081293D00DA9B24 /* StatisticsService.swift */; };
+		01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */; };
+		01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA23081293D00DA9B24 /* StatisticsView.swift */; };
+		E72026101600000000000011 /* StatisticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026101600000000000001 /* StatisticsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -254,6 +259,11 @@
 		100000000000000000000082 /* ActivityShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareCard.swift; sourceTree = "<group>"; };
 		100000000000000000000083 /* ActivityShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareView.swift; sourceTree = "<group>"; };
 		100000000000000000000084 /* ActivityShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityShareTests.swift; sourceTree = "<group>"; };
+		01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsModels.swift; sourceTree = "<group>"; };
+		01CD9DA13081293D00DA9B24 /* StatisticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsService.swift; sourceTree = "<group>"; };
+		01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsViewModel.swift; sourceTree = "<group>"; };
+		01CD9DA23081293D00DA9B24 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
+		E72026101600000000000001 /* StatisticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -380,6 +390,7 @@
 		20A000000000000000000001 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				E72026101600000000000021 /* Statistics */,
 				F62000000000000000000001 /* Friends */,
 				222CA46EF530402A1EFB0C1D /* Documents */,
 				58A8F78977627F369AF92B94 /* CheckIn */,
@@ -440,6 +451,7 @@
 		20E000000000000000000001 /* VitailTests */ = {
 			isa = PBXGroup;
 			children = (
+				E72026101600000000000001 /* StatisticsTests.swift */,
 				F60000000000000000000005 /* FriendsTests.swift */,
 				F60000000000000000000008 /* AvatarShopTests.swift */,
 				88668FC77BE11DA618DE477C /* WalletRefreshTests.swift */,
@@ -610,6 +622,17 @@
 			path = Quest;
 			sourceTree = "<group>";
 		};
+		E72026101600000000000021 /* Statistics */ = {
+			isa = PBXGroup;
+			children = (
+				01CD9DA03081293D00DA9B24 /* StatisticsModels.swift */,
+				01CD9DA13081293D00DA9B24 /* StatisticsService.swift */,
+				01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */,
+				01CD9DA23081293D00DA9B24 /* StatisticsView.swift */,
+			);
+			path = Statistics;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -709,6 +732,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				01CD9DA43081293D00DA9B24 /* StatisticsModels.swift in Sources */,
+				01CD9DA53081293D00DA9B24 /* StatisticsService.swift in Sources */,
+				01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */,
+				01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */,
 				F61000000000000000000001 /* FriendsModels.swift in Sources */,
 				F61000000000000000000002 /* FriendsService.swift in Sources */,
 				F61000000000000000000003 /* FriendsStore.swift in Sources */,
@@ -800,6 +827,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E72026101600000000000011 /* StatisticsTests.swift in Sources */,
 				F61000000000000000000005 /* FriendsTests.swift in Sources */,
 				F61000000000000000000008 /* AvatarShopTests.swift in Sources */,
 				000000000000000000000084 /* ActivityShareTests.swift in Sources */,

@@ -1,6 +1,6 @@
 # Product integration and acceptance
 
-Updated 14 October 2026. This record identifies the combined implementation and
+Updated 16 October 2026. This record identifies the combined implementation and
 the boundaries of its evidence. Current feature requirements and acceptance
 criteria remain in the linked Confluence records; do not duplicate their policy
 here. Exact run results belong in the [Testing evidence index](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/13795332).
@@ -11,20 +11,45 @@ here. Exact run results belong in the [Testing evidence index](https://group5-vi
 | Owner onboarding, per-dog goals and registration-gated redemption | [Dog Registration / Daily Goal](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35913729), [SCRUM-58](https://group5-vitail-project.atlassian.net/browse/SCRUM-58) | [PR #14](https://github.com/IT-project-team-5/vitail-team-5/pull/14), `dcbcbcb5b7bdfa198463ecd2e6d669d975bc84e5` |
 | Public dog profiles and points-based clothing shop | [Net-Walking](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35684355), [SCRUM-56](https://group5-vitail-project.atlassian.net/browse/SCRUM-56) | [PR #15](https://github.com/IT-project-team-5/vitail-team-5/pull/15), `fb26860f7bb11275f95b86e26a6d17325cd01a35` |
 
+## Statistics integration — 16 October
+
+The integration combines [PR16](https://github.com/IT-project-team-5/vitail-team-5/pull/16),
+`abd902d`, and Jocelyn's [PR17](https://github.com/IT-project-team-5/vitail-team-5/pull/17),
+`50e3e1a`, with privacy, activity-calculation and client integration fixes.
+Tony's latest published work is already in main through PR15; no newer Tony
+branch was published at this check. The combined change is ready for teammate review.
+
+Statistics and the friends leaderboard open from Friends, preserving the five
+main navigation tabs. The API reads existing validated, completed walks; it
+creates no points or separate activity counters. Daily-goal progress combines
+actual dog participation, capped at each eligible dog's own target.
+
+The candidate leaderboard uses walking minutes over today and the preceding six
+Melbourne calendar days. Accepted friends appear only after opting in, with
+blocked, inactive, deleted and non-owner accounts excluded. Names and public IDs
+are shown; login emails are omitted. The owner's own row remains private when
+sharing is off. Equal exact walking seconds share a competition rank (1, 1, 3).
+The opt-in affects leaderboard sharing independently of location/Net-Walking
+consent. These are reviewable candidate choices under
+[SCRUM-46](https://group5-vitail-project.atlassian.net/browse/SCRUM-46) and
+[SCRUM-63](https://group5-vitail-project.atlassian.net/browse/SCRUM-63), pending
+team/client confirmation. The API contract is in [OpenAPI](openapi.yaml).
+
+Real-phone testing is complete for integration candidate `a0414b5`, separately
+from the earlier PR13–15 tests below. The device model and individual case
+observations are not recorded here. Client acceptance and non-author review
+remain separate completion steps.
+
 ## Acceptance evidence
 
-On 14 October 2026, Chien confirmed in the project conversation: “目前 PR 有過的，
-我都真機測試過了，可以標示完成” — the already-passed PRs had been tested on a real
-phone and their physical acceptance may be marked complete. This is a direct
-human attestation. It supersedes older blanket “physical testing pending” notes
-for that stated scope; a new video is not required to recognise it.
+We completed real-phone testing for the merged PRs 13–15. We retain that
+PR-level acceptance and test later changes according to their impact.
 
-The attestation does not supply a device model, execution date, per-case video or
-third-party client sign-off. None is invented. A new combined candidate still
-needs affected automated/integration regression at its actual SHA. The
+The existing record contains no device model, original execution date or
+individual case observations. Final client acceptance is recorded separately. The
 [venue checklist](VENUE_CHECKIN_TESTING.md), [goal verification](DAILY_GOALS.md#migration-and-verification)
-and [social acceptance cases](SOCIAL.md#release-acceptance) remain reusable case
-definitions, not a claim that a later build has already passed them.
+and [social acceptance cases](SOCIAL.md#release-acceptance) remain reusable test
+instructions, not results for a later build.
 
 ## Integration choices
 
