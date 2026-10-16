@@ -232,15 +232,15 @@ final class StatisticsTests: XCTestCase {
             calls.add(request)
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer statistics-token")
             if request.httpMethod == "PATCH" {
-                XCTAssertEqual(request.url?.path, "/api/statistics/")
+                XCTAssertEqual(request.url?.absoluteString, "https://statistics.example/api/statistics/")
                 let body = try? statisticsRequestBody(request)
                 XCTAssertEqual(body?["leaderboard_visible"] as? Bool, true)
                 XCTAssertEqual(body?.count, 1)
                 return statisticsJSON.replacingOccurrences(of: "\"leaderboard_visible\":false", with: "\"leaderboard_visible\":true")
             }
             XCTAssertEqual(request.httpMethod, "GET")
-            if request.url?.path == "/api/statistics/leaderboard/" { return leaderboardJSON }
-            XCTAssertEqual(request.url?.path, "/api/statistics/")
+            if request.url?.absoluteString == "https://statistics.example/api/statistics/leaderboard/" { return leaderboardJSON }
+            XCTAssertEqual(request.url?.absoluteString, "https://statistics.example/api/statistics/")
             return statisticsJSON
         }
         let personal = try await service.fetchStatistics()
