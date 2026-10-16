@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class StatisticsConfig(AppConfig):
+class ActivityStatsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "statistics"
+    name = "activity_stats"

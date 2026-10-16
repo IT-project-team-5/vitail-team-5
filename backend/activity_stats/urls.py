@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import UserStatisticsView, FriendsLeaderboardView
+
+from .views import FriendsLeaderboardView, UserStatisticsView
 
 urlpatterns = [
     path("", UserStatisticsView.as_view(), name="statistics"),

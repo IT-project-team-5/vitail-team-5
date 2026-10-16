@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     "evidence",
     "checkins",
     "social",
-    "statistics.apps.StatisticsConfig",
+    "activity_stats.apps.ActivityStatsConfig",
 ]
 
 MIDDLEWARE = [
