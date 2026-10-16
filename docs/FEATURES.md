@@ -4,8 +4,9 @@ Updated 16 October 2026. **Connected** means a real client/API
 flow exists; it does not certify every physical-device acceptance case.
 **Foundation** means data/services are prepared but the end-user feature is not
 complete. Reward amounts and limits live in [Quest policy](QUESTS.md).
-We completed real-phone testing for the merged PRs 13–15. We record integrated
-checks and client acceptance separately; see [acceptance evidence](INTEGRATION.md).
+We completed real-phone testing for the merged PRs 13–15 and statistics
+integration candidate `a0414b5`. Client acceptance is recorded separately;
+see [acceptance evidence](INTEGRATION.md).
 
 | Feature | Delivery | Current boundary |
 |---|---|---|
@@ -28,7 +29,7 @@ checks and client acceptance separately; see [acceptance evidence](INTEGRATION.m
 | Streak rewards | Connected | Verified walking days per Melbourne date; missed-day reset; one x / milestone bar and explicit collection; each run earns 7-day then 30/60/90… rewards; earned claims survive a break |
 | Friends and blocks | Connected | Search by display name/public ID, requests, removal, directional blocks, selectable map avatar and privacy controls; login email is never exposed |
 | Live sessions/location/Net-Walking | Connected; acceptance recorded separately; wallet rewards disabled | Walk publishes through authenticated session APIs from its existing Core Location stream. Friend and nearby-partner visibility are independent and default off; invitations grant exact partner position; server shows verified together-distance. Raw GPS has a 15-minute rolling retention worker. No reward estimate or credit is shown while policy is disabled |
-| Statistics and Leaderboard | Local integrated candidate | Personal validated activity, per-dog goal progress and an opt-in accepted-friends ranking open inside Friends; [SCRUM-46](https://group5-vitail-project.atlassian.net/browse/SCRUM-46) review and affected phone/client acceptance remain pending |
+| Statistics and Leaderboard | Connected; integration tested | Personal validated activity, per-dog goal progress and an opt-in accepted-friends ranking open inside Friends; [SCRUM-46](https://group5-vitail-project.atlassian.net/browse/SCRUM-46) teammate review and client acceptance remain pending |
 | OAuth, password reset, self-service account deletion | Deferred from this release | Email login remains current. The 15 October team scope decision awaits client acknowledgement |
 | Notifications | Deferred from this release | No working push delivery is claimed; see the current scope decision |
 | Chat and charity | Scope unresolved | No working UI/API is claimed; these were not automatically included in the four agreed team deferrals |

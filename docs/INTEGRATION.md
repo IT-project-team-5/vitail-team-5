@@ -11,13 +11,13 @@ here. Exact run results belong in the [Testing evidence index](https://group5-vi
 | Owner onboarding, per-dog goals and registration-gated redemption | [Dog Registration / Daily Goal](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35913729), [SCRUM-58](https://group5-vitail-project.atlassian.net/browse/SCRUM-58) | [PR #14](https://github.com/IT-project-team-5/vitail-team-5/pull/14), `dcbcbcb5b7bdfa198463ecd2e6d669d975bc84e5` |
 | Public dog profiles and points-based clothing shop | [Net-Walking](https://group5-vitail-project.atlassian.net/wiki/spaces/G5VA/pages/35684355), [SCRUM-56](https://group5-vitail-project.atlassian.net/browse/SCRUM-56) | [PR #15](https://github.com/IT-project-team-5/vitail-team-5/pull/15), `fb26860f7bb11275f95b86e26a6d17325cd01a35` |
 
-## Local statistics candidate — 16 October
+## Statistics integration — 16 October
 
-The local integration includes PR16 `abd902d` and Jocelyn's current
-[PR17](https://github.com/IT-project-team-5/vitail-team-5/pull/17), `50e3e1a`.
+The integration combines [PR16](https://github.com/IT-project-team-5/vitail-team-5/pull/16),
+`abd902d`, and Jocelyn's [PR17](https://github.com/IT-project-team-5/vitail-team-5/pull/17),
+`50e3e1a`, with privacy, activity-calculation and client integration fixes.
 Tony's latest published work is already in main through PR15; no newer Tony
-branch was published at this check. No new PR or main merge is part of this
-local device-test preparation.
+branch was published at this check. The combined change is ready for teammate review.
 
 Statistics and the friends leaderboard open from Friends, preserving the five
 main navigation tabs. The API reads existing validated, completed walks; it
@@ -35,8 +35,10 @@ consent. These are reviewable candidate choices under
 [SCRUM-63](https://group5-vitail-project.atlassian.net/browse/SCRUM-63), pending
 team/client confirmation. The API contract is in [OpenAPI](openapi.yaml).
 
-Record this candidate's real-device outcome separately from the earlier PR13–15
-completion below. No new phone result is asserted by preparing a build.
+Real-phone testing is complete for integration candidate `a0414b5`, separately
+from the earlier PR13–15 tests below. The device model and individual case
+observations are not recorded here. Client acceptance and non-author review
+remain separate completion steps.
 
 ## Acceptance evidence
 
