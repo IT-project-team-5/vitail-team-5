@@ -26,18 +26,22 @@ struct StreakProgressView: View {
                 if progress.targetDays > 7 {
                     ProgressView(value: progress.fraction)
                         .progressViewStyle(.linear)
-                        .tint(AppColors.brand)
+                        .tint(AppColors.honey)
                         .accessibilityHidden(true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(AppSpacing.medium)
             .foregroundStyle(AppColors.primaryText)
-            .background(isReady ? AppColors.brand.opacity(0.12) : AppColors.surface,
-                        in: RoundedRectangle(cornerRadius: AppRadius.card))
+            .vitailCardBackground()
             .overlay {
-                if isReady { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
+                if isReady {
+                    RoundedRectangle(cornerRadius: AppRadius.card)
+                        .strokeBorder(AppColors.honey, lineWidth: AppStroke.width + 1)
+                }
             }
+            .padding(.trailing, AppStroke.shadow)
+            .padding(.bottom, AppStroke.shadow)
             .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Streak progress")
@@ -48,17 +52,17 @@ struct StreakProgressView: View {
     private func streakTitle(_ progress: StreakProgressValue) -> some View {
         Label {
             Text("\(progress.currentDays) day streak")
-                .font(.system(.title3, design: .rounded).weight(.bold))
+                .font(AppFont.heading(17, .bold, relativeTo: .title3))
                 .monospacedDigit()
         } icon: {
-            Image(systemName: "flame.fill").foregroundStyle(AppColors.brand)
+            Image(systemName: "flame.fill").foregroundStyle(AppColors.terracotta)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
 
     private func milestone(_ progress: StreakProgressValue) -> some View {
         Text(isReady ? "Reward ready" : "\(progress.label) days")
-            .font(.subheadline.weight(.semibold))
+            .font(AppFont.body(13, .semibold, relativeTo: .subheadline))
             .monospacedDigit()
             .foregroundStyle(isReady ? AppColors.brand : AppColors.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -71,13 +75,13 @@ struct StreakProgressView: View {
             ForEach(markers) { marker in
                 ZStack {
                     Circle()
-                        .fill(marker.completed ? AppColors.brand : AppColors.background)
+                        .fill(marker.completed ? AppColors.honey : AppColors.background)
                     Circle()
-                        .stroke(marker.completed ? AppColors.brand : AppColors.border, lineWidth: 1.5)
+                        .strokeBorder(marker.completed ? AppColors.outline : AppColors.border, lineWidth: AppStroke.width)
                     if marker.completed {
                         Image(systemName: "checkmark")
                             .font(.system(size: diameter * 0.38, weight: .bold))
-                            .foregroundStyle(AppColors.brandForeground)
+                            .foregroundStyle(AppColors.onAccent)
                     }
                 }
                 .frame(width: diameter, height: diameter)
@@ -99,20 +103,21 @@ private struct QuestHeader: View {
 
     var body: some View {
         HStack {
-            Spacer(minLength: 0)
             HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(AppColors.brand)
+                Image(systemName: "sparkle")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColors.honey)
                     .accessibilityHidden(true)
                 Text(points.map { $0.formatted() } ?? "—")
-                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .font(AppFont.heading(15, .bold, relativeTo: .headline))
                     .monospacedDigit()
-                Text("pts").font(.caption.weight(.semibold)).foregroundStyle(AppColors.secondaryText)
+                Text("pts").font(AppFont.heading(13, .semibold, relativeTo: .caption))
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 42)
+            .foregroundStyle(AppColors.primaryText)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 36)
             .background(AppColors.surface, in: Capsule())
-            .overlay { Capsule().stroke(AppColors.border.opacity(0.8), lineWidth: 1) }
+            .overlay { Capsule().strokeBorder(AppColors.outline, lineWidth: AppStroke.width) }
             .scaleEffect(isPulsing ? 1.08 : 1)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Points")
@@ -126,12 +131,13 @@ private struct QuestAwardToast: View {
 
     var body: some View {
         Label("+\(points) points", systemImage: "checkmark.circle.fill")
-            .font(.system(.headline, design: .rounded).weight(.bold))
-            .foregroundStyle(AppColors.brandForeground)
+            .font(AppFont.heading(16, .bold, relativeTo: .headline))
+            .foregroundStyle(AppColors.onAccent)
             .padding(.horizontal, AppSpacing.medium)
             .frame(minHeight: 44)
-            .background(AppColors.brand, in: Capsule())
-            .shadow(color: AppColors.primaryText.opacity(0.16), radius: 12, y: 6)
+            .background(AppColors.honey, in: Capsule())
+            .overlay(Capsule().strokeBorder(AppColors.outline, lineWidth: AppStroke.width))
+            .background(Capsule().fill(AppColors.outline).offset(x: 3, y: 3))
             .accessibilityLabel("Collected \(points) points")
     }
 }
@@ -153,13 +159,14 @@ struct QuestView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             ScrollView {
-                VStack(spacing: AppSpacing.small) {
-                    QuestHeader(points: points, isPulsing: isPointsPulsing)
-                        .padding(.bottom, AppSpacing.small)
+                VStack(spacing: 12) {
                     if let goals = store.dailyGoals {
                         if goals.isEmpty {
                             Text("Add a dog to start configuring daily walking goals.")
-                                .font(.subheadline).padding(AppSpacing.medium)
+                                .font(AppFont.body(15))
+                                .foregroundStyle(AppColors.secondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, AppSpacing.small)
                         }
                         ForEach(goals) { goal in DailyWalkingGoalCard(goal: goal) }
                     } else if store.snapshot?.dailyGoals != nil {
@@ -190,14 +197,21 @@ struct QuestView: View {
                     }
                     #endif
                 }
-                .padding(AppSpacing.medium)
+                .padding(.horizontal, 20)
+                .padding(.vertical, AppSpacing.medium)
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
             }
-            .background(AppColors.background)
+            .background { VitailScreenBackground(layout: .leadingDog) }
             .foregroundStyle(AppColors.primaryText)
             .tint(AppColors.brand)
             .refreshable { await refresh() }
+        }
+        // Points pill sits in the navigation bar, as on the prototype.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                QuestHeader(points: points, isPulsing: isPointsPulsing)
+            }
         }
         .overlay(alignment: .topTrailing) {
             if isAwardVisible, let presentedAward {
@@ -276,17 +290,17 @@ struct QuestView: View {
                     if store.isResetting { ProgressView().tint(AppColors.error) }
                     Image(systemName: "arrow.counterclockwise")
                     Text(store.isResetting ? "Resetting…" : "Reset all quests")
-                        .fontWeight(.semibold)
+                        .font(AppFont.heading(15, .semibold))
                 }
                 .frame(maxWidth: .infinity, minHeight: 48)
-                .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.field))
-                .overlay { RoundedRectangle(cornerRadius: AppRadius.field).stroke(AppColors.error.opacity(0.45), lineWidth: 1) }
+                .background(AppColors.surface, in: Capsule())
+                .overlay { Capsule().strokeBorder(AppColors.brand, lineWidth: AppStroke.width) }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(AppColors.error)
+            .foregroundStyle(AppColors.brand)
             .disabled(store.isResetting || store.isRefreshing || store.collectingTaskID != nil)
             Text("Testing only · clears quest progress and refreshes every Quest surface")
-                .font(.caption)
+                .font(AppFont.body(11, relativeTo: .caption))
                 .foregroundStyle(AppColors.secondaryText)
                 .multilineTextAlignment(.center)
         }
@@ -335,25 +349,26 @@ struct QuestTaskRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.dogID == nil ? task.title : task.subjectName)
-                    .font(.headline)
+                    .font(AppFont.heading(16, .semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 if task.dogID != nil {
-                    Text(task.title).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                    Text(task.title).font(AppFont.body(13, relativeTo: .subheadline)).foregroundStyle(AppColors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text(task.subjectLabel).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                    Text(task.subjectLabel).font(AppFont.body(13, relativeTo: .subheadline)).foregroundStyle(AppColors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if collected {
-                    Label("Collected", systemImage: "checkmark.circle.fill").font(.caption)
+                    VitailChip(text: "Collected", systemImage: "checkmark", fill: AppColors.sage)
                 } else if ready {
-                    Text("Ready to collect").font(.caption.weight(.semibold)).foregroundStyle(AppColors.brand)
+                    VitailChip(text: "Ready to collect", systemImage: "sparkle", fill: AppColors.honey)
                 } else {
-                    Label("In progress", systemImage: "clock").font(.caption)
+                    Label("In progress", systemImage: "clock").font(AppFont.body(12, relativeTo: .caption))
                         .foregroundStyle(AppColors.secondaryText)
                 }
                 if !ready && !collected, let progress = task.progressRatio {
-                    ProgressView(value: progress).tint(AppColors.brand)
+                    VitailProgressBar(value: progress)
+                        .padding(.top, 2)
                         .accessibilityLabel("Task progress")
                         .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
                 }
@@ -366,11 +381,15 @@ struct QuestTaskRow: View {
         }
         .padding(AppSpacing.medium)
         .foregroundStyle(collected ? AppColors.secondaryText : AppColors.primaryText)
-        .background(ready ? AppColors.brand.opacity(0.12) : AppColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground(shadow: !collected)
         .overlay {
-            if ready { RoundedRectangle(cornerRadius: AppRadius.card).stroke(AppColors.brand.opacity(0.5), lineWidth: 1) }
+            if ready {
+                RoundedRectangle(cornerRadius: AppRadius.card)
+                    .strokeBorder(AppColors.honey, lineWidth: AppStroke.width + 1)
+            }
         }
+        .padding(.trailing, AppStroke.shadow)
+        .padding(.bottom, collected ? 0 : AppStroke.shadow)
         .opacity(collected ? 0.6 : 1)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -395,28 +414,29 @@ struct QuestDetailView: View {
                         if !task.isStreak {
                             HStack(spacing: AppSpacing.medium) {
                                 AvatarView(url: task.photo, name: task.subjectName, systemImage: "dog.fill", size: 64)
-                                Text(task.subjectName).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+                                Text(task.subjectName).font(AppFont.heading(22, .bold, relativeTo: .title2)).fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        Text(task.title).font(.title2.bold())
+                        Text(task.title).vitailTitle(24)
                         if let period = task.expiryLabel {
-                            Text(period).font(.subheadline).foregroundStyle(AppColors.secondaryText)
+                            Text(period).font(AppFont.body(14, relativeTo: .subheadline)).foregroundStyle(AppColors.secondaryText)
                         }
                         if task.isStreak, let progress = task.streakProgress {
                             StreakProgressView(currentDays: progress.currentDays, targetDays: progress.targetDays,
                                                isReady: task.status == .ready)
                         }
-                        Text(task.detail).foregroundStyle(AppColors.secondaryText)
+                        Text(task.detail).font(AppFont.body(15)).foregroundStyle(AppColors.secondaryText)
                         if task.status == .collected {
                             Label("Collected · \(task.rewardPoints) points", systemImage: "checkmark.circle.fill")
-                                .font(.headline)
+                                .font(AppFont.heading(16, .semibold))
                                 .foregroundStyle(AppColors.success)
-                                .padding(AppSpacing.medium)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(AppColors.success.opacity(0.12), in: RoundedRectangle(cornerRadius: AppRadius.field))
+                                .vitailInset()
                                 .transition(.scale(scale: 0.92).combined(with: .opacity))
                         } else {
-                            if task.rewardPoints > 0 { Text("\(task.rewardPoints) points").font(.headline) }
+                            if task.rewardPoints > 0 {
+                                VitailChip(text: "+\(task.rewardPoints) pts", systemImage: "sparkle", fill: AppColors.honey)
+                            }
                             if task.status == .ready {
                                 PrimaryButton(title: "Collect", isLoading: store.collectingTaskID == taskID,
                                               isDisabled: !store.canCollect(task)) {
@@ -502,9 +522,7 @@ struct DailyWalkingGoalCard: View {
                             progressLabel
                         }
                     }
-                    ProgressView(value: min(Double(goal.activeSeconds) / Double(target), 1))
-                        .tint(AppColors.brand)
-                        .scaleEffect(x: 1, y: 1.8, anchor: .center)
+                    VitailProgressBar(value: min(Double(goal.activeSeconds) / Double(target), 1))
                         .accessibilityLabel("\(goal.dogName)'s walking goal")
                         .accessibilityValue("\(goal.activeSeconds) of \(target) seconds. \(goal.completed ? "Completed" : "Incomplete")")
                 } else {
@@ -512,27 +530,27 @@ struct DailyWalkingGoalCard: View {
                         title
                         Spacer(minLength: AppSpacing.small)
                         Text("Set a daily goal")
-                            .font(.subheadline.weight(.semibold))
+                            .font(AppFont.body(13, .semibold, relativeTo: .subheadline))
                             .foregroundStyle(AppColors.secondaryText)
                     }
-                    ProgressView(value: 0)
-                        .tint(AppColors.border)
-                        .scaleEffect(x: 1, y: 1.8, anchor: .center)
+                    VitailProgressBar(value: 0)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppSpacing.medium)
         .foregroundStyle(AppColors.primaryText)
-        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground()
+        .padding(.trailing, AppStroke.shadow)
+        .padding(.bottom, AppStroke.shadow)
         .accessibilityElement(children: .contain)
     }
 
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(goal.dogName).font(.headline)
+            Text(goal.dogName).font(AppFont.heading(16, .semibold))
             Text("Daily walking goal")
-                .font(.subheadline)
+                .font(AppFont.body(13, relativeTo: .subheadline))
                 .foregroundStyle(AppColors.secondaryText)
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -540,7 +558,7 @@ struct DailyWalkingGoalCard: View {
 
     private var progressLabel: some View {
         Text(goal.timeLabel)
-            .font(.subheadline.weight(.semibold).monospacedDigit())
+            .font(AppFont.heading(15, .semibold, relativeTo: .subheadline).monospacedDigit())
             .foregroundStyle(goal.completed ? AppColors.success : AppColors.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
     }

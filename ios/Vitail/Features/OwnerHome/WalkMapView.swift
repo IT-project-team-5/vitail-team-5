@@ -492,8 +492,8 @@ struct WalkMapView: View {
                         drawerDetent = drawerDetent == .collapsed ? .expanded : .collapsed
                     }
                 } label: {
-                    Capsule().fill(AppColors.secondaryText.opacity(0.35))
-                        .frame(width: 36, height: 4)
+                    Capsule().fill(AppColors.border)
+                        .frame(width: 40, height: 5)
                         .frame(maxWidth: .infinity)
                         .frame(height: WalkDrawerGeometry.handleHeight)
                         .contentShape(Rectangle())
@@ -537,12 +537,15 @@ struct WalkMapView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: geometry.expandedHeight, alignment: .top)
-            .background(AppColors.surface)
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
+            .background(AppColors.background)
+            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28))
+            .overlay {
+                UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
+                    .stroke(AppColors.outline, lineWidth: AppStroke.width)
+            }
             .frame(height: geometry.height(at: drawerDetent, translation: panelDrag), alignment: .top)
             .clipped()
             .contentShape(Rectangle())
-            .shadow(color: .black.opacity(0.08), radius: 12, y: -3)
             .onPreferenceChange(WalkDrawerControlsHeightKey.self) { height in
                 if height > 0, abs(controlsHeight - height) > 0.5 { controlsHeight = height }
             }
@@ -603,7 +606,7 @@ struct WalkMapView: View {
                 )
             }
             if let notice = walkTracker.trackingNotice {
-                Text(notice).font(.footnote).foregroundStyle(AppColors.secondaryText)
+                Text(notice).font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
             }
             netWalkPanel
             if let message = venueCheckIns.errorMessage {
@@ -613,7 +616,7 @@ struct WalkMapView: View {
             WalkHistorySection(store: walkHistory)
             WalkSyncPanel(sync: coordinator.sync, history: walkHistory)
             Text("Walking continues with the screen locked. Pauses are excluded. After 5 minutes without activity, review your walk to finish.")
-                .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                .font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
         }
         .padding(.top, AppSpacing.medium)
         .padding(.horizontal, AppSpacing.medium)
@@ -869,14 +872,14 @@ private struct LocationStatusCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.headline)
+                    .font(AppFont.heading(16, .semibold))
                 Text(message)
-                    .font(.subheadline)
+                    .font(AppFont.body(13, relativeTo: .subheadline))
                     .foregroundStyle(AppColors.secondaryText)
 
                 if let actionTitle, let action {
                     Button(actionTitle, action: action)
-                        .font(.subheadline.weight(.semibold))
+                        .font(AppFont.heading(14, .semibold))
                         .foregroundStyle(AppColors.brand)
                         .padding(.top, 2)
                 }
@@ -886,9 +889,8 @@ private struct LocationStatusCard: View {
         }
         .padding(AppSpacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
-        .shadow(radius: 4, y: 2)
+        .vitailCardBackground()
+        .padding(.trailing, AppStroke.shadow)
     }
 }
 
@@ -1070,22 +1072,33 @@ struct WalkFinishSummaryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppSpacing.large) {
                     if let record {
-                        VStack(alignment: .leading, spacing: AppSpacing.small) {
-                            HStack(spacing: AppSpacing.large) {
-                                summaryMetric("Distance", value: String(format: "%.2f km", record.distanceKilometres))
-                                summaryMetric("Walking time", value: WalkDogSelectionCard.durationText(record.activeDuration))
-                            }
+                        VStack(spacing: 8) {
+                            VitailSuccessBadge(systemImage: coordinator.needsFinishConfirmation ? "pawprint.fill" : "checkmark")
+                            Text(coordinator.needsFinishConfirmation ? "Finish your walk" : "Walk complete!").vitailTitle(28)
                         }
+                        .frame(maxWidth: .infinity)
+                        .multilineTextAlignment(.center)
+                        HStack {
+                            VitailStat(value: String(format: "%.2f", record.distanceKilometres), unit: "km", label: "Distance")
+                            VitailStat(value: WalkDogSelectionCard.durationText(record.activeDuration), label: "Time")
+                        }
+                        .monospacedDigit()
+                        .padding(.vertical, 16)
+                        .vitailCardBackground()
+                        .padding(.trailing, AppStroke.shadow)
                         pointsSummary(record)
+                            .padding(16)
+                            .vitailCardBackground()
+                            .padding(.trailing, AppStroke.shadow)
                         if let receipt = record.serverSummary {
                             WalkVenueAwardsSection(summary: receipt)
                         } else if !record.dogs.isEmpty || coordinator.needsFinishConfirmation {
                             VStack(alignment: .leading, spacing: AppSpacing.small) {
-                                Text("Venue check-ins").font(.headline)
+                                Text("Venue check-ins").font(AppFont.heading(16, .semibold))
                                 Text(coordinator.needsFinishConfirmation
                                     ? "Complete your walk to settle verified check-ins."
                                     : "Processing venue settlement. Rewards appear after the upload is confirmed.")
-                                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                                    .font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
                             }
                         }
                         if coordinator.needsFinishConfirmation {
@@ -1097,12 +1110,12 @@ struct WalkFinishSummaryView: View {
                             ) { Task { await coordinator.confirmFinishedWalk() } }
                         } else {
                             if !record.dogs.isEmpty {
-                                Text(record.dogs.map(\.name).joined(separator: ", "))
-                                    .foregroundStyle(AppColors.secondaryText)
+                                VitailChip(text: record.dogs.map(\.name).joined(separator: ", "), systemImage: "pawprint.fill",
+                                           fill: AppColors.surface)
                             }
                             if let message = sync.errorMessage {
-                                Text(message).font(.footnote).foregroundStyle(AppColors.secondaryText)
-                                Button("Retry upload") { Task { await sync.refreshAndUpload() } }
+                                Text(message).font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
+                                SecondaryButton(title: "Retry upload") { Task { await sync.refreshAndUpload() } }
                                     .disabled(sync.isSyncing)
                             }
                             PrimaryButton(title: "Done", isLoading: coordinator.isConfirmingFinish) { dismiss() }
@@ -1113,9 +1126,10 @@ struct WalkFinishSummaryView: View {
                         Button("Retry saving") { coordinator.retryStorage() }
                     }
                 }
-                .padding(AppSpacing.large)
+                .padding(.horizontal, 20)
+                .padding(.vertical, AppSpacing.large)
             }
-            .background(AppColors.background)
+            .background { VitailScreenBackground() }
             .navigationTitle("Walk summary")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1143,35 +1157,51 @@ struct WalkFinishSummaryView: View {
     @ViewBuilder
     private func pointsSummary(_ record: WalkRecord) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.small) {
+            VitailSectionLabel(text: "Points earned")
             if let receipt = record.serverSummary {
-                Text("+\(receipt.settledTotalPoints) points").font(.largeTitle.weight(.semibold))
+                pointRow("Walk", receipt.pointsAwarded)
+                pointRow("Venue check-ins", receipt.checkInPointsAwarded)
+                if receipt.netPointsAwarded > 0 { pointRow("Net-Walking", receipt.netPointsAwarded) }
+                VitailDashedDivider().padding(.vertical, 2)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Total").font(AppFont.heading(16, .semibold))
+                    Spacer()
+                    Text("+\(receipt.settledTotalPoints) pts").font(AppFont.heading(28, .bold, relativeTo: .title))
+                        .foregroundStyle(AppColors.success)
+                }
                 Text("Added to your wallet · \(receipt.distanceM / 1_000, specifier: "%.2f") km accepted")
-                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
-                Text("Walk \(receipt.pointsAwarded) · Venue \(receipt.checkInPointsAwarded) · Net-Walking \(receipt.netPointsAwarded)")
-                    .font(.caption).foregroundStyle(AppColors.secondaryText)
+                    .font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
             } else if coordinator.needsFinishConfirmation {
                 let estimate = coordinator.estimatedPoints(for: record, hasSelectedDogs: !selection.selectedDogs.isEmpty)
-                Text("≈ \(estimate) points").font(.largeTitle.weight(.semibold))
+                Text("≈ \(estimate) pts").font(AppFont.heading(34, .bold, relativeTo: .largeTitle))
                 Text(selection.selectedDogs.isEmpty
                      ? "Choose who came along. Walks without a dog are saved on this device and earn no points."
                      : "Walk points estimated from your route, up to 40 per day. Venue rewards are confirmed at settlement; walking and check-ins share a 72-point daily limit.")
-                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                    .font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
             } else if record.dogs.isEmpty || record.uploadRequest == nil || record.uploadFailure != nil {
-                Text("0 points").font(.largeTitle.weight(.semibold))
-                Text(record.syncDescription).font(.footnote).foregroundStyle(AppColors.secondaryText)
+                Text("0 pts").font(AppFont.heading(34, .bold, relativeTo: .largeTitle))
+                Text(record.syncDescription).font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
             } else {
-                Text("Points pending").font(.title2.weight(.semibold))
+                Text("Points pending").font(AppFont.heading(24, .bold, relativeTo: .title2))
                 Text("Your walk is saved. Your points will appear when the upload is confirmed.")
-                    .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                    .font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
                 if sync.isSyncing { ProgressView() }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func pointRow(_ title: String, _ points: Int) -> some View {
+        HStack {
+            Text(title).font(AppFont.body(14)).foregroundStyle(AppColors.secondaryText)
+            Spacer()
+            Text("+\(points)").font(AppFont.heading(15, .semibold)).foregroundStyle(AppColors.success)
+        }
+    }
+
     private var dogPicker: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.medium) {
-            Text("Who came along?").font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Who came along?").font(AppFont.heading(20, .bold, relativeTo: .title3))
             if selection.isLoading {
                 ProgressView("Loading your dogs…")
             } else if let message = selection.errorMessage {
@@ -1184,17 +1214,25 @@ struct WalkFinishSummaryView: View {
                 ForEach(selection.dogs) { dog in
                     let selected = selection.selectedDogIDs.contains(dog.id)
                     Button { selection.toggleDog(id: dog.id) } label: {
-                        HStack(spacing: AppSpacing.medium) {
+                        HStack(spacing: 12) {
                             AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 44)
-                            Text(dog.name).foregroundStyle(AppColors.primaryText)
+                            Text(dog.name).font(AppFont.heading(16, .semibold)).foregroundStyle(AppColors.primaryText)
                             Spacer()
-                            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected ? AppColors.brand : AppColors.secondaryText)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 7).fill(selected ? AppColors.honey : AppColors.surface)
+                                RoundedRectangle(cornerRadius: 7).strokeBorder(AppColors.outline, lineWidth: AppStroke.width)
+                                if selected {
+                                    Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(AppColors.onAccent)
+                                }
+                            }
+                            .frame(width: 26, height: 26)
                         }
-                        .padding(.vertical, 4)
+                        .padding(12)
+                        .vitailCardBackground(shadow: selected)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.trailing, AppStroke.shadow)
                     .disabled(coordinator.isConfirmingFinish)
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }

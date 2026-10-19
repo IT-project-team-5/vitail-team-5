@@ -48,108 +48,138 @@ struct DogFormView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
                     AvatarPhotoPicker(url: dog?.photo, name: name.isEmpty ? "your dog" : name,
                                       systemImage: "dog.fill", photoData: $photoData)
-                        .padding(.vertical, AppSpacing.medium)
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                if pendingRequest != nil && dog == nil {
-                    Section {
+                        .padding(.vertical, AppSpacing.small)
+                    if pendingRequest != nil && dog == nil {
                         Text("Your previous save needs confirmation. Retry to recover that profile, then edit its details if needed.")
-                            .font(.footnote)
+                            .font(AppFont.body(13, relativeTo: .footnote))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .vitailInset()
                     }
-                }
-                Section("Dog details") {
-                    TextField("Name", text: $name, prompt: Text("Name").foregroundStyle(AppColors.secondaryText))
-                        .focused($focusedField, equals: .name)
-                        .submitLabel(.next)
-                        .onSubmit { focusedField = .weight }
-                    Menu {
-                        Picker("Breed", selection: $breedID) {
-                            Text("Select a breed").tag(Int?.none)
-                            ForEach(viewModel.breeds) { breed in
-                                Text(breed.name).tag(Optional(breed.id))
+                    Group {
+                        fieldGroup("Dog's name") {
+                            TextField("Name", text: $name, prompt: Text("e.g. Mochi").foregroundStyle(AppColors.secondaryText))
+                                .focused($focusedField, equals: .name)
+                                .submitLabel(.next)
+                                .onSubmit { focusedField = .weight }
+                                .vitailFieldStyle()
+                        }
+                        fieldGroup("Breed") {
+                            Menu {
+                                Picker("Breed", selection: $breedID) {
+                                    Text("Select a breed").tag(Int?.none)
+                                    ForEach(viewModel.breeds) { breed in
+                                        Text(breed.name).tag(Optional(breed.id))
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Text(selectedBreedName)
+                                        .foregroundStyle(breedID == nil ? AppColors.secondaryText : AppColors.primaryText)
+                                    Spacer(minLength: AppSpacing.small)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppColors.secondaryText)
+                                        .accessibilityHidden(true)
+                                }
+                                .vitailFieldStyle()
+                                // Include the label, spacer and arrow in the native control.
+                                .contentShape(Rectangle())
+                            }
+                            .menuIndicator(.hidden)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Breed")
+                            .accessibilityValue(selectedBreedName)
+                            .accessibilityIdentifier("dog.breed")
+                        }
+                        fieldGroup("Birthday", footer: dog != nil && birthday == nil
+                                    ? "Birthday is not recorded. Add it when you know it."
+                                    : "Used for birthday quests. Age updates automatically.") {
+                            Button {
+                                birthdayDraft = birthday.flatMap(DogBirthday.date(from:)) ?? Date()
+                                isChoosingBirthday = true
+                            } label: {
+                                HStack {
+                                    Text(birthday.map(DogBirthday.display) ?? "DD / MM / YYYY")
+                                        .foregroundStyle(birthday == nil ? AppColors.secondaryText : AppColors.primaryText)
+                                    Spacer()
+                                    if let birthday, let age = DogBirthday.ageMonths(birthday: birthday) {
+                                        Text(ageDescription(months: age))
+                                            .font(AppFont.body(13, relativeTo: .subheadline))
+                                            .foregroundStyle(AppColors.secondaryText)
+                                    } else if let dog {
+                                        Text(dog.ageDescription)
+                                            .font(AppFont.body(13, relativeTo: .subheadline))
+                                            .foregroundStyle(AppColors.secondaryText)
+                                    }
+                                    Image(systemName: "calendar").foregroundStyle(AppColors.secondaryText)
+                                }
+                                .vitailFieldStyle()
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Birthday")
+                            .accessibilityValue(birthday.map(DogBirthday.display) ?? "Not selected")
+                        }
+                        fieldGroup("Size") {
+                            VitailSegmentedControl(selection: $size,
+                                                   options: DogSize.allCases.map { (value: $0, title: $0.label) },
+                                                   label: "Size")
+                        }
+                        fieldGroup("Weight (kg)") {
+                            TextField("Weight (kg)", text: $weightKg, prompt: Text("e.g. 9.5").foregroundStyle(AppColors.secondaryText))
+                                .keyboardType(.decimalPad)
+                                .focused($focusedField, equals: .weight)
+                                .vitailFieldStyle()
+                        }
+                        Toggle(isOn: $isBrachycephalic) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Brachycephalic").font(AppFont.heading(15, .semibold))
+                                Text("Short-nosed breeds get gentler goals")
+                                    .font(AppFont.body(12, relativeTo: .caption))
+                                    .foregroundStyle(AppColors.secondaryText)
                             }
                         }
-                    } label: {
-                        HStack {
-                            Text("Breed")
-                                .foregroundStyle(AppColors.primaryText)
-                            Spacer(minLength: AppSpacing.small)
-                            Text(selectedBreedName)
-                                .multilineTextAlignment(.trailing)
-                                .foregroundStyle(AppColors.secondaryText)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppColors.secondaryText)
-                                .accessibilityHidden(true)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        // Include the label, spacer, arrow and row padding in the native control.
-                        .contentShape(Rectangle())
+                        .tint(AppColors.sage)
+                        .padding(14)
+                        .vitailCardBackground(shadow: false)
                     }
-                    .menuIndicator(.hidden)
-                    .buttonStyle(.plain)
-                    .listRowInsets(EdgeInsets())
-                    .accessibilityLabel("Breed")
-                    .accessibilityValue(selectedBreedName)
-                    .accessibilityIdentifier("dog.breed")
-                    Toggle("Brachycephalic", isOn: $isBrachycephalic)
-                    TextField("Weight (kg)", text: $weightKg)
-                        .keyboardType(.decimalPad)
-                        .focused($focusedField, equals: .weight)
-                }
-                .disabled(pendingRequest != nil && dog == nil)
-                .listRowBackground(AppColors.surface)
+                    .disabled(pendingRequest != nil && dog == nil)
 
-                Section {
-                    Button {
-                        birthdayDraft = birthday.flatMap(DogBirthday.date(from:)) ?? Date()
-                        isChoosingBirthday = true
-                    } label: {
-                        LabeledContent("Birthday", value: birthday.map(DogBirthday.display) ?? "Select birthday")
+                    if let message = validationMessage ?? viewModel.errorMessage {
+                        Label(message, systemImage: "exclamationmark.circle.fill")
+                            .font(AppFont.body(14, .medium))
+                            .foregroundStyle(AppColors.error)
                     }
-                    .foregroundStyle(AppColors.primaryText)
-                    if let birthday, let age = DogBirthday.ageMonths(birthday: birthday) {
-                        LabeledContent("Age", value: ageDescription(months: age))
-                    } else if let dog {
-                        LabeledContent("Recorded age", value: dog.ageDescription)
+
+                    PrimaryButton(title: pendingRequest != nil && dog == nil ? "Retry save" : (isNew ? "Continue" : "Save"),
+                                  isLoading: viewModel.isSaving, isDisabled: viewModel.isSaving) {
+                        Task { await save() }
                     }
-                } header: {
-                    Text("Birthday")
-                } footer: {
-                    Text(dog != nil && birthday == nil
-                         ? "Birthday is not recorded. Add it when you know it."
-                         : "Your dog's age updates automatically from their birthday.")
-                }
-                .disabled(pendingRequest != nil && dog == nil)
-                .listRowBackground(AppColors.surface)
+                    .padding(.top, 4)
 
-                if let message = validationMessage ?? viewModel.errorMessage {
-                    Section { Text(message).foregroundStyle(AppColors.error) }
-                        .listRowBackground(AppColors.surface)
-                }
-
-                if dog != nil {
-                    Section {
-                        Button("Delete Dog", role: .destructive) {
+                    if dog != nil {
+                        Button(role: .destructive) {
                             isConfirmingDelete = true
+                        } label: {
+                            Text("Delete Dog")
+                                .font(AppFont.heading(16, .semibold))
+                                .foregroundStyle(AppColors.error)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                         }
-                        .foregroundStyle(AppColors.error)
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.plain)
                     }
-                    .listRowBackground(AppColors.surface)
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, AppSpacing.medium)
             }
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.interactively)
             .background(AppColors.background)
-            .navigationTitle(dog == nil ? "Add Dog" : "Edit Dog")
+            .navigationTitle(dog == nil ? "Dog profile" : "Edit Dog")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
@@ -158,10 +188,6 @@ struct DogFormView: View {
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(pendingRequest != nil && dog == nil ? "Retry save" : "Save") { Task { await save() } }
-                        .disabled(viewModel.isSaving)
                 }
             }
             .disabled(viewModel.isSaving)
@@ -215,6 +241,19 @@ struct DogFormView: View {
                 }
             } message: {
                 Text("This dog profile will be permanently deleted.")
+            }
+        }
+    }
+
+    private func fieldGroup<Content: View>(_ label: String, footer: String? = nil,
+                                           @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            VitailSectionLabel(text: label).padding(.horizontal, 4).accessibilityHidden(true)
+            content()
+            if let footer {
+                Text(footer).font(AppFont.body(12, relativeTo: .caption))
+                    .foregroundStyle(AppColors.secondaryText)
+                    .padding(.horizontal, 4)
             }
         }
     }
@@ -343,25 +382,36 @@ struct DogOnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: AppSpacing.medium) {
-                Text("Set up Vitail").font(.title2.bold())
-                Text("Account created · \(selectedDog == nil ? "Step 2 of 3: Dog profile" : "Step 3 of 3: Walking goal")")
-                    .font(.subheadline).foregroundStyle(AppColors.secondaryText)
-                    .multilineTextAlignment(.center)
-                ProgressView(value: selectedDog == nil ? 0.5 : 1).tint(AppColors.brand)
+            VStack(alignment: .leading, spacing: 14) {
+                VitailStepBar(step: selectedDog == nil ? 1 : 2, total: 2)
                 if let selectedDog {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Set \(selectedDog.name)'s daily goal").vitailTitle(26)
+                        Text("Pick a level you can keep up most days. You can change it any time in Account.")
+                            .font(AppFont.body(14)).foregroundStyle(AppColors.secondaryText)
+                    }
                     DogGoalView(dog: dogs.dogs.first { $0.id == selectedDog.id } ?? selectedDog, service: dogs.goalService,
                                 onSavingChanged: { savingGoal = $0 }, setupActions: AnyView(setupActions))
                         .id(selectedDog.id)
                 } else {
                     ScrollView {
-                        DogListView(viewModel: dogs, addDog: { addingDog = true }, editDog: { selectedDog = $0 })
-                        setupActions
+                        VStack(alignment: .leading, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Tell us about your dog").vitailTitle(26)
+                                Text("You can add more dogs later in Account.")
+                                    .font(AppFont.body(14)).foregroundStyle(AppColors.secondaryText)
+                            }
+                            DogListView(viewModel: dogs, addDog: { addingDog = true }, editDog: { selectedDog = $0 })
+                            setupActions
+                        }
                     }
                 }
             }
-            .padding(AppSpacing.large)
+            .padding(.horizontal, 20)
+            .padding(.top, AppSpacing.medium)
             .background(AppColors.background)
+            .navigationTitle(selectedDog == nil ? "Dog profile" : "Daily goal")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $addingDog) {
                 DogFormView(viewModel: dogs, onSavedDog: { selectedDog = $0 })
             }
@@ -381,28 +431,33 @@ struct DogOnboardingView: View {
 
     private var setupActions: some View {
         VStack(spacing: AppSpacing.medium) {
-            if let selectedDog {
-                Button("Back to \(selectedDog.name)'s profile") { editingDog = selectedDog }
-                    .disabled(savingGoal || finishing)
-                if dogs.dogs.count > 1 {
-                    Button("Review both dogs") { self.selectedDog = nil }
-                        .disabled(savingGoal || finishing)
-                }
-            }
             if let message = errorMessage ?? dogs.errorMessage {
-                Text(message).foregroundStyle(AppColors.error)
-                if dogs.dogs.isEmpty { Button("Retry loading dogs") { Task { await dogs.load() } } }
+                Text(message).font(AppFont.body(14)).foregroundStyle(AppColors.error)
+                if dogs.dogs.isEmpty {
+                    SecondaryButton(title: "Retry loading dogs") { Task { await dogs.load() } }
+                }
             }
             if !dogs.dogs.isEmpty {
                 if selectedDog != nil {
                     Text("Save your goal above, or finish without an active goal and set one later in Dog Profile.")
-                        .font(.footnote).foregroundStyle(AppColors.secondaryText)
+                        .font(AppFont.body(12, relativeTo: .footnote)).foregroundStyle(AppColors.secondaryText)
+                        .multilineTextAlignment(.center)
                 }
-                if dogs.canAddDog { Button("Add a second dog (optional)") { addingDog = true }.disabled(savingGoal || finishing) }
                 PrimaryButton(title: "Finish setup", isLoading: finishing, isDisabled: savingGoal) { Task { await finish() } }
+                if dogs.canAddDog {
+                    VitailTextButton(title: "Add a second dog (optional)", systemImage: "plus") { addingDog = true }
+                        .disabled(savingGoal || finishing)
+                }
+            }
+            if let selectedDog {
+                VitailTextButton(title: "Back to \(selectedDog.name)'s profile") { editingDog = selectedDog }
+                    .disabled(savingGoal || finishing)
+                if dogs.dogs.count > 1 {
+                    VitailTextButton(title: "Review both dogs") { self.selectedDog = nil }
+                        .disabled(savingGoal || finishing)
+                }
             }
         }
-        .buttonStyle(.borderless)
     }
 
     private func finish() async {

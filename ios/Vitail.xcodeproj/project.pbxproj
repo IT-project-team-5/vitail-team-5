@@ -125,6 +125,13 @@
 		01CD9DA63081293D00DA9B24 /* StatisticsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */; };
 		01CD9DA73081293D00DA9B24 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CD9DA23081293D00DA9B24 /* StatisticsView.swift */; };
 		E72026101600000000000011 /* StatisticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026101600000000000001 /* StatisticsTests.swift */; };
+		FA5700000000000000000200 /* Fredoka-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000100 /* Fredoka-Medium.ttf */; };
+		FA5700000000000000000201 /* Fredoka-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000101 /* Fredoka-SemiBold.ttf */; };
+		FA5700000000000000000202 /* Fredoka-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000102 /* Fredoka-Bold.ttf */; };
+		FA5700000000000000000203 /* WorkSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000103 /* WorkSans-Regular.ttf */; };
+		FA5700000000000000000204 /* WorkSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000104 /* WorkSans-Medium.ttf */; };
+		FA5700000000000000000205 /* WorkSans-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000105 /* WorkSans-SemiBold.ttf */; };
+		FA5700000000000000000206 /* WorkSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FA5700000000000000000106 /* WorkSans-Bold.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -264,6 +271,13 @@
 		01CD9DA33081293D00DA9B24 /* StatisticsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsViewModel.swift; sourceTree = "<group>"; };
 		01CD9DA23081293D00DA9B24 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		E72026101600000000000001 /* StatisticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsTests.swift; sourceTree = "<group>"; };
+		FA5700000000000000000100 /* Fredoka-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fredoka-Medium.ttf; sourceTree = "<group>"; };
+		FA5700000000000000000101 /* Fredoka-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fredoka-SemiBold.ttf; sourceTree = "<group>"; };
+		FA5700000000000000000102 /* Fredoka-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fredoka-Bold.ttf; sourceTree = "<group>"; };
+		FA5700000000000000000103 /* WorkSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = WorkSans-Regular.ttf; sourceTree = "<group>"; };
+		FA5700000000000000000104 /* WorkSans-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = WorkSans-Medium.ttf; sourceTree = "<group>"; };
+		FA5700000000000000000105 /* WorkSans-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = WorkSans-SemiBold.ttf; sourceTree = "<group>"; };
+		FA5700000000000000000106 /* WorkSans-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = WorkSans-Bold.ttf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -320,6 +334,7 @@
 			isa = PBXGroup;
 			children = (
 				00000000000000000000E212 /* Assets.xcassets */,
+				FA5700000000000000000300 /* Fonts */,
 				204000000000000000000001 /* App */,
 				205000000000000000000001 /* Core */,
 				20A000000000000000000001 /* Features */,
@@ -633,6 +648,20 @@
 			path = Statistics;
 			sourceTree = "<group>";
 		};
+		FA5700000000000000000300 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				FA5700000000000000000100 /* Fredoka-Medium.ttf */,
+				FA5700000000000000000101 /* Fredoka-SemiBold.ttf */,
+				FA5700000000000000000102 /* Fredoka-Bold.ttf */,
+				FA5700000000000000000103 /* WorkSans-Regular.ttf */,
+				FA5700000000000000000104 /* WorkSans-Medium.ttf */,
+				FA5700000000000000000105 /* WorkSans-SemiBold.ttf */,
+				FA5700000000000000000106 /* WorkSans-Bold.ttf */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -715,6 +744,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				00000000000000000000E112 /* Assets.xcassets in Resources */,
+				FA5700000000000000000200 /* Fredoka-Medium.ttf in Resources */,
+				FA5700000000000000000201 /* Fredoka-SemiBold.ttf in Resources */,
+				FA5700000000000000000202 /* Fredoka-Bold.ttf in Resources */,
+				FA5700000000000000000203 /* WorkSans-Regular.ttf in Resources */,
+				FA5700000000000000000204 /* WorkSans-Medium.ttf in Resources */,
+				FA5700000000000000000205 /* WorkSans-SemiBold.ttf in Resources */,
+				FA5700000000000000000206 /* WorkSans-Bold.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

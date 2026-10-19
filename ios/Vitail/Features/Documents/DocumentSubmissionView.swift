@@ -291,7 +291,7 @@ struct DocumentSubmissionView: View {
             }
         }
         .padding(AppSpacing.medium)
-        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground()
     }
 
     private var reviewFields: some View {
@@ -406,7 +406,7 @@ struct DocumentSubmissionView: View {
         }
         .padding(AppSpacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground()
     }
 
     @ViewBuilder

@@ -14,17 +14,43 @@ struct AvatarView: View {
             if let image = phase.image {
                 image.resizable().scaledToFill()
             } else {
-                ZStack {
-                    AppColors.brand.opacity(0.10)
-                    Image(systemName: systemImage)
-                        .font(.system(size: size * 0.37, weight: .medium))
-                        .foregroundStyle(AppColors.brand)
-                }
+                placeholder
             }
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+        .overlay(Circle().strokeBorder(AppColors.outline, lineWidth: size >= 40 ? AppStroke.width : 1.5))
         .accessibilityLabel("\(name) photo")
+    }
+
+    /// Prototype placeholder: dogs get a white sitting-dog on one of the accent
+    /// colours (stable per name); people and cafés get an ink icon on Paper Alt.
+    @ViewBuilder private var placeholder: some View {
+        if systemImage.hasPrefix("dog") || systemImage.hasPrefix("pawprint") {
+            ZStack {
+                Self.accent(for: name)
+                Image("MotifDogSit")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color(vitailHex: 0xFFF8EA))
+                    .frame(width: size * 0.6, height: size * 0.6)
+                    .offset(y: size * 0.04)
+            }
+        } else {
+            ZStack {
+                AppColors.inset
+                Image(systemName: systemImage.replacingOccurrences(of: ".fill", with: ""))
+                    .font(.system(size: size * 0.4, weight: .medium))
+                    .foregroundStyle(AppColors.primaryText)
+            }
+        }
+    }
+
+    static func accent(for name: String) -> Color {
+        let palette = [AppColors.honey, AppColors.terracotta, AppColors.sage, AppColors.sky]
+        let sum = name.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+        return palette[sum % palette.count]
     }
 
     private var resolvedURL: URL? {

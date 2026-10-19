@@ -20,22 +20,11 @@ struct AuthView: View {
             GeometryReader { geometry in
                 ScrollView {
                     VStack(alignment: .leading, spacing: AppSpacing.extraLarge) {
-                        VStack(alignment: .leading, spacing: AppSpacing.large) {
+                        VStack(alignment: .leading, spacing: 16) {
                             header
-                            VStack(spacing: AppSpacing.medium) {
-                                ForEach(AuthViewModel.AccountType.allCases) { accountType in
-                                    VStack(alignment: .leading, spacing: AppSpacing.medium) {
-                                        accountTypeButton(accountType)
-                                        if viewModel.accountType == accountType {
-                                            authenticationForm
-                                                .padding(.horizontal, AppSpacing.small)
-                                                .padding(.bottom, AppSpacing.medium)
-                                                .transition(.opacity.combined(with: .move(edge: .top)))
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.top, AppSpacing.large)
+                                .padding(.bottom, 4)
+                            accountTypeMenu
+                            authenticationForm
                             Spacer(minLength: AppSpacing.extraLarge)
                         }
                         .frame(minHeight: max(geometry.size.height - AppSpacing.large * 2, 0), alignment: .top)
@@ -45,36 +34,65 @@ struct AuthView: View {
                             .padding(.top, AppSpacing.extraLarge)
                         #endif
                     }
-                    .padding(AppSpacing.large)
+                    .padding(.horizontal, AppSpacing.large)
+                    .padding(.vertical, AppSpacing.large)
                 }
-                .background(AppColors.background)
+                .background { signInBackdrop }
                 .disabled(viewModel.isLoading)
+                .onAppear {
+                    // The prototype opens with Dog Owner already chosen.
+                    if viewModel.accountType == nil { viewModel.select(.dogOwner) }
+                }
             }
         }
     }
 
+    private var selectedType: AuthViewModel.AccountType { viewModel.accountType ?? .dogOwner }
+
+    /// Two very faint ink dogs, as on the prototype's sign-in screen.
+    private var signInBackdrop: some View {
+        GeometryReader { proxy in
+            ZStack {
+                AppColors.background
+                Image("MotifDogRun").renderingMode(.template).resizable().scaledToFit()
+                    .foregroundStyle(AppColors.primaryText.opacity(0.07))
+                    .frame(width: 110, height: 63)
+                    .rotationEffect(.degrees(-8))
+                    .position(x: proxy.size.width - 35, y: 50)
+                Image("MotifDogSit").renderingMode(.template).resizable().scaledToFit()
+                    .foregroundStyle(AppColors.primaryText.opacity(0.06))
+                    .frame(width: 90, height: 90)
+                    .rotationEffect(.degrees(6))
+                    .position(x: 23, y: proxy.size.height - 59)
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+
     private var authenticationForm: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.large) {
+        VStack(alignment: .leading, spacing: 14) {
             if viewModel.accountType == .dogOwner {
-                Picker("Authentication mode", selection: $viewModel.mode) {
-                    ForEach(AuthViewModel.Mode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+                VitailSegmentedControl(
+                    selection: $viewModel.mode,
+                    options: AuthViewModel.Mode.allCases.map { (value: $0, title: $0.rawValue) },
+                    label: "Authentication mode"
+                )
+                .padding(.bottom, 4)
             }
-            VStack(spacing: AppSpacing.medium) {
-                if viewModel.mode == .register {
-                    AppTextField(title: "Display name", text: $viewModel.displayName, textContentType: .name)
-                }
-                AppTextField(title: "Email", text: $viewModel.email,
-                             keyboardType: .emailAddress, textContentType: .emailAddress)
-                AppTextField(title: "Password", text: $viewModel.password, isSecure: true,
-                             textContentType: viewModel.mode == .login ? .password : .newPassword)
+            if viewModel.mode == .register {
+                AppTextField(title: "Display name", text: $viewModel.displayName, textContentType: .name,
+                             label: "Name", prompt: "Your name")
             }
+            AppTextField(title: "Email", text: $viewModel.email,
+                         keyboardType: .emailAddress, textContentType: .emailAddress,
+                         label: "Email", prompt: "you@example.com")
+            AppTextField(title: "Password", text: $viewModel.password, isSecure: true,
+                         textContentType: viewModel.mode == .login ? .password : .newPassword,
+                         label: "Password", prompt: "••••••••")
             if let errorMessage = viewModel.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.circle.fill")
-                    .font(.subheadline)
+                    .font(AppFont.body(14, .medium))
                     .foregroundStyle(AppColors.error)
                     .accessibilityIdentifier("authError")
             }
@@ -82,46 +100,80 @@ struct AuthView: View {
                           isDisabled: !viewModel.canSubmit) {
                 Task { await viewModel.submit(using: session) }
             }
+            .padding(.top, 8)
             if viewModel.accountType == .cafeOwner {
                 Text("Café accounts are created by a Vitail administrator.")
-                    .font(.footnote)
+                    .font(AppFont.body(12, relativeTo: .footnote))
                     .foregroundStyle(AppColors.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
             }
         }
+        .animation(.easeOut(duration: 0.18), value: viewModel.mode)
     }
 
-    private func accountTypeButton(_ accountType: AuthViewModel.AccountType) -> some View {
-        Button {
-            withAnimation { viewModel.select(accountType) }
+    /// Account type card ("🐾 Dog Owner ⌄"); opens a menu to switch to Cafe.
+    private var accountTypeMenu: some View {
+        Menu {
+            ForEach(AuthViewModel.AccountType.allCases) { accountType in
+                Button {
+                    // select() toggles when the same type is chosen again; keep one selected.
+                    guard viewModel.accountType != accountType else { return }
+                    withAnimation { viewModel.select(accountType) }
+                } label: {
+                    if viewModel.accountType == accountType {
+                        Label(accountType.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(accountType.rawValue)
+                    }
+                }
+            }
         } label: {
-            HStack(spacing: AppSpacing.medium) {
-                Image(systemName: accountType == .dogOwner ? "dog.fill" : "cup.and.saucer.fill")
-                    .frame(width: accountIconWidth)
-                Text(accountType.rawValue)
-                    .fontWeight(.semibold)
+            HStack(spacing: 10) {
+                Group {
+                    if selectedType == .dogOwner {
+                        Image("MotifPaw").renderingMode(.template).resizable().scaledToFit()
+                    } else {
+                        Image(systemName: "cup.and.saucer.fill").resizable().scaledToFit()
+                    }
+                }
+                .foregroundStyle(AppColors.terracotta)
+                .frame(width: accountIconWidth * 0.85, height: accountIconWidth * 0.85)
+                Text(selectedType.rawValue)
+                    .font(AppFont.heading(16, .semibold))
+                    .foregroundStyle(AppColors.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                Image(systemName: viewModel.accountType == accountType ? "chevron.up" : "chevron.down")
-                    .font(.subheadline)
+                Image(systemName: "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.secondaryText)
             }
-            .foregroundStyle(AppColors.primaryText)
-            .padding(AppSpacing.large)
-            .frame(minHeight: 64)
-            .background(AppColors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .vitailCardBackground(radius: 18)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityValue(viewModel.accountType == accountType ? "Expanded" : "Collapsed")
-        .accessibilityHint(viewModel.accountType == accountType ? "Hide sign-in fields" : "Show sign-in fields")
+        .padding(.trailing, AppStroke.shadow)
+        .padding(.bottom, AppStroke.shadow)
+        .accessibilityLabel("Account type")
+        .accessibilityValue(selectedType.rawValue)
+        .accessibilityHint("Choose Dog Owner or Cafe")
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.small) {
-            VitailBrandMark(size: 136)
+        VStack(spacing: 10) {
+            // The approved brand artwork (same as the Home Screen icon).
+            VitailBrandMark(size: 120)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 120 * 0.22, style: .continuous)
+                        .strokeBorder(AppColors.outline, lineWidth: AppStroke.width)
+                }
             Text("Walk more. Earn local rewards.")
+                .font(AppFont.body(13, relativeTo: .subheadline))
                 .foregroundStyle(AppColors.secondaryText)
         }
-        .padding(.top, AppSpacing.extraLarge)
+        .frame(maxWidth: .infinity)
+        .padding(.top, AppSpacing.medium)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Vitail. Walk more. Earn local rewards.")
     }
@@ -142,6 +194,10 @@ struct AuthView: View {
                 .frame(height: 44)
                 .background(AppColors.background)
                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.field))
+                .overlay {
+                    RoundedRectangle(cornerRadius: AppRadius.field)
+                        .strokeBorder(AppColors.border, lineWidth: 1.5)
+                }
                 .accessibilityIdentifier("debugBackendURL")
 
             HStack {
@@ -170,8 +226,7 @@ struct AuthView: View {
             }
         }
         .padding(AppSpacing.medium)
-        .background(AppColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground(shadow: false)
     }
 
     private func saveDebugBackendURL() {

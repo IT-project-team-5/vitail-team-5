@@ -8,16 +8,16 @@ struct WalkHistorySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
             HStack(alignment: .firstTextBaseline) {
-                Label("Walk History", systemImage: "clock.arrow.circlepath")
-                    .font(.headline)
+                Label("Walk history", systemImage: "clock.arrow.circlepath")
+                    .font(AppFont.heading(20, .bold, relativeTo: .title3))
                 Spacer(minLength: AppSpacing.small)
                 Text("\(store.records.count)")
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppFont.heading(15, .semibold))
                     .foregroundStyle(AppColors.secondaryText)
             }
 
             Text("Routes stay on this device. Uploaded walk summaries and points are stored on the server.")
-                .font(.caption)
+                .font(AppFont.body(12, relativeTo: .caption))
                 .foregroundStyle(AppColors.secondaryText)
 
             if let message = store.errorMessage {
@@ -37,9 +37,9 @@ struct WalkHistorySection: View {
             if store.records.isEmpty && store.errorMessage == nil {
                 VStack(alignment: .leading, spacing: AppSpacing.small) {
                     Label("No walks yet", systemImage: "figure.walk")
-                        .font(.headline)
+                        .font(AppFont.heading(16, .semibold))
                     Text("Finish a walk to see it here, with your dogs, distance and route.")
-                        .font(.subheadline)
+                        .font(AppFont.body(13, relativeTo: .subheadline))
                         .foregroundStyle(AppColors.secondaryText)
                 }
                 .historyCard()
@@ -72,9 +72,9 @@ struct WalkHistoryCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(walk.startedAt, format: .dateTime.day().month(.abbreviated).year())
-                        .font(.headline)
+                        .font(AppFont.heading(16, .semibold))
                     Text(walk.startedAt, format: .dateTime.hour().minute())
-                        .font(.caption)
+                        .font(AppFont.body(12, relativeTo: .caption))
                         .foregroundStyle(AppColors.secondaryText)
                 }
                 Spacer(minLength: AppSpacing.small)
@@ -84,18 +84,20 @@ struct WalkHistoryCard: View {
                     .accessibilityHidden(true)
             }
 
-            Label(walk.dogs.isEmpty ? "Solo walk" : walk.dogs.map(\.name).joined(separator: ", "), systemImage: "dog.fill")
-                .font(.subheadline)
+            Label(walk.dogs.isEmpty ? "Solo walk" : walk.dogs.map(\.name).joined(separator: ", "), systemImage: "pawprint.fill")
+                .font(AppFont.body(13, .medium, relativeTo: .subheadline))
                 .fixedSize(horizontal: false, vertical: true)
 
             WalkHistoryStats(walk: walk)
             Text(walk.syncDescription)
-                .font(.caption)
+                .font(AppFont.body(12, relativeTo: .caption))
                 .foregroundStyle(AppColors.secondaryText)
 
             if walk.routeSegments.contains(where: { !$0.isEmpty }) {
                 WalkRouteThumbnail(segments: walk.routeSegments)
                     .frame(height: 88)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(AppColors.outline, lineWidth: AppStroke.width))
                     .accessibilityHidden(true)
                 HStack {
                     Text("Route preview")
@@ -129,9 +131,9 @@ struct WalkHistoryDetailView: View {
                 VStack(alignment: .leading, spacing: AppSpacing.medium) {
                     VStack(alignment: .leading, spacing: AppSpacing.small) {
                         Text(walk.startedAt, format: .dateTime.day().month(.wide).year())
-                            .font(.title2.bold())
-                        Label(walk.dogs.isEmpty ? "Solo walk" : walk.dogs.map(\.name).joined(separator: ", "), systemImage: "dog.fill")
-                            .font(.subheadline)
+                            .font(AppFont.heading(24, .bold, relativeTo: .title2))
+                        Label(walk.dogs.isEmpty ? "Solo walk" : walk.dogs.map(\.name).joined(separator: ", "), systemImage: "pawprint.fill")
+                            .font(AppFont.body(14, .medium, relativeTo: .subheadline))
                         WalkHistoryStats(walk: walk)
                         LabeledContent("Started") {
                             Text(walk.startedAt, format: .dateTime.hour().minute())
@@ -146,12 +148,16 @@ struct WalkHistoryDetailView: View {
                     .historyCard()
 
                     Text("Recorded route")
-                        .font(.headline)
+                        .font(AppFont.heading(20, .bold, relativeTo: .title3))
 
                     if let first = points.first, let last = points.last {
                         routeMap(first: first, last: last)
                             .frame(height: 320)
                             .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: AppRadius.card)
+                                    .strokeBorder(AppColors.outline, lineWidth: AppStroke.width)
+                            }
                         Text(points.count == 1
                              ? "Only one location was recorded for this walk."
                              : "The line shows recorded locations. Paused parts are not joined.")
@@ -167,7 +173,8 @@ struct WalkHistoryDetailView: View {
                         .font(.caption)
                         .foregroundStyle(AppColors.secondaryText)
                 }
-                .padding(AppSpacing.medium)
+                .padding(.horizontal, 20)
+                .padding(.vertical, AppSpacing.medium)
             }
             .background(AppColors.background)
             .navigationTitle("Walk Details")
@@ -252,13 +259,13 @@ private struct WalkHistoryStats: View {
         } icon: {
             Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
         }
-        .font(.subheadline.weight(.semibold))
+        .font(AppFont.heading(15, .semibold, relativeTo: .subheadline))
         .accessibilityLabel("Distance, \(walk.distanceKilometres, specifier: "%.2f") kilometres")
     }
 
     private var duration: some View {
         Label(walkDurationText(walk.activeDuration), systemImage: "stopwatch")
-            .font(.subheadline.weight(.semibold))
+            .font(AppFont.heading(15, .semibold, relativeTo: .subheadline))
             .monospacedDigit()
             .accessibilityLabel("Walking time, \(walkDurationText(walk.activeDuration))")
     }
@@ -364,7 +371,8 @@ private extension View {
     func historyCard() -> some View {
         padding(AppSpacing.medium)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppColors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+            .vitailCardBackground()
+            .padding(.trailing, AppStroke.shadow)
+            .padding(.bottom, AppStroke.shadow)
     }
 }

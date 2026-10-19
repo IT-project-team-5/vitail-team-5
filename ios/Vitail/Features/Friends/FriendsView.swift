@@ -7,71 +7,61 @@ struct FriendsView: View {
     @State private var pendingBlock: SocialProfile?
 
     var body: some View {
-        List {
-            if let profile = store.overview?.me.profile { myProfileSection(profile) }
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let profile = store.overview?.me.profile { myProfileSection(profile) }
+                if store.overview != nil { visibilityCard }
                 NavigationLink {
                     StatisticsView(ownerID: store.ownerID, session: session)
                 } label: {
-                    Label("Statistics & leaderboard", systemImage: "chart.bar.xaxis")
+                    linkRow(title: "Statistics & leaderboard", subtitle: "Your walks and how friends compare",
+                            systemImage: "chart.bar.xaxis", fill: AppColors.honey)
+                        .vitailCard(padding: 14)
                 }
+                .buttonStyle(.plain)
+                .padding(.trailing, AppStroke.shadow)
                 .accessibilityIdentifier("friends-statistics-link")
-            }
-            if let overview = store.overview {
-                friendsSection(overview)
-                settingsSection
-            } else if store.isRefreshing {
-                Section { ProgressView("Loading friends…") }
-            } else {
-                Section {
-                    ContentUnavailableView(
-                        "Friends unavailable",
-                        systemImage: "person.2.slash",
-                        description: Text(store.errorMessage ?? "Check your connection and try again.")
-                    )
-                    Button("Try Again") { Task { await store.refresh() } }
+                if let overview = store.overview {
+                    friendsSection(overview)
+                    settingsSection
+                } else if store.isRefreshing {
+                    ProgressView("Loading friends…")
+                        .font(AppFont.body(15))
                         .frame(maxWidth: .infinity)
-                }
-            }
-
-            if store.overview != nil, let error = store.errorMessage {
-                Section {
-                    Text(error).foregroundStyle(AppColors.error)
-                    Button("Try Again") { Task { await store.refresh() } }
-                }
-            }
-            if let notice = store.notice {
-                Section { Text(notice).foregroundStyle(AppColors.secondaryText) }
-            }
-        }
-        .buttonStyle(.borderless)
-        .scrollContentBackground(.hidden)
-        .background(AppColors.background)
-        .navigationTitle("Friends")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    AddFriendsView(store: store)
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 23, weight: .medium))
-                            .frame(width: 42, height: 42)
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .bold))
-                            .padding(3).background(AppColors.background, in: Circle())
-                        if !(store.overview?.incomingRequests.isEmpty ?? true) {
-                            Circle().fill(AppColors.error).frame(width: 8, height: 8)
-                                .offset(x: 4, y: -4)
+                        .padding(.vertical, AppSpacing.large)
+                } else {
+                    VStack(spacing: AppSpacing.medium) {
+                        ContentUnavailableView {
+                            Label("Friends unavailable", systemImage: "person.2.slash")
+                                .font(AppFont.heading(20, .semibold, relativeTo: .title3))
+                        } description: {
+                            Text(store.errorMessage ?? "Check your connection and try again.")
+                                .font(AppFont.body(15))
                         }
+                        SecondaryButton(title: "Try Again") { Task { await store.refresh() } }
                     }
-                    .padding(4)
-                    .accessibilityLabel("Add friends\((store.overview?.incomingRequests.isEmpty ?? true) ? "" : ", new friend requests")")
+                    .vitailInset()
                 }
-                .tint(AppColors.brand)
-                .accessibilityIdentifier("friends-add-button")
+
+                if store.overview != nil, let error = store.errorMessage {
+                    VStack(alignment: .leading, spacing: AppSpacing.small) {
+                        Text(error).font(AppFont.body(14)).foregroundStyle(AppColors.error)
+                        SecondaryButton(title: "Try Again") { Task { await store.refresh() } }
+                    }
+                    .vitailInset()
+                }
+                if let notice = store.notice {
+                    Text(notice).font(AppFont.body(14)).foregroundStyle(AppColors.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .vitailInset()
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, AppSpacing.medium)
         }
+        .scrollContentBackground(.hidden)
+        .background { VitailScreenBackground() }
+        .navigationTitle("Friends")
         .refreshable { await store.refresh() }
         .task { if store.overview == nil { await store.refresh() } }
         .confirmationDialog("Remove friend?", isPresented: Binding(
@@ -95,31 +85,88 @@ struct FriendsView: View {
     }
 
     private func myProfileSection(_ me: SocialProfile) -> some View {
-        Section {
+        VStack(alignment: .leading, spacing: 12) {
             NavigationLink {
                 MapAppearanceEditor(store: store)
             } label: {
                 HStack(spacing: AppSpacing.medium) {
-                    SocialAvatarView(user: me, size: 64)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(name(me)).font(.headline)
+                    SocialAvatarView(user: me, size: 60)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(name(me)).font(AppFont.heading(18, .bold)).foregroundStyle(AppColors.primaryText)
                         Text("Edit your map appearance")
-                            .font(.subheadline).foregroundStyle(AppColors.brand)
+                            .font(AppFont.body(13, .semibold, relativeTo: .subheadline)).foregroundStyle(AppColors.brand)
                         if me.avatarKey == SocialAvatarOption.dog.rawValue {
                             Text(me.dogAvatarBreed.title)
-                                .font(.caption).foregroundStyle(AppColors.secondaryText)
+                                .font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
                         }
                     }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.secondaryText)
                 }
-                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .accessibilityIdentifier("friends-my-map-profile")
             DogBandanaGuidanceView(user: me)
-        } header: {
-            Text("You on the map")
-        } footer: {
             Text("This is the appearance other walkers see. Changing it does not turn on location sharing.")
+                .font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
         }
+        .padding(AppSpacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .vitailCardBackground()
+        .padding(.trailing, AppStroke.shadow)
+    }
+
+    /// Prototype "Visible to friends" card, wired to the existing sharing preference.
+    private var visibilityCard: some View {
+        VStack(spacing: 12) {
+            toggleRow(title: "Visible to friends", subtitle: "Friends see your dog on their map while you walk",
+                      systemImage: "eye", fill: AppColors.sky,
+                      isOn: Binding(get: { store.sharesWithFriends }, set: { value in
+                          Task { await store.updatePreferences(shareWithFriends: value, netMatching: store.netMatchingEnabled) }
+                      }))
+            Rectangle().fill(AppColors.border).frame(height: 1.5)
+            toggleRow(title: "Find Net-Walking partners", subtitle: "Match with walkers nearby",
+                      systemImage: "person.2", fill: AppColors.sage,
+                      isOn: Binding(get: { store.netMatchingEnabled }, set: { value in
+                          Task { await store.updatePreferences(shareWithFriends: store.sharesWithFriends, netMatching: value) }
+                      }))
+        }
+        .disabled(store.isWorking)
+        .vitailCard(padding: 14)
+        .padding(.trailing, AppStroke.shadow)
+    }
+
+    private func toggleRow(title: String, subtitle: String, systemImage: String, fill: Color,
+                           isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            HStack(spacing: 12) {
+                VitailIconTile(systemImage: systemImage, fill: fill, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(AppFont.heading(15, .semibold)).foregroundStyle(AppColors.primaryText)
+                    Text(subtitle).font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
+                }
+            }
+        }
+        .tint(AppColors.sage)
+    }
+
+    private func linkRow(title: String, subtitle: String?, systemImage: String, fill: Color) -> some View {
+        HStack(spacing: 12) {
+            VitailIconTile(systemImage: systemImage, fill: fill, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(AppFont.heading(15, .semibold)).foregroundStyle(AppColors.primaryText)
+                if let subtitle {
+                    Text(subtitle).font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
+                }
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -158,44 +205,107 @@ struct FriendsView: View {
     }
 
     private func friendsSection(_ overview: SocialOverview) -> some View {
-        Section("Friends") {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(overview.friends.isEmpty ? "Friends" : "Friends · \(overview.friends.count)")
+                    .font(AppFont.heading(22, .bold, relativeTo: .title3))
+                Spacer()
+                NavigationLink {
+                    AddFriendsView(store: store)
+                } label: {
+                    let hasRequests = !overview.incomingRequests.isEmpty
+                    Label("Add", systemImage: "plus")
+                        .font(AppFont.heading(15, .semibold))
+                        .foregroundStyle(AppColors.brand)
+                        .frame(minHeight: 44)
+                        .overlay(alignment: .topTrailing) {
+                            if hasRequests {
+                                Circle().fill(AppColors.error).frame(width: 8, height: 8).offset(x: 6, y: 8)
+                            }
+                        }
+                        .accessibilityLabel(hasRequests ? "Add friends, new friend requests" : "Add friends")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("friends-add-button")
+            }
+            .padding(.bottom, 8)
             if overview.friends.isEmpty {
-                ContentUnavailableView(
-                    "No friends yet",
-                    systemImage: "person.2",
-                    description: Text("Use the add button to find someone by name or public ID.")
-                )
+                ContentUnavailableView {
+                    Label("No friends yet", systemImage: "person.2")
+                        .font(AppFont.heading(20, .semibold, relativeTo: .title3))
+                } description: {
+                    Text("Use the add button to find someone by name or public ID.").font(AppFont.body(15))
+                }
+                .vitailInset()
             }
             ForEach(overview.friends) { friendship in
                 HStack(spacing: AppSpacing.small) {
                     NavigationLink {
                         FriendProfileView(initialUser: friendship.user, store: store)
                     } label: {
-                        SocialProfileRow(user: friendship.user)
+                        HStack(spacing: 12) {
+                            SocialAvatarView(user: friendship.user, size: 44)
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name(friendship.user)).font(AppFont.heading(16, .semibold))
+                                    .foregroundStyle(AppColors.primaryText)
+                                if let status = walkingStatus(friendship.user) {
+                                    Label(status, systemImage: "circle.fill")
+                                        .labelStyle(WalkingStatusLabelStyle())
+                                        .font(AppFont.body(12, relativeTo: .caption))
+                                        .foregroundStyle(AppColors.secondaryText)
+                                } else if let dog = friendship.user.dog {
+                                    Text(dog.breedName).font(AppFont.body(12, relativeTo: .caption))
+                                        .foregroundStyle(AppColors.secondaryText)
+                                }
+                            }
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
+                        .contentShape(Rectangle())
+                        .accessibilityElement(children: .combine)
                     }
-                    Spacer()
+                    .buttonStyle(.plain)
                     Menu {
                         Button("Remove friend", role: .destructive) { pendingRemoval = friendship.user }
                         Button("Block user", role: .destructive) { pendingBlock = friendship.user }
                     } label: {
                         Label("Options", systemImage: "ellipsis.circle")
                             .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                            .foregroundStyle(AppColors.secondaryText)
                     }
                     .disabled(store.isWorking)
+                }
+                .padding(.vertical, 10)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(AppColors.border).frame(height: 1.5)
                 }
             }
         }
     }
 
+    private func walkingStatus(_ user: SocialProfile) -> String? {
+        guard let peer = store.mapSnapshot.friends.first(where: { $0.user.publicID == user.publicID }) else { return nil }
+        guard let meters = peer.distanceM else { return "Walking now" }
+        let distance = meters < 1000 ? "\(Int(meters.rounded())) m" : String(format: "%.1f km", meters / 1000)
+        return "Walking now · \(distance) away"
+    }
+
     private var settingsSection: some View {
-        Section {
+        VStack(alignment: .leading, spacing: 8) {
             NavigationLink {
                 FriendsSettingsView(store: store)
             } label: {
-                Label("Privacy & blocked people", systemImage: "slider.horizontal.3")
+                linkRow(title: "Privacy & blocked people", subtitle: nil,
+                        systemImage: "slider.horizontal.3", fill: AppColors.inset)
+                    .vitailCard(padding: 14)
             }
-        } footer: {
+            .buttonStyle(.plain)
+            .padding(.trailing, AppStroke.shadow)
             Text("Live people and Net-Walking controls appear on the Walk map.")
+                .font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
+                .padding(.horizontal, 4)
         }
     }
 
@@ -383,6 +493,16 @@ private struct AddFriendsView: View {
     }
 }
 
+/// Small sage dot in front of "Walking now".
+private struct WalkingStatusLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 5) {
+            configuration.icon.font(.system(size: 7)).foregroundStyle(AppColors.success)
+            configuration.title
+        }
+    }
+}
+
 struct SocialProfileRow: View {
     let user: SocialProfile
     var showsPublicID = false
@@ -392,7 +512,7 @@ struct SocialProfileRow: View {
             SocialAvatarView(user: user, size: 42)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(displayName).fontWeight(.medium)
+                Text(displayName).font(AppFont.heading(16, .semibold))
                 if showsPublicID {
                     Text(user.publicID).font(.caption.monospaced()).foregroundStyle(AppColors.secondaryText)
                         .lineLimit(1).textSelection(.enabled)
@@ -417,18 +537,20 @@ struct SocialAvatarView: View {
             DogMapAvatarView(breed: user.dogAvatarBreed, bandanaColor: user.bandanaColor, outfit: user.avatarOutfit)
                 .padding(2)
                 .frame(width: size, height: size)
-                .background(AppColors.brand.opacity(0.10), in: Circle())
+                .background(AvatarView.accent(for: displayName).opacity(0.35), in: Circle())
+                .overlay(Circle().strokeBorder(AppColors.outline, lineWidth: AppStroke.width))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(displayName), \(user.dogAvatarBreed.title), \(user.bandanaColor.guidance ?? "no bandana, no designation")")
         } else if let option = SocialAvatarOption(rawValue: user.avatarKey ?? ""), option != .photo {
             ZStack {
-                AppColors.brand.opacity(0.12)
+                AvatarView.accent(for: displayName)
                 Image(systemName: option.systemImage)
                     .font(.system(size: size * 0.42, weight: .semibold))
-                    .foregroundStyle(AppColors.brand)
+                    .foregroundStyle(AppColors.onAccent)
             }
             .frame(width: size, height: size)
             .clipShape(Circle())
+            .overlay(Circle().strokeBorder(AppColors.outline, lineWidth: AppStroke.width))
             .accessibilityLabel("\(displayName) avatar")
         } else {
             AvatarView(url: user.photoURL, name: displayName, size: size)
