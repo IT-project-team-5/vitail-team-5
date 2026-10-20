@@ -192,6 +192,7 @@ struct VitailChip: View {
     let text: String
     var systemImage: String?
     var fill: Color = AppColors.inset
+    var foreground: Color = AppColors.primaryText
 
     var body: some View {
         HStack(spacing: 4) {
@@ -203,7 +204,7 @@ struct VitailChip: View {
             Text(text)
                 .font(AppFont.body(12, .semibold, relativeTo: .caption))
         }
-        .foregroundStyle(AppColors.onAccent)
+        .foregroundStyle(foreground)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(fill, in: Capsule())
@@ -349,7 +350,7 @@ struct VitailSegmentedControl<Value: Hashable>: View {
 struct VitailIconTile: View {
     let systemImage: String
     var fill: Color = AppColors.inset
-    var foreground: Color = AppColors.onAccent
+    var foreground: Color = AppColors.primaryText
     var size: CGFloat = 44
 
     var body: some View {

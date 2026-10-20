@@ -72,7 +72,7 @@ struct CheckInProgressCard: View {
                         .font(.subheadline).foregroundStyle(AppColors.secondaryText)
                     let availablePoints = item.availablePoints(earnedToday: store.earnedPointsToday)
                     if item.status != .collected {
-                        VitailChip(text: "+\(availablePoints) pts", systemImage: "sparkle", fill: AppColors.honey)
+                        VitailChip(text: "+\(availablePoints) pts", systemImage: "sparkle", fill: AppColors.honey, foreground: AppColors.onAccent)
                         Text("Walking and check-in rewards share a 72-point daily limit.")
                             .font(.footnote).foregroundStyle(AppColors.secondaryText)
                     }

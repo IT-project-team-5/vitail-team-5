@@ -156,7 +156,7 @@ struct RedemptionView: View {
                     Text(order.cafeNameSnapshot ?? "Café").font(AppFont.body(13, relativeTo: .subheadline))
                         .foregroundStyle(AppColors.secondaryText)
                     if order.status == .pending {
-                        VitailChip(text: "\(order.pointCostSnapshot) pts · Ready to collect", fill: AppColors.honey)
+                        VitailChip(text: "\(order.pointCostSnapshot) pts · Ready to collect", fill: AppColors.honey, foreground: AppColors.onAccent)
                             .padding(.top, 4)
                     } else {
                         Text(order.status.rawValue.capitalized)
@@ -204,7 +204,7 @@ struct CafeThumbnail: View {
                             .strokeBorder(AppColors.outline, lineWidth: AppStroke.width)
                     }
             } else {
-                VitailIconTile(systemImage: "cup.and.saucer", fill: AvatarView.accent(for: name), size: size)
+                VitailIconTile(systemImage: "cup.and.saucer", fill: AvatarView.accent(for: name), foreground: AppColors.onAccent, size: size)
             }
         }
         .accessibilityHidden(true)
@@ -447,7 +447,7 @@ private struct RedemptionConfirmSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Confirm redemption").vitailTitle(22)
                 HStack(spacing: 12) {
-                    VitailIconTile(systemImage: "cup.and.saucer", fill: AppColors.honey, size: 44)
+                    VitailIconTile(systemImage: "cup.and.saucer", fill: AppColors.honey, foreground: AppColors.onAccent, size: 44)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(reward.name).font(AppFont.heading(16, .semibold))
                         Text(reward.cafeName).font(AppFont.body(12, relativeTo: .caption))

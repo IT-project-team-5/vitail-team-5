@@ -37,7 +37,7 @@ struct DogFormView: View {
         _breedID = State(initialValue: draft?.breedID ?? dog?.breed.id)
         _birthday = State(initialValue: draft?.birthday ?? dog?.dateOfBirth)
         _birthdayDraft = State(initialValue: dog?.dateOfBirth.flatMap(DogBirthday.date(from:)) ?? Date())
-        _size = State(initialValue: dog?.size ?? .medium)
+        _size = State(initialValue: draft?.size ?? dog?.size ?? .medium)
         _isBrachycephalic = State(initialValue: draft?.brachycephalic ?? dog?.isBrachycephalic ?? false)
         _weightKg = State(initialValue: draft?.weight ?? dog?.weightKg ?? "")
         _requestID = State(initialValue: draft?.requestID ?? UUID())
@@ -342,7 +342,7 @@ struct DogFormView: View {
 
     private var draft: DogFormDraft {
         DogFormDraft(name: name, breedID: breedID, birthday: birthday, brachycephalic: isBrachycephalic,
-                     weight: weightKg, requestID: requestID, photo: photoData)
+                     weight: weightKg, requestID: requestID, photo: photoData, size: size)
     }
 
     private func ageDescription(months: Int) -> String {
@@ -367,6 +367,8 @@ private struct DogFormDraft: Codable, Equatable {
     let weight: String
     let requestID: UUID
     let photo: Data?
+    // Optional so drafts saved before the size control was added still decode.
+    let size: DogSize?
 }
 
 struct DogOnboardingView: View {

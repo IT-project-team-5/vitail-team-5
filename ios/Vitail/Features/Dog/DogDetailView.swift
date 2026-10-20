@@ -40,7 +40,8 @@ struct DogDetailView: View {
                         DogGoalView(dog: currentDog, service: goalService, onChanged: onGoalsChanged)
                     } label: {
                         HStack(spacing: 12) {
-                            VitailIconTile(systemImage: "figure.walk", fill: AppColors.honey, size: 40)
+                            VitailIconTile(systemImage: "figure.walk", fill: AppColors.honey,
+                                           foreground: AppColors.onAccent, size: 40)
                             Text("Daily walking goal")
                                 .fixedSize(horizontal: false, vertical: true)
                                 .multilineTextAlignment(.leading)
@@ -60,7 +61,8 @@ struct DogDetailView: View {
                                          onChanged: onDocumentsChanged)
                     } label: {
                         HStack(spacing: 12) {
-                            VitailIconTile(systemImage: "doc.text", fill: AppColors.sky, size: 40)
+                            VitailIconTile(systemImage: "doc.text", fill: AppColors.sky,
+                                           foreground: AppColors.onAccent, size: 40)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Documents")
                                 Text("Vaccination & registration records")
@@ -128,7 +130,8 @@ struct DogGoalView: View {
                                 .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(VitailPressStyle(fill: isSelected ? AppColors.honey : AppColors.surface,
-                                                      foreground: AppColors.onAccent, shadow: isSelected ? 3 : 0))
+                                                      foreground: isSelected ? AppColors.onAccent : AppColors.primaryText,
+                                                      shadow: isSelected ? 3 : 0))
                         .padding(.trailing, isSelected ? 3 : 0)
                         .padding(.bottom, 3)
                         .accessibilityAddTraits(isSelected ? .isSelected : [])

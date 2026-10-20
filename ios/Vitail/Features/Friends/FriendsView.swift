@@ -15,7 +15,7 @@ struct FriendsView: View {
                     StatisticsView(ownerID: store.ownerID, session: session)
                 } label: {
                     linkRow(title: "Statistics & leaderboard", subtitle: "Your walks and how friends compare",
-                            systemImage: "chart.bar.xaxis", fill: AppColors.honey)
+                            systemImage: "chart.bar.xaxis", fill: AppColors.honey, foreground: AppColors.onAccent)
                         .vitailCard(padding: 14)
                 }
                 .buttonStyle(.plain)
@@ -120,20 +120,40 @@ struct FriendsView: View {
 
     /// Prototype "Visible to friends" card, wired to the existing sharing preference.
     private var visibilityCard: some View {
-        VStack(spacing: 12) {
-            toggleRow(title: "Visible to friends", subtitle: "Friends see your dog on their map while you walk",
-                      systemImage: "eye", fill: AppColors.sky,
-                      isOn: Binding(get: { store.sharesWithFriends }, set: { value in
-                          Task { await store.updatePreferences(shareWithFriends: value, netMatching: store.netMatchingEnabled) }
-                      }))
-            Rectangle().fill(AppColors.border).frame(height: 1.5)
-            toggleRow(title: "Find Net-Walking partners", subtitle: "Match with walkers nearby",
-                      systemImage: "person.2", fill: AppColors.sage,
-                      isOn: Binding(get: { store.netMatchingEnabled }, set: { value in
-                          Task { await store.updatePreferences(shareWithFriends: store.sharesWithFriends, netMatching: value) }
-                      }))
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 12) {
+                toggleRow(title: "Visible to friends", subtitle: "Friends see your dog on their map while you walk",
+                          systemImage: "eye", fill: AppColors.sky,
+                          isOn: Binding(get: { store.sharesWithFriends }, set: { value in
+                              Task { await store.updatePreferences(shareWithFriends: value, netMatching: store.netMatchingEnabled) }
+                          }))
+                Rectangle().fill(AppColors.border).frame(height: 1.5)
+                toggleRow(title: "Find Net-Walking partners", subtitle: "Match with walkers nearby",
+                          systemImage: "person.2", fill: AppColors.sage,
+                          isOn: Binding(get: { store.netMatchingEnabled }, set: { value in
+                              Task { await store.updatePreferences(shareWithFriends: store.sharesWithFriends, netMatching: value) }
+                          }))
+            }
+            .disabled(store.isWorking)
+            if let message = store.preferenceSaveError {
+                Rectangle().fill(AppColors.border).frame(height: 1.5)
+                Text("Save required").font(AppFont.heading(16, .semibold))
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(AppFont.body(14))
+                    .foregroundStyle(AppColors.error)
+                if let summary = store.preferenceRetrySummary {
+                    Text(summary)
+                        .font(AppFont.body(12, relativeTo: .footnote))
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+                SecondaryButton(title: store.isWorking ? "Saving settings…" : "Retry saving settings",
+                                systemImage: store.isWorking ? "arrow.triangle.2.circlepath" : "arrow.clockwise") {
+                    Task { await store.retryPreferences() }
+                }
+                .disabled(store.isWorking)
+                .accessibilityIdentifier("friends-visibility-retry")
+            }
         }
-        .disabled(store.isWorking)
         .vitailCard(padding: 14)
         .padding(.trailing, AppStroke.shadow)
     }
@@ -142,7 +162,7 @@ struct FriendsView: View {
                            isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
             HStack(spacing: 12) {
-                VitailIconTile(systemImage: systemImage, fill: fill, size: 40)
+                VitailIconTile(systemImage: systemImage, fill: fill, foreground: AppColors.onAccent, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(AppFont.heading(15, .semibold)).foregroundStyle(AppColors.primaryText)
                     Text(subtitle).font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
@@ -152,9 +172,10 @@ struct FriendsView: View {
         .tint(AppColors.sage)
     }
 
-    private func linkRow(title: String, subtitle: String?, systemImage: String, fill: Color) -> some View {
+    private func linkRow(title: String, subtitle: String?, systemImage: String, fill: Color,
+                         foreground: Color = AppColors.primaryText) -> some View {
         HStack(spacing: 12) {
-            VitailIconTile(systemImage: systemImage, fill: fill, size: 40)
+            VitailIconTile(systemImage: systemImage, fill: fill, foreground: foreground, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(AppFont.heading(15, .semibold)).foregroundStyle(AppColors.primaryText)
                 if let subtitle {

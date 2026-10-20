@@ -359,9 +359,9 @@ struct QuestTaskRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if collected {
-                    VitailChip(text: "Collected", systemImage: "checkmark", fill: AppColors.sage)
+                    VitailChip(text: "Collected", systemImage: "checkmark", fill: AppColors.sage, foreground: AppColors.onAccent)
                 } else if ready {
-                    VitailChip(text: "Ready to collect", systemImage: "sparkle", fill: AppColors.honey)
+                    VitailChip(text: "Ready to collect", systemImage: "sparkle", fill: AppColors.honey, foreground: AppColors.onAccent)
                 } else {
                     Label("In progress", systemImage: "clock").font(AppFont.body(12, relativeTo: .caption))
                         .foregroundStyle(AppColors.secondaryText)
@@ -435,7 +435,7 @@ struct QuestDetailView: View {
                                 .transition(.scale(scale: 0.92).combined(with: .opacity))
                         } else {
                             if task.rewardPoints > 0 {
-                                VitailChip(text: "+\(task.rewardPoints) pts", systemImage: "sparkle", fill: AppColors.honey)
+                                VitailChip(text: "+\(task.rewardPoints) pts", systemImage: "sparkle", fill: AppColors.honey, foreground: AppColors.onAccent)
                             }
                             if task.status == .ready {
                                 PrimaryButton(title: "Collect", isLoading: store.collectingTaskID == taskID,
