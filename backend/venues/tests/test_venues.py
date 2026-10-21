@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
-from django.db import connection, IntegrityError, transaction
+from django.db import connection, DataError, IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
@@ -61,7 +61,9 @@ class VenueTests(APITestCase):
                 venue = Venue(name="Invalid radius", checkin_radius_m=radius)
                 with self.assertRaises(ValidationError):
                     venue.full_clean()
-                with self.assertRaises(IntegrityError), transaction.atomic():
+                # MySQL's unsigned column rejects negatives before the CHECK.
+                database_error = (IntegrityError, DataError) if radius < 0 else IntegrityError
+                with self.assertRaises(database_error), transaction.atomic():
                     venue.save()
         Venue(name="Larger radius", checkin_radius_m=50).full_clean()
 
