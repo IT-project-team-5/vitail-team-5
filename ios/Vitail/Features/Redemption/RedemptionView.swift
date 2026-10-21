@@ -270,7 +270,7 @@ struct CafeCoverPhoto: View {
     let name: String
     var body: some View {
         GeometryReader { geometry in
-            AsyncImage(url: url.flatMap(URL.init(string:))) { phase in
+            AsyncImage(url: CafePhotoURL.resolve(url, baseURL: AppConfiguration.apiBaseURL)) { phase in
                 if let image = phase.image {
                     image.resizable().scaledToFill()
                 } else {

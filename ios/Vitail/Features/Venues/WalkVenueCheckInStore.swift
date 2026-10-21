@@ -8,12 +8,16 @@ struct WalkVenuePresentation: Equatable {
     let verifiedSeconds: Int
     let requiredSeconds: Int
     let category: String
-    var progress: Double { min(1, max(0, Double(verifiedSeconds) / Double(max(1, requiredSeconds)))) }
+    var liveElapsedSeconds = 0
+    var isPendingVerification = false
+    var displayedSeconds: Int { min(requiredSeconds, max(0, verifiedSeconds + liveElapsedSeconds)) }
+    var progress: Double { min(1, max(0, Double(displayedSeconds) / Double(max(1, requiredSeconds)))) }
     var message: String {
         switch state {
         case .outside: return "Go here to get points"
         case .accumulating:
-            let remaining = max(0, requiredSeconds - verifiedSeconds)
+            let remaining = max(0, requiredSeconds - displayedSeconds)
+            if remaining == 0 { return "Confirming check-in…" }
             if remaining < 60 { return "Stay here for less than a minute to get points" }
             return "Stay here for \(Int(ceil(Double(remaining) / 60))) more minutes to get points"
         case .paused: return "Location verification paused. Your progress is saved for this walk."
@@ -24,11 +28,10 @@ struct WalkVenuePresentation: Equatable {
     }
 }
 
-/// Uses the walk's existing Core Location stream. Progress comes exclusively
-/// from server receipts; a ticking UI never adds client elapsed time.
+/// Uses the walk's existing Core Location stream. A live display ticks between
+/// receipts; completion and rewards still require server-verified progress.
 @MainActor
 final class WalkVenueCheckInStore: ObservableObject {
-    static let radiusMetres: CLLocationDistance = 20
     static let maximumAccuracy: CLLocationAccuracy = 20
     static let maximumFixAge: TimeInterval = 15
     static let reportInterval: TimeInterval = 10
@@ -49,6 +52,13 @@ final class WalkVenueCheckInStore: ObservableObject {
     private var insideVenueIDs: Set<Int> = []
     private var locationIsInterrupted = false
     private var needsPause: Set<Int> = []
+    private struct LiveProgressAnchor {
+        let seconds: TimeInterval
+        let receivedAt: Date
+    }
+    private var liveProgressAnchors: [Int: LiveProgressAnchor] = [:]
+    private var pendingReceiptVenueIDs: Set<Int> = []
+    private var receiptRevisions: [Int: Int] = [:]
     private var queue: Task<Void, Never>?
     private var generation = 0
     private var isEnabled = true
@@ -78,6 +88,9 @@ final class WalkVenueCheckInStore: ObservableObject {
             walkRequestID = id; self.startedAt = startedAt
             sessions = [:]; lastReportedAt = [:]; insideVenueIDs = []
             needsPause = []
+            liveProgressAnchors = [:]
+            pendingReceiptVenueIDs = []
+            receiptRevisions = [:]
             latestLocation = nil; lastSequence = nil; confirmedContext = nil; contextEstablished = false
             locationIsInterrupted = false
             contextState = ""
@@ -90,6 +103,9 @@ final class WalkVenueCheckInStore: ObservableObject {
         let changed = state != contextState
         contextState = state; isWalking = state == "RECORDING"
         if !isWalking {
+            // An explicit Pause/Finish stops the display immediately. GPS or
+            // radius interruptions wait for the server's pause acknowledgement.
+            liveProgressAnchors = [:]
             let interruptedVenues = insideVenueIDs.union(sessions.values.filter { $0.status == .inProgress }.map(\.venueID))
             latestLocation = nil; insideVenueIDs = []
             if state == "PAUSED" {
@@ -117,11 +133,17 @@ final class WalkVenueCheckInStore: ObservableObject {
             guard milliseconds.isFinite, milliseconds >= 0, milliseconds < Double(Int64.max) else {
                 locationInterrupted(); continue
             }
-            guard Self.isReliable(fix, at: now()), fix.timestamp >= (startedAt ?? .distantFuture) else {
+            let sequence = Self.sequence(for: fix.timestamp)
+            // Core Location may redeliver cached or out-of-order points. An
+            // already superseded fix is not evidence that the current GPS
+            // signal was lost, even if that old point is now stale/inaccurate.
+            guard lastSequence.map({ sequence > $0 }) ?? true else { continue }
+            // The preview fix commonly predates Start; wait for the first
+            // recording fix without creating an artificial pause/resume gap.
+            guard fix.timestamp >= (startedAt ?? .distantFuture) else { continue }
+            guard Self.isReliable(fix, at: now()) else {
                 locationInterrupted(); continue
             }
-            let sequence = Self.sequence(for: fix.timestamp)
-            guard lastSequence.map({ sequence > $0 }) ?? true else { continue }
             lastSequence = sequence
             locationIsInterrupted = false
             latestLocation = fix
@@ -156,7 +178,10 @@ final class WalkVenueCheckInStore: ObservableObject {
                 guard let context else { return }
                 do {
                     try await store.service.updateContext(context)
-                    if store.valid(revision) { store.confirmedContext = context; store.contextEstablished = true }
+                    if store.valid(revision) {
+                        store.confirmedContext = context; store.contextEstablished = true
+                        store.confirmServerPause(venueIDs: Set(store.sessions.keys))
+                    }
                 }
                 catch { if store.valid(revision) { store.errorMessage = "Location verification is paused. Retry when online." } }
             }
@@ -170,13 +195,16 @@ final class WalkVenueCheckInStore: ObservableObject {
               let fix = latestLocation, Self.isReliable(fix, at: date) else { return false }
         return venues.contains {
             Self.isInside(fix, venue: $0) && eligible($0) && !needsPause.contains($0.id)
-                && sessions[$0.id]?.isAccumulating == true
+                && sessions[$0.id]?.isAccumulating == true && liveProgressAnchors[$0.id] != nil
         }
     }
 
     func presentation(for venue: CheckInVenue, at date: Date? = nil) -> WalkVenuePresentation {
         let session = sessions[venue.id]
         let seconds = session?.verifiedSeconds ?? 0
+        let currentTime = date ?? now()
+        let liveSeconds = projectedSeconds(venueID: venue.id, at: currentTime)
+        let live = isWalking && liveProgressAnchors[venue.id] != nil
         let base = WalkVenuePresentation(state: .outside, verifiedSeconds: seconds,
             requiredSeconds: venue.requiredSeconds, category: venue.venueType.rewardCategoryTitle)
         let state: WalkVenuePresentation.State
@@ -184,14 +212,20 @@ final class WalkVenueCheckInStore: ObservableObject {
         else if session?.status == .ready { state = .ready }
         else if venue.availability == .unavailable { state = .unavailable }
         else if !isWalking { state = seconds > 0 ? .paused : .outside }
-        else if let fix = latestLocation, Self.isReliable(fix, at: date ?? now()) {
+        else if live { state = .accumulating }
+        else if let fix = latestLocation, Self.isReliable(fix, at: currentTime) {
             if Self.isInside(fix, venue: venue) {
-                state = confirmedContext?.state == "RECORDING" && errorMessage == nil && !needsPause.contains(venue.id)
-                    && session?.isAccumulating == true ? .accumulating : .paused
+                state = .paused
             } else { state = .outside }
         } else { state = seconds > 0 ? .paused : .outside }
+        let locationPending = latestLocation.map {
+            !Self.isReliable($0, at: currentTime) || !Self.isInside($0, venue: venue)
+        } ?? true
         return WalkVenuePresentation(state: state, verifiedSeconds: base.verifiedSeconds,
-            requiredSeconds: base.requiredSeconds, category: base.category)
+            requiredSeconds: base.requiredSeconds, category: base.category,
+            liveElapsedSeconds: live ? max(0, liveSeconds - seconds) : 0,
+            isPendingVerification: live && (errorMessage != nil || needsPause.contains(venue.id)
+                || pendingReceiptVenueIDs.contains(venue.id) || confirmedContext?.state != "RECORDING" || locationPending))
     }
 
     func load() async {
@@ -241,6 +275,9 @@ final class WalkVenueCheckInStore: ObservableObject {
         latestLocation = nil
         locationIsInterrupted = false
         needsPause = []
+        liveProgressAnchors = [:]
+        pendingReceiptVenueIDs = []
+        receiptRevisions = [:]
         isLoading = false
         errorMessage = nil
 
@@ -288,6 +325,9 @@ final class WalkVenueCheckInStore: ObservableObject {
         isEnabled = false; generation += 1
         queue?.cancel(); queue = nil
         venues = []; sessions = [:]; latestLocation = nil; insideVenueIDs = []
+        liveProgressAnchors = [:]
+        pendingReceiptVenueIDs = []
+        receiptRevisions = [:]
         isWalking = false; errorMessage = nil
         onTerminalConfirmed = nil
     }
@@ -300,7 +340,7 @@ final class WalkVenueCheckInStore: ObservableObject {
             && fix.sourceInformation?.isSimulatedBySoftware != true
     }
     static func isInside(_ fix: CLLocation, venue: CheckInVenue) -> Bool {
-        fix.distance(from: CLLocation(latitude: venue.latitude, longitude: venue.longitude)) <= radiusMetres
+        fix.distance(from: CLLocation(latitude: venue.latitude, longitude: venue.longitude)) <= CLLocationDistance(venue.checkinRadiusM)
     }
     static func sequence(for timestamp: Date) -> Int64 { Int64((timestamp.timeIntervalSince1970 * 1_000).rounded(.down)) }
 
@@ -342,8 +382,12 @@ final class WalkVenueCheckInStore: ObservableObject {
             try await service.updateContext(paused)
             guard valid(revision) else { return }
             confirmedContext = paused; contextEstablished = true
+            confirmServerPause(venueIDs: Set(sessions.keys))
         } else { return }
-        if valid(revision) { needsPause.remove(venueID) }
+        if valid(revision) {
+            needsPause.remove(venueID)
+            confirmServerPause(venueIDs: [venueID])
+        }
     }
     private func record(venueID: Int, request: WalkVenueLocationRequest, revision: Int) async {
         do {
@@ -372,23 +416,36 @@ final class WalkVenueCheckInStore: ObservableObject {
             } else { result = try await service.start(venueID: venueID, request: request) }
             guard valid(revision) else { return }
             guard result.venueID == venueID, result.walkRequestID == request.walkRequestID else { throw APIError.invalidResponse }
+            receiptRevisions[venueID, default: 0] += 1
+            updateLiveProgress(with: result)
             sessions[venueID] = result; errorMessage = nil
-        } catch { if valid(revision) { errorMessage = "Check-in progress could not be verified. Progress resumes with fresh GPS when online." } }
+        } catch {
+            if valid(revision) {
+                pendingReceiptVenueIDs.insert(venueID)
+                errorMessage = "Check-in display is waiting for server verification. Retry when online."
+            }
+        }
     }
     private func refresh(revision: Int) async {
         guard valid(revision), !isLoading else { return }
         isLoading = true
         defer { if revision == generation { isLoading = false } }
         do {
+            let revisionsAtRequest = receiptRevisions
             let result = try await service.fetchVenues(walkRequestID: walkRequestID)
             guard valid(revision) else { return }
             venues = result
             for venue in result {
+                // A GET may have started before a POST receipt or pause ACK.
+                // Keep that newer per-venue truth while still refreshing the
+                // other venues and the server's availability flags.
+                guard receiptRevisions[venue.id, default: 0] == revisionsAtRequest[venue.id, default: 0] else { continue }
                 if venue.checkIn == nil, venue.availability != .collected,
                    sessions[venue.id]?.status == .collected {
                     // Today's category receipts expire on the server's local
                     // day boundary. Do not retain yesterday's dimmed marker.
                     sessions[venue.id] = nil
+                    liveProgressAnchors[venue.id] = nil
                 }
                 if let session = venue.checkIn, session.walkRequestID == walkRequestID {
                     // Same-walk accumulation never resets. A delayed GET must
@@ -396,11 +453,46 @@ final class WalkVenueCheckInStore: ObservableObject {
                     let existing = sessions[venue.id]
                     if session.status == .collected || existing == nil
                         || (existing?.status != .ready && session.verifiedSeconds >= (existing?.verifiedSeconds ?? 0)) {
+                        if existing != session { updateLiveProgress(with: session) }
                         sessions[venue.id] = session
                     }
                 }
             }
             errorMessage = nil
         } catch { if valid(revision) { errorMessage = "Venues could not be refreshed. Retry when online." } }
+    }
+
+    private func projectedSeconds(venueID: Int, at date: Date) -> Int {
+        guard let anchor = liveProgressAnchors[venueID] else { return sessions[venueID]?.verifiedSeconds ?? 0 }
+        let elapsed = max(0, date.timeIntervalSince(anchor.receivedAt))
+        return Int((anchor.seconds + elapsed).rounded(.down))
+    }
+
+    private func updateLiveProgress(with session: VenueCheckInSession) {
+        pendingReceiptVenueIDs.remove(session.venueID)
+        guard isWalking, session.status == .inProgress, session.isAccumulating == true else {
+            liveProgressAnchors[session.venueID] = nil
+            return
+        }
+        let receivedAt = now()
+        let prior = liveProgressAnchors[session.venueID].map {
+            $0.seconds + max(0, receivedAt.timeIntervalSince($0.receivedAt))
+        } ?? 0
+        // Preserve the fractional part between receipts, so network latency and
+        // server integer rounding do not make a running display jump backwards.
+        // A confirmed pause/READY receipt removes this estimate altogether.
+        liveProgressAnchors[session.venueID] = LiveProgressAnchor(
+            seconds: min(Double(session.requiredSeconds), max(prior, Double(session.verifiedSeconds))),
+            receivedAt: receivedAt
+        )
+    }
+
+    private func confirmServerPause(venueIDs: Set<Int>) {
+        for venueID in venueIDs {
+            receiptRevisions[venueID, default: 0] += 1
+            liveProgressAnchors[venueID] = nil
+            pendingReceiptVenueIDs.remove(venueID)
+            sessions[venueID]?.isAccumulating = false
+        }
     }
 }

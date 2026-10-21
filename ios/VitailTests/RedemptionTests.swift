@@ -5,6 +5,43 @@ import XCTest
 
 @MainActor
 final class RedemptionTests: XCTestCase {
+    func testCafeAndReceiptPhotosUseHTTPSForTheCurrentAPIOrigin() throws {
+        let baseURL = try XCTUnwrap(URL(string: "https://f9ac-149-88-22-18.ngrok-free.app"))
+        let path = "/media/avatars/venues/c7d19d28faa74f69aa11a3b2f9af5cd3.jpg"
+        let data = Data("""
+        {"id":1,"name":"Coffee","description":"","point_cost":60,"cafe_name":"Paws",
+        "cafe_photo":"http://f9ac-149-88-22-18.ngrok-free.app\(path)"}
+        """.utf8)
+        let reward = try JSONDecoder().decode(Reward.self, from: data)
+        let cafe = try XCTUnwrap(CafeRewardGroup.grouped([reward]).first)
+        XCTAssertEqual(CafePhotoURL.resolve(cafe.photo, baseURL: baseURL)?.absoluteString,
+                       baseURL.absoluteString + path)
+        let receipt = Redemption(id: 1, referenceNumber: "TEST", rewardNameSnapshot: "Coffee",
+            pointCostSnapshot: 60, status: .collected, cafePhoto: reward.cafePhoto)
+        XCTAssertEqual(CafePhotoURL.resolve(receipt.cafePhoto, baseURL: baseURL)?.scheme, "https")
+    }
+
+    func testCafePhotoRelativeURLsFollowTheCurrentConfiguredServer() throws {
+        let baseURL = try XCTUnwrap(URL(string: "https://new-tunnel.ngrok-free.app"))
+        XCTAssertEqual(CafePhotoURL.resolve(" /media/cafe.jpg?version=2 \n", baseURL: baseURL)?.absoluteString,
+                       "https://new-tunnel.ngrok-free.app/media/cafe.jpg?version=2")
+        let localURL = try XCTUnwrap(URL(string: "http://192.168.1.10:8000"))
+        XCTAssertEqual(CafePhotoURL.resolve("/media/cafe.jpg", baseURL: localURL)?.absoluteString,
+                       "http://192.168.1.10:8000/media/cafe.jpg")
+    }
+
+    func testCafePhotoResolutionDoesNotRewriteOtherHostsOrRelaxTransportSecurity() throws {
+        let baseURL = try XCTUnwrap(URL(string: "https://api.example.com"))
+        for value in ["https://images.example.com/cafe.jpg", "http://images.example.com/cafe.jpg",
+                      "http://api.example.com:8080/cafe.jpg"] {
+            XCTAssertEqual(CafePhotoURL.resolve(value, baseURL: baseURL)?.absoluteString, value)
+        }
+        for value in [nil, "", "  ", "file:///tmp/cafe.jpg", "javascript:alert(1)",
+                      "https://user:password@api.example.com/cafe.jpg"] {
+            XCTAssertNil(CafePhotoURL.resolve(value, baseURL: baseURL))
+        }
+    }
+
     func testFivePointRewardBalanceBoundariesAndHandlerGuards() async {
         for balance in [0, 4, 5, 12] {
             let service = RedemptionStub(initialBalance: balance, pointCost: 5)

@@ -15,7 +15,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from quests.models import QuestDefinition
 from rewards.models import PointEntry
 from rewards.policy import (
-    CHECKIN_POINTS, CHECKIN_RADIUS_M, CHECKIN_SECONDS, DAILY_ACTIVITY_CAP,
+    CHECKIN_POINTS, CHECKIN_SECONDS, DAILY_ACTIVITY_CAP,
     local_date,
 )
 from rewards.services import credit_points, get_balance
@@ -51,7 +51,7 @@ def _sample_fingerprint(sample):
 def _inside(row_or_venue, sample):
     latitude = row_or_venue.center_latitude if isinstance(row_or_venue, CheckIn) else row_or_venue.latitude
     longitude = row_or_venue.center_longitude if isinstance(row_or_venue, CheckIn) else row_or_venue.longitude
-    radius = row_or_venue.radius_m if isinstance(row_or_venue, CheckIn) else CHECKIN_RADIUS_M
+    radius = row_or_venue.radius_m if isinstance(row_or_venue, CheckIn) else row_or_venue.checkin_radius_m
     return distance_between({"latitude": float(latitude), "longitude": float(longitude)}, sample) <= radius
 
 
@@ -240,12 +240,12 @@ def start_checkin(*, owner, venue_id, walk_request_id, sample, now=None):
     if replay_entry is None and venue.kind in _rewarded_categories(owner, day):
         raise ValidationError({"code": "CATEGORY_ALREADY_USED", "message": "Today's reward for this venue category has already been earned."})
     if not _inside(venue, sample):
-        raise ValidationError({"code": "OUTSIDE_RADIUS", "message": f"Move within {CHECKIN_RADIUS_M} m of {venue.name} to check in."})
+        raise ValidationError({"code": "OUTSIDE_RADIUS", "message": f"Move within {venue.checkin_radius_m} m of {venue.name} to check in."})
     if dormant:
         # The DEBUG Quest reset keeps this row so the original ledger key can
         # be replayed without changing the wallet balance.
         dormant.walk_context = context
-        dormant.radius_m = CHECKIN_RADIUS_M
+        dormant.radius_m = venue.checkin_radius_m
         dormant.center_latitude = venue.latitude
         dormant.center_longitude = venue.longitude
         dormant.required_seconds = CHECKIN_SECONDS[venue.kind]
@@ -271,7 +271,7 @@ def start_checkin(*, owner, venue_id, walk_request_id, sample, now=None):
         return dormant
     return CheckIn.objects.create(
         owner=owner, walk_context=context, venue=venue, venue_name_snapshot=venue.name,
-        local_date=day, category_slot=venue.kind, radius_m=CHECKIN_RADIUS_M,
+        local_date=day, category_slot=venue.kind, radius_m=venue.checkin_radius_m,
         center_latitude=venue.latitude, center_longitude=venue.longitude,
         required_seconds=CHECKIN_SECONDS[venue.kind], last_sequence=sample["sequence"],
         last_captured_at=sample["recorded_at"], last_sample_fingerprint=_sample_fingerprint(sample),

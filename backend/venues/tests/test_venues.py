@@ -54,6 +54,17 @@ class VenueTests(APITestCase):
         park = Venue.objects.create(name="Located park", kind="PARK", latitude=Decimal("-37.813600"), longitude=Decimal("144.963100"), checkin_enabled=True)
         self.assertTrue(park.checkin_enabled)
 
+    def test_checkin_radius_defaults_to_twenty_and_must_be_positive(self):
+        self.assertEqual(self.venue.checkin_radius_m, 20)
+        for radius in (0, -1):
+            with self.subTest(radius=radius):
+                venue = Venue(name="Invalid radius", checkin_radius_m=radius)
+                with self.assertRaises(ValidationError):
+                    venue.full_clean()
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    venue.save()
+        Venue(name="Larger radius", checkin_radius_m=50).full_clean()
+
     def test_manager_validation_requires_active_cafe_but_an_unmanaged_place_is_valid(self):
         venue = Venue(name="Wrong manager", manager_user=self.owner)
         with self.assertRaises(ValidationError):

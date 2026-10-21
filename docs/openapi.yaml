@@ -1758,7 +1758,11 @@ components:
         photo: {type: string, format: uri, nullable: true}
         latitude: {type: number}
         longitude: {type: number}
-        checkin_radius_m: {type: integer, enum: [20]}
+        checkin_radius_m:
+          type: integer
+          minimum: 1
+          example: 20
+          description: Effective venue radius in metres. Defaults to 20; a current check-in retains its snapshotted radius when the venue configuration changes. The client uses this value for both the map circle and entry detection.
         required_seconds: {type: integer, minimum: 1}
         checkin_status: {type: string, enum: [AVAILABLE, IN_PROGRESS, READY, COLLECTED, UNAVAILABLE]}
         reward_category: {type: string, enum: [VET, PARK, PARTNER]}

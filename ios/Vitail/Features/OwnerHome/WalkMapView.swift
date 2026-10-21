@@ -631,7 +631,7 @@ struct WalkMapView: View {
         Map(position: $cameraPosition, interactionModes: .all) {
             ForEach(venueCheckIns.venues) { venue in
                 if venue.id == selectedVenueID {
-                    MapCircle(center: venue.coordinate, radius: WalkVenueCheckInStore.radiusMetres)
+                    MapCircle(center: venue.coordinate, radius: CLLocationDistance(venue.checkinRadiusM))
                         .foregroundStyle(AppColors.brand.opacity(0.12))
                         .stroke(AppColors.brand.opacity(0.6), lineWidth: 1)
                 }

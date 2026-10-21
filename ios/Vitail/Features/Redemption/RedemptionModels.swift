@@ -1,5 +1,28 @@
 import Foundation
 
+enum CafePhotoURL {
+    static func resolve(_ value: String?, baseURL: URL?) -> URL? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty,
+              let url = URL(string: value, relativeTo: baseURL)?.absoluteURL,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+              let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = components.host, !host.isEmpty,
+              components.user == nil, components.password == nil else { return nil }
+
+        // TLS may terminate at ngrok/a reverse proxy while Django sees HTTP.
+        // Use the already-configured HTTPS API origin for its own media only;
+        // unrelated image hosts and explicitly different ports stay untouched.
+        let samePort = components.port == baseURL?.port
+            || (components.port == 80 && (baseURL?.port == nil || baseURL?.port == 443))
+        if scheme == "http", baseURL?.scheme?.lowercased() == "https",
+           host.caseInsensitiveCompare(baseURL?.host ?? "") == .orderedSame, samePort {
+            components.scheme = "https"
+            components.port = baseURL?.port
+        }
+        return components.url
+    }
+}
+
 struct RedemptionEligibility: Decodable, Sendable {
     struct IncompleteDog: Decodable, Identifiable, Sendable {
         let id: Int

@@ -15,6 +15,34 @@ from venues.models import Venue
 
 
 class VenueMigrationTests(TransactionTestCase):
+    def test_checkin_radius_upgrade_preserves_existing_venue_and_visit(self):
+        executor = MigrationExecutor(connection)
+        latest = executor.loader.graph.leaf_nodes()
+        try:
+            executor.migrate([("venues", "0002_venue_import_source")])
+            executor = MigrationExecutor(connection)
+            apps = executor.loader.project_state(list(executor.loader.applied_migrations)).apps
+            OldVenue = apps.get_model("venues", "Venue")
+            OldUser = apps.get_model("accounts", "User")
+            OldCheckIn = apps.get_model("checkins", "CheckIn")
+            owner = OldUser.objects.create(email="radius-migration@example.com", display_name="Owner", role="OWNER")
+            venue = OldVenue.objects.create(name="Existing vet", kind="VET", latitude=-37.8, longitude=144.9,
+                                           checkin_enabled=True, import_source="test:radius-preservation")
+            now = timezone.now()
+            visit = OldCheckIn.objects.create(owner=owner, venue=venue, venue_name_snapshot=venue.name,
+                                              local_date=now.date(), category_slot="VET", radius_m=35,
+                                              required_seconds=180, verified_seconds=30,
+                                              center_latitude=venue.latitude, center_longitude=venue.longitude,
+                                              started_at=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1))
+            before_venue = OldVenue.objects.values().get(pk=venue.pk)
+            before_visit = OldCheckIn.objects.values().get(pk=visit.pk)
+            MigrationExecutor(connection).migrate(latest)
+            self.assertEqual(Venue.objects.values().get(pk=venue.pk), {**before_venue, "checkin_radius_m": 20})
+            from checkins.models import CheckIn
+            self.assertEqual(CheckIn.objects.values().get(pk=visit.pk), before_visit)
+        finally:
+            MigrationExecutor(connection).migrate(latest)
+
     def test_all_cafe_identities_profiles_photos_and_historical_orders_are_preserved(self):
         executor = MigrationExecutor(connection)
         latest = executor.loader.graph.leaf_nodes()

@@ -50,7 +50,10 @@ final class WalkVenueCheckInTests: XCTestCase {
         let requests = await service.locations
         XCTAssertEqual(requests.count, 1)
         XCTAssertEqual(store.sessions[1]?.verifiedSeconds, 40)
-        XCTAssertEqual(store.presentation(for: store.venues[0], at: clock).state, .paused)
+        let pending = store.presentation(for: store.venues[0], at: clock)
+        XCTAssertEqual(pending.state, .accumulating)
+        XCTAssertEqual(pending.displayedSeconds, 140)
+        XCTAssertTrue(pending.isPendingVerification)
     }
 
     func testInvalidFutureFixCannotPoisonOrderingWatermark() async {
@@ -65,6 +68,61 @@ final class WalkVenueCheckInTests: XCTestCase {
         let requests = await service.locations
         XCTAssertEqual(requests.count, 1)
         XCTAssertEqual(requests.first?.sequence, WalkVenueCheckInStore.sequence(for: origin))
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .accumulating)
+    }
+
+    func testOlderStaleOrInaccurateFixDoesNotPauseNewerReliableVisit() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+
+        clock = clock.addingTimeInterval(20)
+        await service.setVerifiedSeconds(20)
+        let currentFix = fix(at: clock)
+        store.receiveLocations([currentFix])
+        await store.load()
+        clock = clock.addingTimeInterval(1)
+        store.receiveLocations([
+            fix(at: origin),
+            fix(at: currentFix.timestamp.addingTimeInterval(-1), accuracy: 40),
+            currentFix,
+        ])
+        await store.load()
+
+        let pauses = await service.pauses
+        let contexts = await service.contexts
+        let locations = await service.locations
+        XCTAssertEqual(pauses, 0)
+        XCTAssertFalse(contexts.contains { $0.state == "PAUSED" })
+        XCTAssertEqual(locations.count, 2)
+        XCTAssertEqual(store.latestLocation?.timestamp, currentFix.timestamp)
+        XCTAssertEqual(store.sessions[1]?.verifiedSeconds, 20)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .accumulating)
+    }
+
+    func testCachedPreviewBeforeStartDoesNotPauseRecordingContext() async {
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { self.origin })
+        store.updateWalk(id: UUID(), startedAt: origin, status: .walking)
+        await store.load()
+        store.receiveLocations([fix(at: origin.addingTimeInterval(-1))])
+        await store.load()
+        let beforeFirstFix = await service.contexts
+        let beforeFirstLocations = await service.locations
+        XCTAssertEqual(beforeFirstFix.map(\.state), ["RECORDING"])
+        XCTAssertTrue(beforeFirstLocations.isEmpty)
+        XCTAssertNil(store.latestLocation)
+
+        store.receiveLocations([fix(at: origin)])
+        await store.load()
+        let contexts = await service.contexts
+        let locations = await service.locations
+        XCTAssertEqual(contexts.map(\.state), ["RECORDING"])
+        XCTAssertEqual(locations.count, 1)
         XCTAssertEqual(store.presentation(for: store.venues[0]).state, .accumulating)
     }
 
@@ -154,7 +212,8 @@ final class WalkVenueCheckInTests: XCTestCase {
         await store.load()
         let blocked = await service.locations
         XCTAssertEqual(blocked.count, 1)
-        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .paused)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .accumulating)
+        XCTAssertTrue(store.presentation(for: store.venues[0]).isPendingVerification)
         XCTAssertFalse(store.hasVerifiedVenueActivity(at: clock))
         clock = clock.addingTimeInterval(10)
         store.receiveLocations([fix(at: clock)])
@@ -410,7 +469,50 @@ final class WalkVenueCheckInTests: XCTestCase {
         XCTAssertTrue(contexts.isEmpty)
     }
 
-    func testTwentyMetreBoundaryAndMessages() {
+    func testVenueRadiusControlsInsideBoundary() {
+        let standardVenue = WalkVenueFixture.venue()
+        let expandedVenue = WalkVenueFixture.venue(radius: 50)
+        let fortyMetresAway = fix(at: origin, longitude: 145.00045)
+        let sixtyMetresAway = fix(at: origin, longitude: 145.0007)
+        XCTAssertEqual(fortyMetresAway.distance(from: fix(at: origin)), 40, accuracy: 1)
+        XCTAssertGreaterThan(sixtyMetresAway.distance(from: fix(at: origin)), 50)
+        XCTAssertFalse(WalkVenueCheckInStore.isInside(fortyMetresAway, venue: standardVenue))
+        XCTAssertTrue(WalkVenueCheckInStore.isInside(fortyMetresAway, venue: expandedVenue))
+        XCTAssertFalse(WalkVenueCheckInStore.isInside(sixtyMetresAway, venue: expandedVenue))
+    }
+
+    func testExpandedRadiusRecordsInsideFiftyMetresWithReliableGPSOnly() async {
+        var clock = origin
+        let service = WalkVenueFixture(radius: 50)
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        store.receiveLocations([fix(at: clock, accuracy: 21, longitude: 145.00045)])
+        await store.load()
+        let unreliableRequests = await service.locations
+        XCTAssertTrue(unreliableRequests.isEmpty)
+        XCTAssertFalse(store.hasVerifiedVenueActivity(at: clock))
+
+        clock = clock.addingTimeInterval(10)
+        store.receiveLocations([fix(at: clock, longitude: 145.00045)])
+        await store.load()
+        let reliableRequests = await service.locations
+        XCTAssertEqual(reliableRequests.count, 1)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .accumulating)
+        XCTAssertTrue(store.hasVerifiedVenueActivity(at: clock))
+
+        clock = clock.addingTimeInterval(10)
+        store.receiveLocations([fix(at: clock, longitude: 145.0007)])
+        await store.load()
+        let outsideRequests = await service.locations
+        let pauses = await service.pauses
+        XCTAssertEqual(outsideRequests.count, 1)
+        XCTAssertEqual(pauses, 1)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .outside)
+        XCTAssertFalse(store.hasVerifiedVenueActivity(at: clock))
+    }
+
+    func testTwentyMetreVenueAndMessages() {
         let venue = WalkVenueFixture.venue()
         XCTAssertTrue(WalkVenueCheckInStore.isInside(fix(at: origin), venue: venue))
         XCTAssertFalse(WalkVenueCheckInStore.isInside(fix(at: origin, longitude: 145.001), venue: venue))
@@ -420,6 +522,188 @@ final class WalkVenueCheckInTests: XCTestCase {
             "Stay here for 2 more minutes to get points")
         XCTAssertEqual(CheckInVenueKind.cafe.rewardCategoryTitle, "Partner")
         XCTAssertEqual(CheckInVenueKind.restaurant.rewardCategoryTitle, "Partner")
+    }
+
+    func testLiveDisplayTicksEachSecondWithoutChangingVerifiedProgress() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(40)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        for seconds in 1...3 {
+            clock = origin.addingTimeInterval(Double(seconds))
+            let presentation = store.presentation(for: store.venues[0])
+            XCTAssertEqual(presentation.displayedSeconds, 40 + seconds)
+            XCTAssertEqual(presentation.verifiedSeconds, 40)
+            XCTAssertEqual(presentation.state, .accumulating)
+        }
+        let requests = await service.locations
+        XCTAssertEqual(requests.count, 1, "A display tick must not manufacture GPS reports")
+    }
+
+    func testLiveDisplayWaitsForServerPauseAndResumesFromVerifiedReceipt() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(40)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+
+        await service.holdPause()
+        clock = origin.addingTimeInterval(10)
+        store.receiveLocations([fix(at: clock, longitude: 145.001)])
+        await service.waitForPause()
+        clock = origin.addingTimeInterval(12)
+        let pending = store.presentation(for: store.venues[0])
+        XCTAssertEqual(pending.displayedSeconds, 52)
+        XCTAssertEqual(pending.state, .accumulating)
+        XCTAssertTrue(pending.isPendingVerification)
+        await service.releasePause()
+        await store.load()
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 40)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .outside)
+        clock = origin.addingTimeInterval(20)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        clock = clock.addingTimeInterval(1)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 41)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).verifiedSeconds, 40)
+    }
+
+    func testAccumulatingReceiptsKeepDisplayMonotonicButServerPauseCorrectsIt() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(40)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        clock = origin.addingTimeInterval(10.75)
+        await service.setVerifiedSeconds(45)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 50)
+        XCTAssertEqual(store.sessions[1]?.verifiedSeconds, 45)
+        clock = origin.addingTimeInterval(11)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 51,
+                       "A receipt must preserve the running clock's fractional second")
+        clock = origin.addingTimeInterval(21)
+        await service.setVerifiedSeconds(48)
+        await service.setAccumulating(false)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        let paused = store.presentation(for: store.venues[0])
+        XCTAssertEqual(paused.state, .paused)
+        XCTAssertEqual(paused.displayedSeconds, 48)
+        XCTAssertEqual(paused.verifiedSeconds, 48)
+    }
+
+    func testProjectedTargetWaitsForReadyAndOfflineDisplayIsMarkedPending() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(179)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        await service.setFetchFailure(true)
+        clock = origin.addingTimeInterval(5)
+        await store.load()
+        let pending = store.presentation(for: store.venues[0])
+        XCTAssertEqual(pending.displayedSeconds, 180)
+        XCTAssertEqual(pending.verifiedSeconds, 179)
+        XCTAssertEqual(pending.state, .accumulating)
+        XCTAssertEqual(pending.message, "Confirming check-in…")
+        XCTAssertTrue(pending.isPendingVerification)
+        XCTAssertEqual(store.sessions[1]?.status, .inProgress)
+        await service.setFetchFailure(false)
+        await service.setVerifiedSeconds(180)
+        clock = origin.addingTimeInterval(10)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .ready)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).verifiedSeconds, 180)
+    }
+
+    func testExplicitPauseFinishAndNewWalkStopOrResetLiveDisplay() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        let id = UUID()
+        store.updateWalk(id: id, startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(40)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        clock = clock.addingTimeInterval(3)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 43)
+        store.updateWalk(id: id, startedAt: origin, status: .paused)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 40)
+        store.updateWalk(id: id, startedAt: origin, status: .finished)
+        await store.load()
+        clock = clock.addingTimeInterval(10)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 40)
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 0)
+    }
+
+    func testDelayedPausedGETCannotOverwriteNewerAccumulatingReceipt() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(40)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        await service.setSessionAccumulating(false)
+        await service.holdFetch()
+        let polling = Task { await store.load() }
+        await service.waitForFetch()
+
+        clock = origin.addingTimeInterval(10)
+        store.receiveLocations([fix(at: clock)])
+        await store.load() // Drain the POST; the earlier polling GET is still held.
+        XCTAssertEqual(store.sessions[1]?.isAccumulating, true)
+        await service.releaseFetch()
+        await polling.value
+        clock = clock.addingTimeInterval(1)
+        XCTAssertEqual(store.sessions[1]?.isAccumulating, true)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 51)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .accumulating)
+    }
+
+    func testDelayedAccumulatingGETCannotUndoConfirmedPause() async {
+        var clock = origin
+        let service = WalkVenueFixture()
+        let store = WalkVenueCheckInStore(service: service, now: { clock })
+        store.updateWalk(id: UUID(), startedAt: clock, status: .walking)
+        await store.load()
+        await service.setVerifiedSeconds(40)
+        store.receiveLocations([fix(at: clock)])
+        await store.load()
+        await service.holdFetch()
+        let polling = Task { await store.load() }
+        await service.waitForFetch()
+
+        clock = origin.addingTimeInterval(10)
+        store.receiveLocations([fix(at: clock, longitude: 145.001)])
+        await store.load() // Drain pause acknowledgement while the old GET waits.
+        XCTAssertEqual(store.sessions[1]?.isAccumulating, false)
+        await service.releaseFetch()
+        await polling.value
+        clock = clock.addingTimeInterval(1)
+        XCTAssertEqual(store.sessions[1]?.isAccumulating, false)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).displayedSeconds, 40)
+        XCTAssertEqual(store.presentation(for: store.venues[0]).state, .outside)
     }
 
     func testSummaryDecodesActualPartialAwardsAndLegacyReceipts() throws {
@@ -435,6 +719,7 @@ final class WalkVenueCheckInTests: XCTestCase {
     }
 
     func testVenueStatesRenderWithReduceMotionAndLargeText() async throws {
+        for scheme in [ColorScheme.light, .dark] {
         for state in [WalkVenuePresentation.State.outside, .accumulating, .paused, .ready, .collected, .unavailable] {
             let presentation = WalkVenuePresentation(state: state, verifiedSeconds: 90, requiredSeconds: 180, category: "Vet")
             let content = VStack(spacing: 20) {
@@ -447,13 +732,15 @@ final class WalkVenueCheckInTests: XCTestCase {
             .padding(24)
             .frame(width: 393, height: 500)
             .environment(\.dynamicTypeSize, .accessibility1)
+            .environment(\.colorScheme, scheme)
             .vitailAppearance()
             let renderer = ImageRenderer(content: content)
             let image = try XCTUnwrap(renderer.uiImage)
             let attachment = XCTAttachment(image: image)
-            attachment.name = "SCRUM-57-Venue-\(state)-Reduce-Motion-Large-Text"
+            attachment.name = "SCRUM-57-Venue-\(state)-\(scheme)-Reduce-Motion-Large-Text"
             attachment.lifetime = .keepAlways
             add(attachment)
+        }
         }
     }
 
@@ -464,6 +751,7 @@ final class WalkVenueCheckInTests: XCTestCase {
 }
 
 private actor WalkVenueFixture: WalkVenueCheckInServing {
+    private let radius: Int
     private(set) var contexts: [VenueWalkContext] = []
     private(set) var locations: [WalkVenueLocationRequest] = []
     private(set) var pauses = 0
@@ -483,7 +771,16 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
     private var startResponseFails = false
     private var hiddenSession = false
     private var collected = false
+    private var accumulatingOverride: Bool?
+    private var fetchFails = false
+    private var holdingPause = false
+    private var pauseContinuation: CheckedContinuation<Void, Never>?
+    private var enteredPause: CheckedContinuation<Void, Never>?
+    private var holdingFetch = false
+    private var fetchContinuation: CheckedContinuation<Void, Never>?
+    private var enteredFetch: CheckedContinuation<Void, Never>?
     private var id = UUID(uuidString: "00000000-0000-0000-0000-000000000100")!
+    init(radius: Int = 20) { self.radius = radius }
     func setVerifiedSeconds(_ value: Int) { seconds = value }
     func setPauseFailures(_ value: Int) { pauseFailures = value }
     func setFinishFailure(_ value: Bool) { finishFails = value }
@@ -498,6 +795,21 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
     }
     func failNextStartResponse() { startResponseFails = true }
     func setCollected(_ value: Bool) { collected = value }
+    func setAccumulating(_ value: Bool) { accumulatingOverride = value }
+    func setFetchFailure(_ value: Bool) { fetchFails = value }
+    func setSessionAccumulating(_ value: Bool) { session?.isAccumulating = value }
+    func holdFetch() { holdingFetch = true }
+    func waitForFetch() async {
+        if fetchContinuation != nil { return }
+        await withCheckedContinuation { enteredFetch = $0 }
+    }
+    func releaseFetch() { holdingFetch = false; fetchContinuation?.resume(); fetchContinuation = nil }
+    func holdPause() { holdingPause = true }
+    func waitForPause() async {
+        if pauseContinuation != nil { return }
+        await withCheckedContinuation { enteredPause = $0 }
+    }
+    func releasePause() { holdingPause = false; pauseContinuation?.resume(); pauseContinuation = nil }
     func holdStart() { holdingStart = true }
     func waitForStart() async {
         if startContinuation != nil { return }
@@ -510,13 +822,21 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
         await withCheckedContinuation { enteredReport = $0 }
     }
     func releaseReport() { holdingReport = false; reportContinuation?.resume(); reportContinuation = nil }
-    nonisolated static func venue(session: VenueCheckInSession? = nil) -> CheckInVenue {
+    nonisolated static func venue(session: VenueCheckInSession? = nil, radius: Int = 20) -> CheckInVenue {
         CheckInVenue(id: 1, name: "Vet", kindRaw: "VET", description: "Veterinary clinic", address: "1 Test Street",
-            openingHours: "", latitude: -37.8, longitude: 145, checkinRadiusM: 20, requiredSeconds: 180,
+            openingHours: "", latitude: -37.8, longitude: 145, checkinRadiusM: radius, requiredSeconds: 180,
             checkInStatus: "AVAILABLE", checkIn: session)
     }
     func fetchVenues(walkRequestID: UUID?) async throws -> [CheckInVenue] {
-        [Self.venue(session: !hiddenSession && session?.walkRequestID == walkRequestID ? session : nil)]
+        if fetchFails { throw APIError.network("Venue response unavailable") }
+        let result = [Self.venue(session: !hiddenSession && session?.walkRequestID == walkRequestID ? session : nil, radius: radius)]
+        if holdingFetch {
+            await withCheckedContinuation { continuation in
+                fetchContinuation = continuation
+                enteredFetch?.resume(); enteredFetch = nil
+            }
+        }
+        return result
     }
     func updateContext(_ context: VenueWalkContext) async throws {
         contexts.append(context)
@@ -549,12 +869,19 @@ private actor WalkVenueFixture: WalkVenueCheckInServing {
     func pause(checkInID: UUID) async throws {
         pauses += 1
         if pauseFailures > 0 { pauseFailures -= 1; throw APIError.network("Pause response interrupted") }
+        if holdingPause {
+            await withCheckedContinuation { continuation in
+                pauseContinuation = continuation
+                enteredPause?.resume(); enteredPause = nil
+            }
+        }
+        session?.isAccumulating = false
     }
     private func result(_ request: WalkVenueLocationRequest) -> VenueCheckInSession {
         locations.append(request)
         let result = VenueCheckInSession(id: id, venueID: 1, venueName: "Vet", status: collected ? .collected : seconds >= 180 ? .ready : .inProgress,
             requiredSeconds: 180, verifiedSeconds: seconds, rewardPoints: 12,
-            walkRequestID: request.walkRequestID, isAccumulating: seconds < 180)
+            walkRequestID: request.walkRequestID, isAccumulating: accumulatingOverride ?? (seconds < 180))
         session = result
         return result
     }

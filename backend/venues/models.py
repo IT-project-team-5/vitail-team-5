@@ -1,6 +1,9 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
+
+from rewards.policy import CHECKIN_RADIUS_M
 
 
 class Venue(models.Model):
@@ -27,6 +30,7 @@ class Venue(models.Model):
     is_partner = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     checkin_enabled = models.BooleanField(default=False)
+    checkin_radius_m = models.PositiveIntegerField(default=CHECKIN_RADIUS_M, validators=[MinValueValidator(1)])
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -40,6 +44,7 @@ class Venue(models.Model):
             models.CheckConstraint(condition=models.Q(latitude__isnull=True) | models.Q(latitude__gte=-90, latitude__lte=90), name="venue_latitude_range"),
             models.CheckConstraint(condition=models.Q(longitude__isnull=True) | models.Q(longitude__gte=-180, longitude__lte=180), name="venue_longitude_range"),
             models.CheckConstraint(condition=models.Q(checkin_enabled=False) | models.Q(latitude__isnull=False, longitude__isnull=False), name="venue_checkin_coordinates"),
+            models.CheckConstraint(condition=models.Q(checkin_radius_m__gt=0), name="venue_checkin_radius_positive"),
         ]
 
     def clean(self):

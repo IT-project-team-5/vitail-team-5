@@ -48,6 +48,106 @@ final class DocumentReaderTests: XCTestCase {
         XCTAssertEqual(older.dogName, "Coco")
     }
 
+    func testMicrochipReadsNamedRegistryHeaderWithoutARegistryLabel() {
+        let result = parse("""
+        COMPANION TEST REGISTRY
+        Certificate of Identification
+        MICROCHIP REGISTRATION
+        Animal name: Mishow
+        Microchip number: 999000000001234
+        Implanting clinic: Example Veterinary Clinic
+        """, kind: .microchip)
+        XCTAssertEqual(result.registryName, "COMPANION TEST REGISTRY")
+        XCTAssertEqual(result.registrationNumber, "999000000001234")
+        XCTAssertEqual(result.dogName, "Mishow")
+        XCTAssertEqual(result.candidates.first { $0.field == .registryName }?.context, "COMPANION TEST REGISTRY")
+    }
+
+    func testRegistryHeaderDoesNotUseCertificateTitlesClinicOrBodyText() {
+        let result = parse("""
+        Microchip Registry
+        Microchip Registration Certificate
+        Example Veterinary Clinic
+        Animal name: Mishow
+        Microchip number: 999000000001234
+        Happy Companion Registry
+        No official registry or clinic has issued this record.
+        """, kind: .microchip)
+        XCTAssertNil(result.registryName)
+        XCTAssertFalse(result.candidates.contains { $0.field == .registryName })
+        XCTAssertEqual(result.dogName, "Mishow")
+    }
+
+    func testConflictingOrUnclearRegistryHeadersNeedManualReview() {
+        let text = "Companion Test Registry\nSouthern Companion Registry\n" + chipText
+            .replacingOccurrences(of: "Central Animal Records\n", with: "")
+        let ambiguous = parse(text, kind: .microchip)
+        XCTAssertNil(ambiguous.registryName)
+        XCTAssertTrue(ambiguous.warnings.contains { $0.contains("More than one registry name") })
+        let lines = DocumentReadLine.lines(text: text.replacingOccurrences(of: "Southern Companion Registry\n", with: ""),
+                                          page: 1, source: .vision).map {
+            DocumentReadLine(text: $0.text, page: 1, source: .vision, confidence: 0.2)
+        }
+        let unclear = DocumentFieldParser.parse(lines: lines, kind: .microchip, pagesRead: 1, source: .vision)
+        XCTAssertNil(unclear.registryName)
+        XCTAssertTrue(unclear.candidates.contains { $0.field == .registryName })
+    }
+
+    func testVisionLabelsReadValuesInTheirOwnColumn() {
+        func line(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat) -> DocumentReadLine {
+            DocumentReadLine(text: text, page: 1, source: .vision, confidence: 0.99,
+                             bounds: CGRect(x: x, y: y, width: width, height: 0.015))
+        }
+        let lines = [
+            line("COMPANION TEST REGISTRY", x: 0.14, y: 0.92, width: 0.29),
+            line("APPLICATION QA FIXTURE", x: 0.74, y: 0.92, width: 0.2),
+            line("Certificate of Identification", x: 0.07, y: 0.85, width: 0.6),
+            line("ANIMAL NAME", x: 0.1, y: 0.74, width: 0.13),
+            line("REGISTRATION STATUS", x: 0.62, y: 0.74, width: 0.2),
+            line("Mishow", x: 0.1, y: 0.70, width: 0.25),
+            line("REGISTERED", x: 0.62, y: 0.70, width: 0.2),
+            line("MICROCHIP NUMBER", x: 0.1, y: 0.62, width: 0.18),
+            line("999000000001234", x: 0.1, y: 0.58, width: 0.4),
+        ]
+        let result = DocumentFieldParser.parse(lines: lines, kind: .microchip, pagesRead: 1, source: .vision)
+        XCTAssertEqual(result.registryName, "COMPANION TEST REGISTRY")
+        XCTAssertEqual(result.dogName, "Mishow")
+        XCTAssertEqual(result.registrationNumber, "999000000001234")
+        XCTAssertEqual(result.candidates.first { $0.field == .dogName }?.context, "ANIMAL NAME Mishow")
+    }
+
+    func testBlankVisionDogNameDoesNotConsumeTheNextFieldLabelOrItsNumber() {
+        func line(_ text: String, x: CGFloat, y: CGFloat) -> DocumentReadLine {
+            DocumentReadLine(text: text, page: 1, source: .vision, confidence: 0.99,
+                             bounds: CGRect(x: x, y: y, width: 0.2, height: 0.015))
+        }
+        let lines = [
+            line("COMPANION TEST REGISTRY", x: 0.1, y: 0.9),
+            line("Certificate of Identification", x: 0.1, y: 0.85),
+            line("ANIMAL NAME", x: 0.1, y: 0.74),
+            line("REGISTRATION STATUS", x: 0.62, y: 0.74),
+            line("MICROCHIP NUMBER", x: 0.1, y: 0.69),
+            line("999000000001234", x: 0.1, y: 0.65),
+        ]
+        let result = DocumentFieldParser.parse(lines: lines, kind: .microchip, pagesRead: 1, source: .vision)
+        XCTAssertNil(result.dogName)
+        XCTAssertFalse(result.candidates.contains { $0.field == .dogName })
+        XCTAssertEqual(result.registrationNumber, "999000000001234")
+    }
+
+    @MainActor func testOriginalMishowFixturePopulatesAllThreeReviewFieldsWithoutConfirming() async throws {
+        // This supplied image is visibly fictional test data, not registration proof.
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "mishow-test-microchip-certificate", withExtension: "png"))
+        let review = DocumentReviewModel()
+        await review.read(data: try Data(contentsOf: url), filename: url.lastPathComponent, kind: .microchip)
+        XCTAssertNil(review.errorMessage)
+        XCTAssertEqual(review.registryName, "COMPANION TEST REGISTRY")
+        XCTAssertEqual(review.registrationNumber, "999000000001234")
+        XCTAssertEqual(review.dogName, "Mishow")
+        XCTAssertEqual(review.readingAudit?.source, "APPLE_VISION")
+        XCTAssertFalse(review.isConfirmed, "OCR suggestions must never confirm registration on the owner's behalf")
+    }
+
     func testNeverUsesPaymentRenewalDueBirthdayOrUnlabelledDates() {
         for otherDate in ["Payment due: 9 April 2027", "Renewal due: 9 April 2027", "Date of birth: 9 April 2027",
                           "Registration date: 9 April 2027", "9 April 2027", "Expiry date:\nRenewal due: 9 April 2027"] {
@@ -87,7 +187,8 @@ final class DocumentReaderTests: XCTestCase {
     }
 
     func testBlankFieldDoesNotConsumeTheNextPrintedInstructionAsDogName() {
-        for label in ["Date of Birth of Animal", "Tick for Cross-Breed", "Breed", "Sex"] {
+        for label in ["Date of Birth of Animal", "Tick for Cross-Breed", "Breed", "Sex", "Microchip number",
+                      "Registry name", "Council name", "Animal ID", "Registration status"] {
             let result = DocumentFieldParser.parse(lines: DocumentReadLine.lines(
                 text: "Registration Certificate\nDog name\n" + label,
                 page: 1, source: .pdfText), kind: .council, pagesRead: 1, source: .pdfText)

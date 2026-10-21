@@ -1,4 +1,5 @@
 from datetime import timedelta
+from math import degrees
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from checkins.models import CheckIn, CheckInWalk
+from checkins.serializers import VenueMapSerializer
 from checkins.services import cancel_checkin, collect_checkin, report_checkin_location, start_checkin, update_walk_context
 from checkins.tests.test_checkins import CheckInFixture
 from dogs.models import Breed, Dog
@@ -213,6 +215,75 @@ class LocationCheckInTests(CheckInFixture, TestCase):
                 start_checkin(owner=self.owner, venue_id=self.venues["CAFE"].pk,
                               walk_request_id=request_id, sample={**sample, "recorded_at": self.now}, now=self.now)
         self.assertFalse(CheckIn.objects.exists())
+
+    def test_configured_venue_radius_accepts_forty_metres_but_rejects_sixty(self):
+        venue = self.venues["VET"]
+        venue.checkin_radius_m = 50
+        venue.save(update_fields=("checkin_radius_m",))
+        for metres in (60, 40):
+            sample = {**self.sample, "latitude": -37.8 + degrees(metres / 6371000), "recorded_at": self.now}
+            if metres == 60:
+                with self.assertRaises(ValidationError) as exc:
+                    start_checkin(owner=self.owner, venue_id=venue.pk,
+                                  walk_request_id=self.context.request_id, sample=sample, now=self.now)
+                self.assertEqual(str(exc.exception.detail["code"]), "OUTSIDE_RADIUS")
+                self.assertIn("50 m", str(exc.exception.detail["message"]))
+            else:
+                row = start_checkin(owner=self.owner, venue_id=venue.pk,
+                                    walk_request_id=self.context.request_id, sample=sample, now=self.now)
+                self.assertEqual(row.radius_m, 50)
+                self.assertTrue(row.is_accumulating)
+
+        with self.assertRaises(ValidationError) as exc:
+            start_checkin(owner=self.owner, venue_id=self.venues["PARK"].pk,
+                          walk_request_id=self.context.request_id, sample=sample, now=self.now)
+        self.assertIn("20 m", str(exc.exception.detail["message"]))
+
+    def test_active_checkin_keeps_its_radius_snapshot_when_venue_setting_changes(self):
+        venue = self.venues["VET"]
+        venue.checkin_radius_m = 50
+        venue.save(update_fields=("checkin_radius_m",))
+        row = self.start("VET")
+        venue.checkin_radius_m = 20
+        venue.save(update_fields=("checkin_radius_m",))
+        row = self.report(row, 60, latitude=-37.8 + degrees(40 / 6371000))
+        self.assertEqual((row.radius_m, row.verified_seconds), (50, 60))
+        self.assertTrue(row.is_accumulating)
+        self.assertEqual(VenueMapSerializer(venue).data["checkin_radius_m"], 20)
+        self.assertEqual(VenueMapSerializer(venue, context={"by_venue": {venue.pk: row}}).data["checkin_radius_m"], 50)
+
+        # Increasing the venue setting cannot expand an already-started visit.
+        other = self.start("PARK")
+        Venue.objects.filter(pk=other.venue_id).update(checkin_radius_m=50)
+        other = self.report(other, 60, latitude=-37.8 + degrees(40 / 6371000))
+        self.assertEqual((other.radius_m, other.verified_seconds), (20, 0))
+        self.assertFalse(other.is_accumulating)
+
+    def test_dormant_restarted_checkin_adopts_current_venue_radius(self):
+        venue = self.venues["VET"]
+        dormant = self.opportunity("VET", walk_context=None, ready=False, started_at=None)
+        venue.checkin_radius_m = 50
+        venue.save(update_fields=("checkin_radius_m",))
+        row = start_checkin(owner=self.owner, venue_id=venue.pk, walk_request_id=self.context.request_id,
+                            sample={**self.sample, "latitude": -37.8 + degrees(40 / 6371000), "recorded_at": self.now}, now=self.now)
+        self.assertEqual(row.pk, dormant.pk)
+        self.assertEqual(row.radius_m, 50)
+        self.assertTrue(row.is_accumulating)
+
+    def test_map_api_exposes_configured_radius_and_active_snapshot(self):
+        venue = self.venues["VET"]
+        venue.checkin_radius_m = 50
+        venue.save(update_fields=("checkin_radius_m",))
+        query = f"?walk_request_id={self.context.request_id}"
+        with patch("checkins.services.timezone.now", return_value=self.now):
+            response = self.api_client().get("/api/venues" + query)
+            mapped = next(record for record in response.data if record["id"] == venue.pk)
+            self.assertEqual(mapped["checkin_radius_m"], 50)
+            self.start("VET")
+            Venue.objects.filter(pk=venue.pk).update(checkin_radius_m=20)
+            response = self.api_client().get("/api/venues" + query)
+            mapped = next(record for record in response.data if record["id"] == venue.pk)
+            self.assertEqual(mapped["checkin_radius_m"], 50)
 
     def test_scope_map_returns_independent_venue_progress_and_all_partner_receipts(self):
         second = Venue.objects.create(name="Second Cafe", kind="CAFE", latitude=-37.8, longitude=144.9,

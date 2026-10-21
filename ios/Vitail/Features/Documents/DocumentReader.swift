@@ -169,15 +169,20 @@ struct DocumentReader: DocumentReading {
             if abs($0.boundingBox.midY - $1.boundingBox.midY) < 0.012 { return $0.boundingBox.minX < $1.boundingBox.minX }
             return $0.boundingBox.midY > $1.boundingBox.midY
         }
-        var rows: [(y: CGFloat, text: String, confidence: Float)] = []
+        var rows: [(bounds: CGRect, text: String, confidence: Float)] = []
         for observation in observations.prefix(2000) {
             guard let candidate = observation.topCandidates(1).first else { continue }
-            if let last = rows.last, abs(last.y - observation.boundingBox.midY) < 0.012 {
+            // Nearby fragments can form one label/value row. Separate columns
+            // must retain their own geometry for labels whose value is below.
+            if let last = rows.last, abs(last.bounds.midY - observation.boundingBox.midY) < 0.012,
+               observation.boundingBox.minX - last.bounds.maxX <= 0.06 {
                 rows[rows.count - 1].text += " " + candidate.string
+                rows[rows.count - 1].bounds = last.bounds.union(observation.boundingBox)
                 rows[rows.count - 1].confidence = min(last.confidence, candidate.confidence)
-            } else { rows.append((observation.boundingBox.midY, candidate.string, candidate.confidence)) }
+            } else { rows.append((observation.boundingBox, candidate.string, candidate.confidence)) }
         }
-        return rows.map { DocumentReadLine(text: String($0.text.prefix(500)), page: page, source: .vision, confidence: $0.confidence) }
+        return rows.map { DocumentReadLine(text: String($0.text.prefix(500)), page: page, source: .vision,
+                                          confidence: $0.confidence, bounds: $0.bounds) }
     }
 }
 
@@ -207,13 +212,16 @@ struct DocumentReadLine: Sendable {
     let page: Int
     let source: DocumentReadSource
     var confidence: Float? = nil
+    /// Vision coordinates identify the column; plain PDF text keeps reading order.
+    var bounds: CGRect? = nil
     static func lines(text: String, page: Int, source: DocumentReadSource) -> [Self] {
         text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }.prefix(2000).map { Self(text: String($0.prefix(500)), page: page, source: source) }
     }
 }
 
-/// Intentionally label-based: dates, payment references and unlabelled numbers are not guessed.
+/// Fields use printed labels; a named registry may also appear in the issuer header.
+/// Dates, payment references and unlabelled numbers are never guessed.
 enum DocumentFieldParser {
     private static let numberLabel = #"(?:animal\s*(?:id|number|no\.?)|(?:animal|pet|dog|council)\s+registration\s*(?:number|no\.?|id)|registration\s*(?:number|no\.?|id))"#
     private static let chipLabel = #"(?:microchip|micro-chip|chip)\s*(?:number|no\.?|id)"#
@@ -233,8 +241,15 @@ enum DocumentFieldParser {
             if !candidates.contains(candidate) { candidates.append(candidate) }
         }
         let labels = [numberLabel, chipLabel, nameLabel, expiryLabel, #"(?:(?:issuing|local)\s+)?council(?:\s+name)?|municipality|(?:microchip\s+)?registry(?:\s+name)?"#].joined(separator: "|")
+        var headerLineCounts: [String: Int] = [:]
+        var bodyScopes: Set<String> = []
         for (index, line) in lines.enumerated() {
-            let nextLine = index + 1 < lines.count && lines[index + 1].page == line.page ? lines[index + 1] : nil
+            let scope = "\(line.page):\(line.source.rawValue)"
+            let headerLineCount = headerLineCounts[scope, default: 0]
+            headerLineCounts[scope] = headerLineCount + 1
+            if matches("^\\s*(?:" + nameLabel + "|" + chipLabel + ")\\b", line.text) { bodyScopes.insert(scope) }
+            let isHeader = headerLineCount < 12 && !bodyScopes.contains(scope)
+            let nextLine = followingValueLine(after: index, in: lines)
             let next = nextLine?.text
             var provenance = line
             if let nextLine, matches("^\\s*(?:" + labels + ")\\s*[:#=]?\\s*$", line.text) {
@@ -259,8 +274,11 @@ enum DocumentFieldParser {
                 }
                 if let value = labelled(expiryLabel, line.text, next: next) { add(.validTo, date(value), provenance) }
             } else {
-                if let value = labelled(#"(?:microchip\s+)?registry(?:\s+name)?"#, line.text, next: next), validName(value) { add(.registryName, registry(value), provenance) }
+                if let value = labelled(#"(?:microchip\s+)?registry(?:\s+name)?"#, line.text, next: next), validRegistryName(value) {
+                    add(.registryName, registry(value), provenance)
+                }
                 if let known = knownRegistry(line.text) { add(.registryName, known, line) }
+                else if isHeader, let issuer = registryHeader(line.text) { add(.registryName, issuer, line) }
             }
         }
         result.candidates = Array(candidates.prefix(40))
@@ -289,6 +307,21 @@ enum DocumentFieldParser {
         return result
     }
 
+    private static func followingValueLine(after index: Int, in lines: [DocumentReadLine]) -> DocumentReadLine? {
+        let line = lines[index]
+        guard let bounds = line.bounds else {
+            return index + 1 < lines.count && lines[index + 1].page == line.page ? lines[index + 1] : nil
+        }
+        // A neighbouring column can precede this label's value in OCR reading
+        // order. Look just below the label in the same column instead.
+        return lines.dropFirst(index + 1).prefix(while: { $0.page == line.page }).first {
+            guard $0.source == line.source, let candidate = $0.bounds else { return false }
+            return bounds.midY - candidate.midY > 0.012
+                && bounds.minY - candidate.maxY <= 0.08
+                && abs(bounds.minX - candidate.minX) <= 0.035
+        }
+    }
+
     private static func labelled(_ label: String, _ text: String, next: String?) -> String? {
         guard let expression = try? NSRegularExpression(pattern: "^\\s*(?:" + label + ")\\s*(?:[:#=]\\s*|\\s+)(.+?)\\s*$", options: .caseInsensitive) else { return nil }
         if let match = expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
@@ -304,11 +337,26 @@ enum DocumentFieldParser {
     private static func validName(_ value: String) -> Bool {
         value.count <= 100 && matches(#"^[\p{L}][\p{L}\p{N} '’&().-]*$"#, value)
             && !matches(#"^(?:name|number|unknown|n/?a|date\s+of\s+birth.*|breed|sex|gender|colou?r|please\s+.*|enter\s+.*|tick\s+.*|select\s+.*)$"#, value)
+            && !matches("^(?:" + [numberLabel, chipLabel, nameLabel, expiryLabel,
+                #"(?:(?:issuing|local)\s+)?council(?:\s+name)?|municipality|(?:microchip\s+)?registry(?:\s+name)?|registration\s+status"#]
+                .joined(separator: "|") + ")\\s*[:#=]?$", value)
     }
     private static func knownRegistry(_ value: String) -> String? {
         if matches(#"\b(?:Central Animal Records|CAR)\b"#, value) { return "Central Animal Records" }
         if matches(#"\b(?:Australasian Animal Registry|AAR)\b"#, value) { return "Australasian Animal Registry" }
         return nil
+    }
+    private static func registryHeader(_ value: String) -> String? {
+        guard validRegistryName(value),
+              matches(#"^[\p{L}][\p{L}\p{N}'’&().-]*(?:\s+[\p{L}\p{N}'’&().-]+){0,8}\s+Registry$"#, value),
+              !matches(#"\b(?:certificate|identification|registration|status|clinic|veterinary|number|name|form|application|registered|contact)\b"#, value),
+              !matches(#"^(?:microchip|animal|pet|dog)\s+registry$"#, value) else { return nil }
+        return value
+    }
+    private static func validRegistryName(_ value: String) -> Bool {
+        validName(value)
+            && !matches(#"\b(?:certificate|application|form|clinic|veterinary)\b"#, value)
+            && !matches(#"^(?:(?:microchip|animal|pet|dog)\s+)?(?:registration|registry)(?:\s+(?:status|name|number|details))?$"#, value)
     }
     private static func registry(_ value: String) -> String { knownRegistry(value) ?? value }
     private static func date(_ value: String) -> String? {

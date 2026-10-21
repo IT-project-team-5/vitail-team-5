@@ -4,7 +4,7 @@ from .models import Venue
 
 @admin.register(Venue)
 class VenueAdmin(admin.ModelAdmin):
-    list_display = ("name", "kind", "manager_user", "is_partner", "is_active", "checkin_enabled")
+    list_display = ("name", "kind", "manager_user", "is_partner", "is_active", "checkin_enabled", "checkin_radius_m")
     list_filter = ("kind", "is_partner", "is_active", "checkin_enabled")
     search_fields = ("name", "address", "manager_user__email")
     autocomplete_fields = ("manager_user",)

@@ -3,7 +3,7 @@ import math
 
 from .models import CheckInWalk
 
-from rewards.policy import CHECKIN_RADIUS_M, CHECKIN_SECONDS
+from rewards.policy import CHECKIN_SECONDS
 
 
 class LocationSampleSerializer(serializers.Serializer):
@@ -88,7 +88,8 @@ class VenueMapSerializer(serializers.Serializer):
         return request.build_absolute_uri(venue.photo.url) if request else venue.photo.url
 
     def get_checkin_radius_m(self, venue):
-        return CHECKIN_RADIUS_M
+        row = self.context.get("by_venue", {}).get(venue.pk)
+        return row.radius_m if row is not None else venue.checkin_radius_m
 
     def get_required_seconds(self, venue):
         return CHECKIN_SECONDS[venue.kind]

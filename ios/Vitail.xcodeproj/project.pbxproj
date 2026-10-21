@@ -99,6 +99,7 @@
 		DFDB93C3237E58D028699C37 /* QuestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACB97598A23B803F298053B /* QuestTests.swift */; };
 		E72026092700000000000011 /* DocumentReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000001 /* DocumentReader.swift */; };
 		E72026092700000000000012 /* DocumentReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092700000000000002 /* DocumentReaderTests.swift */; };
+		E72026102100000000000011 /* mishow-test-microchip-certificate.png in Resources */ = {isa = PBXBuildFile; fileRef = E72026102100000000000001 /* mishow-test-microchip-certificate.png */; };
 		E72026092900000000000011 /* DogDocumentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72026092900000000000001 /* DogDocumentsView.swift */; };
 		F10000000000000000000001 /* AvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000001 /* AvatarView.swift */; };
 		F10000000000000000000002 /* DogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* DogDetailView.swift */; };
@@ -243,6 +244,7 @@
 		D0D4C94A411CA65A0369D9A0 /* DocumentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentViewModel.swift; sourceTree = "<group>"; };
 		E72026092700000000000001 /* DocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReader.swift; sourceTree = "<group>"; };
 		E72026092700000000000002 /* DocumentReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentReaderTests.swift; sourceTree = "<group>"; };
+		E72026102100000000000001 /* mishow-test-microchip-certificate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Fixtures/mishow-test-microchip-certificate.png; sourceTree = "<group>"; };
 		E72026092900000000000001 /* DogDocumentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DogDocumentsView.swift; sourceTree = "<group>"; };
 		EBC97A9308058DE40CEA3E34 /* QuestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestStore.swift; sourceTree = "<group>"; };
 		F20000000000000000000001 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
@@ -473,6 +475,7 @@
 				1ACB97598A23B803F298053B /* QuestTests.swift */,
 				F6ECF0F73A9474B166766F7F /* DocumentTests.swift */,
 				E72026092700000000000002 /* DocumentReaderTests.swift */,
+				E72026102100000000000001 /* mishow-test-microchip-certificate.png */,
 				020BF1769E1E01640F7CF4BD /* CheckInProgressTests.swift */,
 				00000000000000000000E213 /* BrandAppearanceTests.swift */,
 				F20000000000000000000003 /* AvatarProfileTests.swift */,
@@ -758,6 +761,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E72026102100000000000011 /* mishow-test-microchip-certificate.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
