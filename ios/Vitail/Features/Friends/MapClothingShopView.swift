@@ -430,7 +430,7 @@ struct MapClothingShopView: View {
             .accessibilityIdentifier("clothing-shop-action-\(product.code)")
         }
         .frame(maxWidth: .infinity, alignment: .top).padding(12)
-        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground()
         .overlay { RoundedRectangle(cornerRadius: AppRadius.card).stroke(isEquipped ? AppColors.brand : AppColors.border) }
     }
 }

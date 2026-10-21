@@ -129,6 +129,9 @@ struct OwnerHomeView: View {
             .background(AppColors.background)
             .navigationTitle("Vitail")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) { VitailNavTitle() }
+            }
             .sheet(isPresented: $isAddingFirstDog, onDismiss: {
                 accountRefreshID += 1
                 Task {
@@ -254,34 +257,51 @@ struct OwnerHomeView: View {
                 navigationItems
             }
         }
-        .padding(.vertical, AppSpacing.small)
-        .padding(.horizontal, AppSpacing.small)
-        .background(AppColors.surface)
+        .padding(.top, AppSpacing.small)
+        .padding(.bottom, 4)
+        .padding(.horizontal, 6)
+        .background(AppColors.background)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppColors.outline)
+                .frame(height: AppStroke.width)
+        }
     }
 
     private var navigationItems: some View {
-        HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 2) {
             ForEach(Page.allCases) { page in
+                let isSelected = selection == page
                 Button {
                     selection = page
                 } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: selection == page ? page.selectedIcon : page.icon)
+                    VStack(spacing: 2) {
+                        Image(systemName: isSelected ? page.selectedIcon : page.icon)
+                            .font(.system(size: 18, weight: .semibold))
                             .accessibilityHidden(true)
                         Text(page.rawValue)
-                            .font(.caption2)
+                            .font(AppFont.heading(11, .semibold, relativeTo: .caption2))
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.center)
                     }
+                    .padding(.vertical, 6)
                     .frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 132 : 0, minHeight: 44)
                     .frame(maxWidth: .infinity)
-                    .foregroundStyle(selection == page ? AppColors.brand : AppColors.secondaryText)
+                    .foregroundStyle(isSelected ? AppColors.onAccent : AppColors.secondaryText)
+                    .background {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(AppColors.honey)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(page.rawValue)
                 .accessibilityIdentifier("owner-tab-\(page.rawValue.lowercased())")
-                .accessibilityAddTraits(selection == page ? .isSelected : [])
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
+        .animation(.easeOut(duration: 0.15), value: selection)
     }
 }

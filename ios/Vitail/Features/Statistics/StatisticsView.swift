@@ -177,6 +177,6 @@ private extension View {
     func statisticsCard() -> some View {
         padding(AppSpacing.medium)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+            .vitailCardBackground()
     }
 }

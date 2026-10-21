@@ -84,7 +84,7 @@ struct DogDocumentsView: View {
             Image(systemName: "chevron.right").foregroundStyle(AppColors.secondaryText)
         }
         .padding(AppSpacing.large)
-        .background(AppColors.surface, in: RoundedRectangle(cornerRadius: AppRadius.card))
+        .vitailCardBackground()
         .contentShape(Rectangle())
     }
 }

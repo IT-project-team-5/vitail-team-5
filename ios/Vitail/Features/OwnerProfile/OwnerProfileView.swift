@@ -26,16 +26,19 @@ struct OwnerProfileView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: AppSpacing.large) {
+            VStack(alignment: .leading, spacing: 20) {
                 profileCard
                 DogListView(
                     viewModel: dogViewModel,
                     addDog: { isAddingDog = true },
                     editDog: { selectedDog = $0 }
                 )
+                settingsCard
             }
-            .padding(AppSpacing.large)
+            .padding(.horizontal, 20)
+            .padding(.vertical, AppSpacing.medium)
         }
+        .background { VitailScreenBackground(layout: .leadingDog) }
         .task { await dogViewModel.load() }
         .refreshable { await dogViewModel.load() }
         .sheet(isPresented: $isEditingProfile) {
@@ -52,23 +55,49 @@ struct OwnerProfileView: View {
 
     private var profileCard: some View {
         Button { isEditingProfile = true } label: {
-            HStack(spacing: AppSpacing.large) {
-                AvatarView(url: user.photo, name: user.displayName, size: 76)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(user.displayName).font(.title2.bold())
+            HStack(spacing: 14) {
+                AvatarView(url: user.photo, name: user.displayName, size: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(user.displayName).font(AppFont.heading(20, .bold, relativeTo: .title3))
                         .foregroundStyle(AppColors.primaryText)
-                    Text(user.email).font(.subheadline)
+                    Text(user.email).font(AppFont.body(13, relativeTo: .subheadline))
                         .foregroundStyle(AppColors.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").foregroundStyle(AppColors.secondaryText)
+                Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.secondaryText)
             }
-            .padding(.vertical, AppSpacing.large)
+            .padding(AppSpacing.medium)
+            .vitailCardBackground()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.trailing, AppStroke.shadow)
         .accessibilityLabel("Your profile, \(user.displayName)")
         .accessibilityHint("Edit your photo and account details")
+    }
+
+    /// Prototype "Settings" row. Opens the same profile sheet, which holds
+    /// appearance and sign out.
+    private var settingsCard: some View {
+        Button { isEditingProfile = true } label: {
+            HStack(spacing: 12) {
+                VitailIconTile(systemImage: "gearshape", size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Settings").font(AppFont.heading(15, .semibold)).foregroundStyle(AppColors.primaryText)
+                    Text("Appearance, profile and sign out").font(AppFont.body(12, relativeTo: .caption))
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.secondaryText)
+            }
+            .padding(14)
+            .vitailCardBackground()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, AppStroke.shadow)
     }
 }
 

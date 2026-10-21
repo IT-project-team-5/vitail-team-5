@@ -14,11 +14,11 @@ struct CheckInProgressCard: View {
                     AvatarView(url: item.photo, name: item.venueName, systemImage: "mappin.and.ellipse", size: 44)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(item.venueName).font(.headline).foregroundStyle(AppColors.primaryText)
+                        Text(item.venueName).font(AppFont.heading(16, .semibold)).foregroundStyle(AppColors.primaryText)
                         Label(statusText(item), systemImage: statusIcon(item))
-                            .font(.caption).foregroundStyle(item.status == .ready ? AppColors.brand : AppColors.secondaryText)
+                            .font(AppFont.body(12, .medium, relativeTo: .caption)).foregroundStyle(item.status == .ready ? AppColors.brand : AppColors.secondaryText)
                         if item.status == .inProgress {
-                            ProgressView(value: item.progressRatio).tint(AppColors.brand)
+                            VitailProgressBar(value: item.progressRatio)
                                 .accessibilityLabel("Check-in progress")
                                 .accessibilityValue("\(Int(item.progressRatio * 100)) percent")
                         }
@@ -29,12 +29,15 @@ struct CheckInProgressCard: View {
                 }
                 .padding(AppSpacing.medium)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(item.status == .ready ? AppColors.brand.opacity(0.12) : AppColors.surface)
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                .vitailCardBackground(shadow: item.status != .collected)
                 .overlay {
-                    RoundedRectangle(cornerRadius: AppRadius.card)
-                        .stroke(item.status == .ready ? AppColors.brand.opacity(0.45) : .clear, lineWidth: 1)
+                    if item.status == .ready {
+                        RoundedRectangle(cornerRadius: AppRadius.card)
+                            .strokeBorder(AppColors.honey, lineWidth: AppStroke.width + 1)
+                    }
                 }
+                .padding(.trailing, AppStroke.shadow)
+                .padding(.bottom, item.status == .collected ? 0 : AppStroke.shadow)
                 .opacity(item.status == .collected ? 0.6 : 1)
                 .contentShape(RoundedRectangle(cornerRadius: AppRadius.card))
             }
@@ -59,17 +62,17 @@ struct CheckInProgressCard: View {
                 VStack(alignment: .leading, spacing: AppSpacing.large) {
                     HStack(spacing: AppSpacing.medium) {
                         AvatarView(url: item.photo, name: item.venueName, systemImage: "mappin.and.ellipse", size: 64)
-                        Text(item.venueName).font(.title2.bold())
+                        Text(item.venueName).vitailTitle(24)
                     }
                     Label(statusText(item), systemImage: statusIcon(item))
                         .foregroundStyle(item.status == .ready ? AppColors.brand : AppColors.secondaryText)
                     Text("Stay at this venue for \(item.requiredSeconds / 60)m \(item.requiredSeconds % 60)s.")
-                    ProgressView(value: item.progressRatio).tint(AppColors.brand)
+                    VitailProgressBar(value: item.progressRatio)
                     Text("\(item.verifiedSeconds / 60)m \(item.verifiedSeconds % 60)s completed")
                         .font(.subheadline).foregroundStyle(AppColors.secondaryText)
                     let availablePoints = item.availablePoints(earnedToday: store.earnedPointsToday)
                     if item.status != .collected {
-                        Text("\(availablePoints) points").font(.headline)
+                        VitailChip(text: "+\(availablePoints) pts", systemImage: "sparkle", fill: AppColors.honey, foreground: AppColors.onAccent)
                         Text("Walking and check-in rewards share a 72-point daily limit.")
                             .font(.footnote).foregroundStyle(AppColors.secondaryText)
                     }

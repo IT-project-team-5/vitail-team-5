@@ -39,11 +39,11 @@ struct SlideToCollect: View {
                     Circle().fill(AppColors.brand)
                     if isLoading { ProgressView().tint(AppColors.brandForeground) }
                     else {
-                        Image(systemName: "arrow.right").font(.title3.weight(.semibold))
+                        Image(systemName: "chevron.right.2").font(.title3.weight(.bold))
                             .foregroundStyle(AppColors.brandForeground)
                     }
                 }
-                .overlay { Circle().stroke(AppColors.brandForeground.opacity(0.6), lineWidth: 1) }
+                .overlay { Circle().strokeBorder(AppColors.outline, lineWidth: AppStroke.width) }
                 .frame(width: 52, height: 52).padding(6).offset(x: min(slide.offset, travel))
                 .gesture(DragGesture(minimumDistance: 8)
                     .onChanged { value in
@@ -88,20 +88,21 @@ struct CollectionSlideBackground: View {
         GeometryReader { geometry in
             let filledWidth = geometry.size.width * min(1, max(0, progress))
             ZStack(alignment: .leading) {
-                AppColors.surface
-                AppColors.brand.frame(width: filledWidth)
+                AppColors.inset
+                AppColors.honey.frame(width: filledWidth)
                 label.foregroundStyle(AppColors.secondaryText)
-                label.foregroundStyle(AppColors.brandForeground)
+                label.foregroundStyle(AppColors.onAccent)
                     .mask(alignment: .leading) { Rectangle().frame(width: filledWidth) }
             }
             .clipShape(Capsule())
+            .overlay(Capsule().strokeBorder(AppColors.outline, lineWidth: AppStroke.width))
         }
         .accessibilityHidden(true)
     }
 
     private var label: some View {
         Text(isLoading ? "Confirming…" : "Slide to collect")
-            .font(.subheadline.weight(.medium))
+            .font(AppFont.heading(16, .semibold))
             .padding(.leading, 60).padding(.trailing, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

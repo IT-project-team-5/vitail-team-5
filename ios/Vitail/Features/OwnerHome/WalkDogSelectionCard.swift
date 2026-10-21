@@ -38,22 +38,33 @@ struct WalkDogSelectionCard: View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
             if session.isInProgress {
                 TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 6) {
+                            Circle().fill(session.status == .paused ? AppColors.honey : AppColors.success)
+                                .frame(width: 8, height: 8)
                             Text(session.status == .paused ? "Paused" : "Walking")
-                                .font(.caption).foregroundStyle(AppColors.secondaryText)
-                            Text("\(session.distanceKilometres, specifier: "%.2f") km")
-                                .font(.title2.weight(.semibold)).monospacedDigit()
+                                .font(AppFont.heading(13, .semibold, relativeTo: .caption))
                         }
-                        Spacer()
-                        Text(Self.durationText(session.elapsedActiveDuration(at: timeline.date)))
-                            .font(.title3).monospacedDigit()
-                            .accessibilityLabel("Active walking time, \(Self.durationText(session.elapsedActiveDuration(at: timeline.date)))")
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(AppColors.surface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(AppColors.outline, lineWidth: AppStroke.width))
+                        HStack {
+                            VitailStat(value: Self.durationText(session.elapsedActiveDuration(at: timeline.date)),
+                                       label: "Time", size: 26)
+                                .accessibilityLabel("Active walking time, \(Self.durationText(session.elapsedActiveDuration(at: timeline.date)))")
+                            VitailStat(value: String(format: "%.2f", session.distanceKilometres), unit: "km",
+                                       label: "Distance", size: 26)
+                        }
+                        .monospacedDigit()
+                        .padding(.vertical, 12)
+                        .vitailCardBackground()
+                        .padding(.trailing, AppStroke.shadow)
+                        .padding(.bottom, AppStroke.shadow)
                     }
                 }
             }
 
-            VStack(spacing: AppSpacing.medium) {
+            VStack(spacing: 6) {
                 let layout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(spacing: AppSpacing.medium))
                     : AnyLayout(HStackLayout(spacing: AppSpacing.large))
@@ -82,22 +93,29 @@ struct WalkDogSelectionCard: View {
                             guard WalkSessionTracker.isFresh(location) else { return }
                             session.resume(from: location)
                         }
-                        Button(titles[1]) { session.finish() }
-                            .font(.headline)
-                            .foregroundStyle(AppColors.brand)
-                            .padding(.horizontal, AppSpacing.large)
-                            .padding(.vertical, AppSpacing.medium)
-                            .frame(minWidth: 112, minHeight: 64)
-                            .background(AppColors.brand.opacity(0.10), in: Capsule())
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Finish walk")
+                        Button { session.finish() } label: {
+                            Label("\(titles[1]) walk", systemImage: "stop.fill")
+                                .font(AppFont.heading(17, .semibold))
+                                .padding(.horizontal, AppSpacing.large)
+                                .frame(minWidth: 150, minHeight: 56)
+                        }
+                        .buttonStyle(VitailPressStyle(fill: AppColors.brand, foreground: AppColors.brandForeground))
+                        .padding(.trailing, AppStroke.shadow)
+                        .padding(.bottom, AppStroke.shadow)
+                        .accessibilityLabel("Finish walk")
                             .accessibilityHint("Review your walk and choose the dogs who came along.")
                     }
                 }
                 .frame(maxWidth: .infinity)
 
+                if !session.isInProgress && canStartNewWalk {
+                    Text("Start walk")
+                        .font(AppFont.heading(17, .semibold))
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
+                }
                 Text("Every walk, a little closer.")
-                    .font(.footnote)
+                    .font(AppFont.body(12, relativeTo: .footnote))
                     .foregroundStyle(AppColors.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -107,7 +125,7 @@ struct WalkDogSelectionCard: View {
             if canStartNewWalk && (session.canStart || session.status == .paused)
                 && !WalkSessionTracker.isFresh(location) {
                 Text("Finding an accurate location…")
-                    .font(.caption).foregroundStyle(AppColors.secondaryText)
+                    .font(AppFont.body(12, relativeTo: .caption)).foregroundStyle(AppColors.secondaryText)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -123,12 +141,23 @@ struct WalkDogSelectionCard: View {
         title: String, systemImage: String, isDisabled: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let isPause = systemImage.hasPrefix("pause")
+        let diameter = min(controlDiameter, 104)
+        return Button(action: action) {
             Image(systemName: systemImage)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(isDisabled ? AppColors.secondaryText : AppColors.brandForeground)
-                .frame(width: min(controlDiameter, 104), height: min(controlDiameter, 104))
-                .background(isDisabled ? AppColors.border.opacity(0.45) : AppColors.brand, in: Circle())
+                .font(.title2.weight(.bold))
+                .foregroundStyle(isDisabled ? AppColors.secondaryText
+                                 : isPause ? AppColors.primaryText : AppColors.brandForeground)
+                .frame(width: diameter, height: diameter)
+                .background(isDisabled ? AppColors.border.opacity(0.45)
+                            : isPause ? AppColors.surface : AppColors.brand, in: Circle())
+                .overlay(Circle().strokeBorder(isDisabled ? AppColors.border : AppColors.outline,
+                                               lineWidth: AppStroke.width))
+                .background {
+                    if !isDisabled {
+                        Circle().fill(AppColors.outline).offset(x: AppStroke.shadow, y: AppStroke.shadow)
+                    }
+                }
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

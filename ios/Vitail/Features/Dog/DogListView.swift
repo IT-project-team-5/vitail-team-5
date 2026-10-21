@@ -8,7 +8,7 @@ struct DogListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.medium) {
             Text("My Dogs")
-                .font(.title2.bold())
+                .font(AppFont.heading(20, .bold, relativeTo: .title3))
 
             if viewModel.isLoading && viewModel.dogs.isEmpty {
                 HStack { Spacer(); ProgressView(); Spacer() }
@@ -22,43 +22,46 @@ struct DogListView: View {
             } else if viewModel.dogs.isEmpty {
                 VStack(alignment: .leading, spacing: AppSpacing.small) {
                     Text("No dogs yet")
-                        .font(.headline)
+                        .font(AppFont.heading(16, .semibold))
                     Text("Add your first dog to start building their profile.")
+                        .font(AppFont.body(14))
                         .foregroundStyle(AppColors.secondaryText)
                 }
-                .padding(AppSpacing.medium)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppColors.surface)
-                .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                .vitailInset()
             } else {
                 ForEach(viewModel.dogs) { dog in
                     Button { editDog(dog) } label: {
                         HStack(spacing: AppSpacing.medium) {
                             AvatarView(url: dog.photo, name: dog.name, systemImage: "dog.fill", size: 52)
                             Text(dog.name)
-                                .font(.headline)
+                                .font(AppFont.heading(17, .semibold))
                                 .foregroundStyle(AppColors.primaryText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right")
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(AppColors.secondaryText)
                         }
-                        .padding(AppSpacing.medium)
-                        .background(AppColors.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.card))
+                        .padding(14)
+                        .vitailCardBackground()
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .padding(.trailing, AppStroke.shadow)
                 }
             }
 
             if viewModel.canAddDog {
                 Button(action: addDog) {
                     Label(viewModel.dogs.isEmpty ? "Add your first dog" : "Add Dog", systemImage: "plus")
-                        .fontWeight(.semibold)
+                        .font(AppFont.heading(16, .semibold))
+                        .frame(minHeight: 44)
                 }
+                .buttonStyle(.plain)
                 .foregroundStyle(AppColors.brand)
             } else {
                 Text("Your account supports up to two dogs.")
-                    .font(.footnote)
+                    .font(AppFont.body(12, relativeTo: .footnote))
                     .foregroundStyle(AppColors.secondaryText)
             }
         }
